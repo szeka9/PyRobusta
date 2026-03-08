@@ -4,6 +4,7 @@ from time import ticks_ms, ticks_diff
 
 from bindings.web_socket import WebSocket
 from con import wifi
+from utils.config import get_config
 
 class SocketServer:
     """Socket server application"""
@@ -11,7 +12,7 @@ class SocketServer:
 
     CON_ACCEPT_TIMEOUT_MS = 5000 # Timeout value for accepting new connection
     CON_ACCEPT_SLEEP_MS = 100    # Duration of sleep between attempts to accept new connection
-    MAX_SOCKETS = 5
+    MAX_SOCKETS = int(get_config("max_con"))
     SOCKET_TIMEOUT_SEC = 5
     LISTEN_PORT = 8000
     ACTIVE_SOCKETS = []

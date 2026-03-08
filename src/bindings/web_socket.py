@@ -4,17 +4,17 @@ from gc import mem_free, collect
 from stream.buffer import MemoryPool, SlidingBuffer, BufferFullError
 from transport.socket import SocketBase
 from protocol.web import WebEngine
-from utils.config import read_config
+from utils.config import get_config
 
 class WebSocket(SocketBase):
     # Constants for memory footprint
-    MEM_CAP  = 0.1              # Default memory cap (percentage / 100) of free heap
-    SEND_BUF_MIN_BYTES = 512    # Minimum buffer size for responses
-    SEND_BUF_MAX_BYTES = 4096   # Max buffer size for responses
-    RECV_BUF_MIN_BYTES = 2048   # Minimum buffer size for requests
-    RECV_BUF_MAX_BYTES = 4096   # Max buffer size for requests
-    CONN_OVERHEAD = 1024        # Overhead per connection
-    MTU_SIZE = 1460             # TCP maximum transmission unit
+    MEM_CAP  = float(get_config("mem_cap"))    # Default memory cap (percentage / 100) of free heap
+    SEND_BUF_MIN_BYTES = 512                    # Minimum buffer size for responses
+    SEND_BUF_MAX_BYTES = 4096                   # Max buffer size for responses
+    RECV_BUF_MIN_BYTES = 2048                   # Minimum buffer size for requests
+    RECV_BUF_MAX_BYTES = 4096                   # Max buffer size for requests
+    CONN_OVERHEAD = 1024                        # Overhead per connection
+    MTU_SIZE = 1460                             # TCP maximum transmission unit
 
     # Timing settings
     STATE_MACHINE_SLEEP_MS = 2
