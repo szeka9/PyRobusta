@@ -1,4 +1,8 @@
-import asyncio
+"""
+Socket server application
+"""
+
+from asyncio import sleep_ms, start_server # pylint: disable=E1101
 import gc
 from time import ticks_ms, ticks_diff
 
@@ -8,7 +12,10 @@ from utils.config import get_config
 
 
 class SocketServer:
-    """Socket server application"""
+    """
+    Socket server class, handling global config (timeout, port, max connections etc.),
+    and managing active sockets.
+    """
 
     __slots__ = ["_host", "_max_sockets", "_port", "_timeout", "http"]
 
@@ -35,8 +42,14 @@ class SocketServer:
         self._max_sockets = max(1, SocketServer.MAX_SOCKETS)
         self._port = SocketServer.LISTEN_PORT
         self._timeout = SocketServer.SOCKET_TIMEOUT_SEC
+        self.http = None
 
-    async def accept_client(self):
+    async def can_handle_new_socket(self):
+        """
+        Decide if the new socket can be handled.
+        Evict closed/inactive sockets if needed.
+        :return is_acceptable: true/false
+        """
         gc.collect()
         con_timestamp = ticks_ms()
         while (
@@ -49,20 +62,23 @@ class SocketServer:
                 socket_inactive = int(ticks_diff(ticks_ms(), socket.last_event) * 0.001)
                 if not socket.connected or socket_inactive > self._timeout:
                     print(
-                        f"[SocketServer] evicted {socket.id} timeout:{self._timeout - socket_inactive}s"
+                        (
+                            f"[SocketServer] evicted {socket.id} "
+                            f"timeout:{self._timeout - socket_inactive}s"
+                        )
                     )
                     await socket.close()
                     SocketServer.drop_client(socket)
                     return True
-            await asyncio.sleep_ms(SocketServer.CON_ACCEPT_SLEEP_MS)
+            await sleep_ms(SocketServer.CON_ACCEPT_SLEEP_MS)
         return False
 
     async def accept_http(self, reader, writer):
         """
-        Handle incoming HTTP request
+        Handle incoming socket connection for HTTP.
         - creates SocketHttp object
         """
-        if not await self.accept_client():
+        if not await self.can_handle_new_socket():
             print("[SocketServer] cannot accept new client")
             writer.close()
             await writer.wait_closed()
@@ -74,13 +90,15 @@ class SocketServer:
         await new_client.run()
 
     async def run_server(self):
-        """ """
+        """
+        Start asyncio socket server on the specified port.
+        """
         addr = wifi.get_address()
         print(f"[SocketServer] Start SocketServer on {addr}")
         try:
             gc.collect()
             SocketHttp.init_pools(self._max_sockets)
-            self.http = asyncio.start_server(
+            self.http = start_server(
                 self.accept_http, self._host, self._port, backlog=self._max_sockets
             )
             await self.http

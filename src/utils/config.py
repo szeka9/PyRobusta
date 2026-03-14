@@ -1,3 +1,9 @@
+"""
+.env-style configuration reader,
+configuration is read from /pyrobusta.env.
+Values can be encapsulated by single or double quotes.
+"""
+
 CONFIG_LOCATION = "pyrobusta.env"
 CONFIG_CACHE = [
     "wifi_ssid",
@@ -14,7 +20,11 @@ CONFIG_CACHE = [
 
 
 def read_config(config=CONFIG_LOCATION):
-    with open(config) as conf:
+    """
+    Read configuration from a file and update CONFIG_CACHE.
+    :param config: path to configuration
+    """
+    with open(config, encoding="utf-8") as conf:
         for line in conf.read().splitlines("\n"):
             key = line.split("=")[0].strip()
             value = line.split("=")[1].strip().strip("'").strip('"')
@@ -30,6 +40,11 @@ def read_config(config=CONFIG_LOCATION):
 
 
 def get_config(key):
+    """
+    Read configuration by key.
+    The cache is reloaded if the key is missing
+    or the value is set to None.
+    """
     if key not in CONFIG_CACHE:
         read_config()
     try:

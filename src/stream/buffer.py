@@ -38,10 +38,17 @@ class MemoryPool:
         self.free = list(self._blocks)
 
     def reserve(self):
+        """
+        Returns free memory block if there is any.
+        :return block: set to None if there is no free block
+        """
         if self.free:
             return self.free.pop()
 
     def release(self, block):
+        """
+        Reintroduce already reserved block in the shared pool.
+        """
         self.free.append(block)
 
 

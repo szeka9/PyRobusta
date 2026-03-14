@@ -1,0 +1,9 @@
+[MAIN]
+disable=E0611,
+        C0415,
+        E0401,
+        W0107,
+        R1710
+
+[DESIGN]
+max-attributes=15

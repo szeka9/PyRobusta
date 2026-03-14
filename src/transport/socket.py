@@ -1,9 +1,16 @@
+"""
+Base class for representing a socket, providing common methods
+and member variables for the socket server to use.
+"""
+
 import asyncio
-import gc
 from time import ticks_ms
 
 
 class SocketBase:
+    """
+    SocketBase class.
+    """
     __slots__ = ("id", "connected", "reader", "writer", "last_event")
 
     def __init__(self, reader, writer):
@@ -46,6 +53,6 @@ class SocketBase:
         try:
             self.writer.close()
             await self.writer.wait_closed()
-        except Exception as e:
-            print(f"[SocketBase] Close error {self.id}: {e}")
+        except OSError as e:
+            print(f"[SocketBase] Error while closing {self.id}: {e}")
         self.connected = False

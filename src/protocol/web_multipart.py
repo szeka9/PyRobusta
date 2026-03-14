@@ -1,13 +1,22 @@
+"""
+State machine extension for multipart parsing.
+"""
+# pylint: disable=W0212
+
 from web import WebEngine, HeaderParsingError
 
 
-def add_method(cls, type="instance"):
+def add_method(cls, method_type="instance"):
+    """
+    Monkey-patch decorators to extend WebEngine with
+    additional methods.
+    """
     def decorator(func):
-        if type == "instance":
+        if method_type == "instance":
             setattr(cls, func.__name__, func)
-        elif type == "staticmethod":
+        elif method_type == "staticmethod":
             setattr(cls, func.__name__, staticmethod(func))
-        elif type == "classmethod":
+        elif method_type == "classmethod":
             setattr(cls, func.__name__, classmethod(func))
         else:
             raise ValueError("Invalid type")

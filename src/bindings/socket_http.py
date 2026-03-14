@@ -1,4 +1,9 @@
+"""
+HTTP application-layer interface for socket connections.
+"""
+
 import asyncio
+from asyncio import sleep_ms # pylint: disable=E1101
 from gc import mem_free, collect
 
 from stream.buffer import MemoryPool, SlidingBuffer, BufferFullError
@@ -8,6 +13,10 @@ from utils.config import get_config
 
 
 class SocketHttp(SocketBase):
+    """
+    HTTP wrapper class for representing HTTP socket connections, with
+    buffer management and state machine parser.
+    """
     # Constants for memory footprint
     MEM_CAP = float(
         get_config("http_mem_cap")
@@ -89,13 +98,19 @@ class SocketHttp(SocketBase):
         self._send_buf.consume()
 
     async def run(self):
+        """
+        Handle socket connection with HTTP state machine parser.
+        - 1) reserve buffer
+        - 2) run state machine parser
+        - 3) release reserved buffers and terminate socket connection
+        """
         await self._reserve_buffers()
         self._prev_state = None
         try:
             while self._engine.state is not None:
                 await self._run_state_machine()
-                await asyncio.sleep_ms(SocketHttp.STATE_MACHINE_SLEEP_MS)
-        except Exception as e:
+                await sleep_ms(SocketHttp.STATE_MACHINE_SLEEP_MS)
+        except Exception as e: # pylint: disable=W0718
             print(f"[SocketHttp] error in run_web: {e}")
         finally:
             if self._send_buf:
@@ -116,7 +131,7 @@ class SocketHttp(SocketBase):
                 self._recv_buf = SocketHttp.RECV_POOL.reserve()
             if not self._send_buf:
                 self._send_buf = SocketHttp.SEND_POOL.reserve()
-            await asyncio.sleep_ms(SocketHttp.STATE_MACHINE_SLEEP_MS)
+            await sleep_ms(SocketHttp.STATE_MACHINE_SLEEP_MS)
 
     async def _run_state_machine(self):
         if self._prev_state == self._engine.state or self._prev_state is None:
@@ -131,12 +146,12 @@ class SocketHttp(SocketBase):
                 if not self._send_buf.size():
                     break
                 await self._flush_response()
-                await asyncio.sleep_ms(SocketHttp.STATE_MACHINE_SLEEP_MS)
+                await sleep_ms(SocketHttp.STATE_MACHINE_SLEEP_MS)
         except BufferFullError:
             self._engine.on_failure(self._send_buf, b"Buffer full")
             await self._flush_response()
             return
-        except Exception as e:
+        except Exception as e: # pylint: disable=W0718
             print(f"[SocketHttp] error in _run_state_machine: {e}")
             self._engine.on_failure(self._send_buf, str(e).encode("ascii"))
             await self._flush_response()
@@ -160,7 +175,7 @@ class SocketHttp(SocketBase):
             self._engine.on_timeout(self._send_buf)
             await self._flush_response()
             return 0
-        except Exception as e:
+        except Exception as e: # pylint: disable=W0718
             self._engine.on_failure(
                 self._send_buf, b"Read error: " + str(e).encode("ascii")
             )
@@ -175,7 +190,7 @@ class SocketHttp(SocketBase):
                 await self._flush_response()
                 if is_finished:
                     break
-                await asyncio.sleep_ms(SocketHttp.RESP_HANDLER_SLEEP_MS)
+                await sleep_ms(SocketHttp.RESP_HANDLER_SLEEP_MS)
         elif type(resp_handler).__name__ in ("FileIO", "BytesIO"):
             with resp_handler as rh:
                 while True:
@@ -185,7 +200,7 @@ class SocketHttp(SocketBase):
                         break
                     self._send_buf.commit(num_read)
                     await self._flush_response()
-                    await asyncio.sleep_ms(SocketHttp.RESP_HANDLER_SLEEP_MS)
+                    await sleep_ms(SocketHttp.RESP_HANDLER_SLEEP_MS)
         else:
             self._engine.on_failure(
                 self._send_buf,

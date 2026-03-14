@@ -1,8 +1,15 @@
+"""
+Helpers for setting up Wi-Fi in station mode
+"""
+
 from network import WLAN, STA_IF
 from utils.config import get_config
 
 
 def initialize():
+    """
+    Initialize WLAN interface in station mode
+    """
     sta_if = WLAN(STA_IF)
     sta_if.active(True)
     nets = sta_if.scan()
@@ -15,5 +22,8 @@ def initialize():
 
 
 def get_address():
+    """
+    Get the address of the WLAN interface
+    """
     sta_if = WLAN(STA_IF)
     return sta_if.ifconfig()[0]

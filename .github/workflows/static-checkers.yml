@@ -1,4 +1,4 @@
-name: Python Unit Tests
+name: Static Checkers
 
 on:
   push:
@@ -33,6 +33,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run pylint
+      - name: Run Pylint
         run: |
           python3 -m pylint src

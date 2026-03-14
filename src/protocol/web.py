@@ -119,7 +119,7 @@ class WebEngine:
             self.mp_delimiter = None
             self.mp_closing_delimiter = None
 
-            import web_multipart
+            import web_multipart  # pylint: disable=W0611
 
     # =========================================
     # Public methods for load modules
@@ -166,6 +166,7 @@ class WebEngine:
         header_lines = bytes(raw_headers).split(b"\r\n")
         headers = {}
         for line in header_lines:
+            # pylint: disable=W0511
             # TODO: support for UTF-8 in field values (e.g filenames), can be board dependent
             if any(c > 127 for c in line):
                 raise HeaderParsingError("Non-ASCII character found in the request")
@@ -306,7 +307,8 @@ class WebEngine:
     def on_unsupported_media(self, tx, info: bytes):
         """Terminate state machine and write 415 response"""
         self.terminate(415)
-        self._write_response_head(tx)
+        self._write_response_head(tx, len(info))
+        tx.write(info)
 
     def on_failure(self, tx, info: bytes):
         """Terminate state machine and write 500 response"""
@@ -365,54 +367,55 @@ class WebEngine:
         rx.consume(blank_idx + 4)
         self.state = self._route_request_st
 
+    def _has_payload(self):
+        return (
+            self.CONTENT_LENGTH in self.headers
+            and self.headers[self.CONTENT_LENGTH] > 0
+        )
+
     def _route_request_st(self, _, tx):
         """
         State for routing requests
         - supported ways: static resources, /rest, load module callbacks
         """
         if self.url in self.ENDPOINTS and self.method in self.ENDPOINTS[self.url]:
+            if self._has_payload() and (
+                mp_boundary := self._is_multipart(self.headers)
+            ):
+                self.mp_boundary = mp_boundary.encode(self.ASCII)
+                self.state = self._start_multipart_parser_st
+                return
+            if self._has_payload():
+                self.state = self._recv_payload
+                return
             self.state = self._app_endpoint_st
             return
         if self.method == self.GET:
             resource = b"index.html" if not self.url else self.url
-            extension = resource.rsplit(b".", 1)[-1]
-            if extension not in self.CONTENT_TYPES:
-                if self.STRICT_TYPES:
-                    self.on_unsupported_media(tx, b"Not supported: %s" % extension)
-                    return
-                else:
-                    content_type = self._get_content_type(b"txt")
-            else:
-                content_type = self._get_content_type(extension)
             self.state = lambda _rx, _tx: self._send_file_st(
-                _rx, _tx, resource.decode(self.ASCII), content_type
+                _rx, _tx, resource.decode(self.ASCII)
             )
             return
         self.on_missing_resource(tx)
 
+    def _recv_payload(self, rx, tx):
+        if self.headers[self.CONTENT_LENGTH] > rx.size():
+            return
+        if self.headers[self.CONTENT_LENGTH] < rx.size():
+            self.on_client_error(tx, self.CONTENT_LENGTH_ERROR)
+            return
+        self.state = self._app_endpoint_st
+
     def _app_endpoint_st(self, rx, tx):
         """Process a request by registered load module callbacks"""
         callback = self.ENDPOINTS[self.url][self.method]
-        if (
-            self.CONTENT_LENGTH in self.headers
-            and self.headers[self.CONTENT_LENGTH] > 0
-        ):
-            if mp_boundary := self._is_multipart(self.headers):
-                self.mp_boundary = mp_boundary.encode(self.ASCII)
-                self.state = self._start_multipart_parser_st
-                return
-            else:
-                if self.headers[self.CONTENT_LENGTH] > rx.size():
-                    return
-                if self.headers[self.CONTENT_LENGTH] < rx.size():
-                    self.on_client_error(tx, self.CONTENT_LENGTH_ERROR)
-                    return
-                self.state = None
-                dtype, data = callback(self.headers, bytes(rx.peek()))
-                dtype = dtype.encode(self.ASCII)
+        if self._has_payload():
+            self.state = None
+            dtype, data = callback(self.headers, bytes(rx.peek()))
+            dtype = dtype.encode(self.ASCII)
         else:
             if not callable(callback):
-                # Handle endpoint callback as a static resource
+                # Handle as a static resource
                 self.state = lambda _rx, _tx: self._send_file_st(_rx, _tx, callback)
                 return
             dtype, data = callback(self.headers, b"")
@@ -429,7 +432,7 @@ class WebEngine:
         if dtype == b"image/jpeg":
             self.terminate(200, dtype)
             return self._generate_response(tx, data)
-        elif dtype in (b"multipart/x-mixed-replace", b"multipart/form-data"):
+        if dtype in (b"multipart/x-mixed-replace", b"multipart/form-data"):
             if type(data["callback"]).__name__ not in ("function", "closure"):
                 self.on_failure(tx, b"Invalid response handler")
                 return
@@ -442,12 +445,20 @@ class WebEngine:
             return self._multipart_wrapper_factory(
                 data["callback"], data["content-type"].encode(self.ASCII), boundary
             )
-        else:  # dtype: text/html or text/plain
-            self.terminate(200, dtype)
-            return self._generate_response(tx, data)
+        # dtype: text/html or text/plain
+        self.terminate(200, dtype)
+        return self._generate_response(tx, data)
 
-    def _send_file_st(self, _, tx, web_resource: str, content_type: str):
+    def _send_file_st(self, _, tx, web_resource: str):
         """State for returning a static resource"""
+        extension = web_resource.rsplit(b".", 1)[-1]
+        try:
+            content_type = self._get_content_type(extension)
+        except IndexError:
+            if self.STRICT_TYPES:
+                self.on_unsupported_media(tx, b"Not supported: %s" % extension)
+                return
+            content_type = self._get_content_type(b"txt")
         try:
             self._set_response_header(
                 b"content-length", str(stat(web_resource)[6]).encode(WebEngine.ASCII)
@@ -458,7 +469,7 @@ class WebEngine:
         except OSError:
             self.on_missing_resource(tx)
 
-    def _start_multipart_parser_st(self, rx, tx):
+    def _start_multipart_parser_st(self, rx, tx): # pylint: disable=W0613
         self.on_failure(tx, b"Multipart handling is disabled")
 
     @staticmethod
