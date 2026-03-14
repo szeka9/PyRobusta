@@ -2,8 +2,10 @@
 Data structures for buffered processing & streaming
 """
 
+
 class BufferFullError(RuntimeError):
     """Custom exception for writes exceeding buffer capacity"""
+
     pass
 
 
@@ -12,6 +14,7 @@ class MemoryPool:
     Preallocated bytearray-backed memory pool that returns reusable memoryview slices
     for coroutine-based streaming without additional heap allocation.
     """
+
     __slots__ = ("_pool", "_blocks", "free")
 
     def __init__(self, block_size, block_count, wrapper=None):
@@ -23,8 +26,13 @@ class MemoryPool:
         """
         self._pool = bytearray(block_size * block_count)
         self._blocks = [
-            memoryview(self._pool)[i*block_size:(i+1)*block_size] if wrapper is None
-            else wrapper(memoryview(self._pool)[i*block_size:(i+1)*block_size])
+            (
+                memoryview(self._pool)[i * block_size : (i + 1) * block_size]
+                if wrapper is None
+                else wrapper(
+                    memoryview(self._pool)[i * block_size : (i + 1) * block_size]
+                )
+            )
             for i in range(block_count)
         ]
         self.free = list(self._blocks)
@@ -54,9 +62,10 @@ class SlidingBuffer:
     required and unused bytes exist before 'start'
     - Bounded memory usage; no dynamic reallocation
     """
+
     __slots__ = ("_buffer", "_start", "_end", "_mv", "capacity")
 
-    def __init__(self, buffer: bytearray|memoryview):
+    def __init__(self, buffer: bytearray | memoryview):
         self._buffer = buffer
         self._start = 0
         self._end = 0
@@ -73,11 +82,11 @@ class SlidingBuffer:
 
     def readable_view(self) -> memoryview:
         """Return a memoryview to the readable region of the buffer (window)"""
-        return self._mv[self._start:self._end]
+        return self._mv[self._start : self._end]
 
     def writable_view(self) -> memoryview:
         """Return a memoryview to the writeable region of the buffer"""
-        return self._mv[self._end:self.capacity]
+        return self._mv[self._end : self.capacity]
 
     def _compact(self):
         """
@@ -102,9 +111,9 @@ class SlidingBuffer:
             n = self.size()
         if n > self.size() or n < 0:
             raise IndexError("Incorrect buffer index")
-        return self._mv[self._start:self._start + n]
+        return self._mv[self._start : self._start + n]
 
-    def write(self, data:bytes):
+    def write(self, data: bytes):
         """Write new data into the writable region and advance the 'end' index"""
         if not isinstance(data, (bytes, bytearray, memoryview)):
             raise TypeError("write() expects bytes or bytearray")
@@ -118,7 +127,7 @@ class SlidingBuffer:
             buf[self._end + i] = data[i]
         self._end += needed
 
-    def consume(self, n: int=None):
+    def consume(self, n: int = None):
         """Discard the first n bytes of the window by advancing the 'start' index"""
         if n is None:
             n = self.size()
@@ -151,6 +160,6 @@ class SlidingBuffer:
     def find(self, term: bytes) -> int:
         """Find and return the index of a search term in the current window"""
         for i in range(self._start, self._end - len(term) + 1):
-            if self._mv[i : i+len(term)] == term:
+            if self._mv[i : i + len(term)] == term:
                 return i - self._start
         return -1

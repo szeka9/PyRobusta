@@ -7,9 +7,14 @@ from json import dumps
 from io import BytesIO
 from os import stat
 
+from utils.config import get_config
+
+
 class HeaderParsingError(ValueError):
     """Exception for errors occurring while parsing HTTP/MIME headers"""
+
     pass
+
 
 class WebEngine:
     """
@@ -35,88 +40,125 @@ class WebEngine:
     )
 
     ENDPOINTS = {}
-    RESP_HEADERS = {
-        200: b"HTTP/1.1 200 OK",
-        400: b"HTTP/1.1 400 Bad Request",
-        404: b"HTTP/1.1 404 Not Found",
-        408: b"HTTP/1.1 408 Request Timeout",
-        413: b"HTTP/1.1 413 Content Too Large",
-        415: b"HTTP/1.1 415 Unsupported Media Type",
-        500: b"HTTP/1.1 500 Internal Server Error",
-        503: b"HTTP/1.1 503 Service Unavailable",
-        505: b"HTTP/1.1 505 Version Not Supported",
-    }
-    CONTENT_TYPES = {
-        b"html": b"text/html",
-        b"css": b"text/css",
-        b"js": b"application/javascript",
-        b"json": b"application/json",
-        b"ico": b"image/x-icon",
-        b"jpeg": b"image/jpeg",
-        b"jpg": b"image/jpeg",
-        b"png": b"image/png",
-        b"txt": b"text/plain",
-        b"gif": b"image/gif",
-    }
+    RESP_HEADERS = (
+        200,
+        b"HTTP/1.1 200 OK",
+        400,
+        b"HTTP/1.1 400 Bad Request",
+        404,
+        b"HTTP/1.1 404 Not Found",
+        405,
+        b"HTTP/1.1 405 Method Not Allowed",
+        408,
+        b"HTTP/1.1 408 Request Timeout",
+        413,
+        b"HTTP/1.1 413 Content Too Large",
+        415,
+        b"HTTP/1.1 415 Unsupported Media Type",
+        500,
+        b"HTTP/1.1 500 Internal Server Error",
+        503,
+        b"HTTP/1.1 503 Service Unavailable",
+        505,
+        b"HTTP/1.1 505 Version Not Supported",
+    )
+    CONTENT_TYPES = (
+        b"html",
+        b"text/html",
+        b"css",
+        b"text/css",
+        b"js",
+        b"application/javascript",
+        b"json",
+        b"application/json",
+        b"ico",
+        b"image/x-icon",
+        b"jpeg",
+        b"image/jpeg",
+        b"jpg",
+        b"image/jpeg",
+        b"png",
+        b"image/png",
+        b"txt",
+        b"text/plain",
+        b"gif",
+        b"image/gif",
+    )
+
+    ASCII = "ascii"
+    CONTENT_LENGTH = "content-length"
+
     GET = b"GET"
     POST = b"POST"
     DELETE = b"DELETE"
     METHODS = (GET, POST, DELETE)
-    WEB_MOUNTS = {}
     STRICT_TYPES = False
     MULTIPART_BOUNDARY = b"pyrobusta-boundary"
+
+    CONTENT_LENGTH_ERROR = b"Content-Length mismatch"
+    HEADER_ERROR = b"Invalid headers"
+    MULTIPART_BOUNDARY_ERROR = b"Invalid multipart boundary"
+    BAD_REQUEST_ERROR = b"Bad request"
 
     def __init__(self):
         # [State machine]
         self.state = self._parse_request_line_st
         self.status_code = None
-        self.response_headers = {}
+        self.response_headers = []
+
         # [Recived request]
         self.version = None
         self.headers = {}
         self.method = None
         self.url = None
         self.content_length_cnt = 0
-        # [Recived request] - multipart
-        self.mp_first_part = True
-        self.mp_boundary = None
-        self.mp_delimiter = None
-        self.mp_closing_delimiter = None
+
+        if get_config("http_multipart") in ("True", "true"):
+            self.mp_first_part = True
+            self.mp_boundary = None
+            self.mp_delimiter = None
+            self.mp_closing_delimiter = None
+
+            import web_multipart
 
     # =========================================
     # Public methods for load modules
     # =========================================
 
-    @staticmethod
-    def register(endpoint: str, callback: object | str, method: str = "GET") -> None:
+    @classmethod
+    def register(
+        cls, endpoint: str, callback: object | str, method: str = "GET"
+    ) -> None:
         """
         PUBLIC METHOD FOR LMs: Webengine endpoint registration handler
         :param endpoint: name of the endpoint
         :param callback: callback function (WebEngine compatible: return:  html_type, content)
         :param method: HTTP method name
         """
-        endpoint = endpoint.encode("ascii")
-        method = method.encode("ascii")
-        if not endpoint in WebEngine.ENDPOINTS:
-            WebEngine.ENDPOINTS[endpoint] = {}
-        if method not in WebEngine.METHODS:
-            raise ValueError(f"method must be one of {WebEngine.METHODS}")
-        WebEngine.ENDPOINTS[endpoint][method] = callback
+        endpoint = endpoint.encode(cls.ASCII)
+        method = method.encode(cls.ASCII)
+        if not endpoint in cls.ENDPOINTS:
+            cls.ENDPOINTS[endpoint] = {}
+        if method not in cls.METHODS:
+            raise ValueError(f"method must be one of {cls.METHODS}")
+        cls.ENDPOINTS[endpoint][method] = callback
 
     # =========================================
     # Static helpers for parsing
     # =========================================
 
-    @staticmethod
-    def _file_type(path: str) -> bytes:
-        """File dynamic Content-Type handling"""
-        # Extract the file extension
-        ext = path.rsplit(".", 1)[-1].encode("ascii")
-        # Return the content type based on the file extension
-        return WebEngine.CONTENT_TYPES.get(ext, b"text/plain")
+    @classmethod
+    def _get_header(cls, status_code):
+        idx = cls.RESP_HEADERS.index(status_code)
+        return cls.RESP_HEADERS[idx + 1]
 
-    @staticmethod
-    def _parse_headers(raw_headers: memoryview) -> dict[str, str | int]:
+    @classmethod
+    def _get_content_type(cls, extension):
+        idx = cls.CONTENT_TYPES.index(extension)
+        return cls.CONTENT_TYPES[idx + 1]
+
+    @classmethod
+    def _parse_headers(cls, raw_headers: memoryview) -> dict[str, str | int]:
         """
         Basic parser to extract HTTP/MIME headers
         :param raw_headers: headers
@@ -130,11 +172,11 @@ class WebEngine:
             if b":" not in line:
                 raise HeaderParsingError()
             name, value = line.split(b":", 1)
-            name = name.strip().lower().decode("ascii")
-            if name == "content-length":
+            name = name.strip().lower().decode(cls.ASCII)
+            if name == cls.CONTENT_LENGTH:
                 value = int(value.strip())
             else:
-                value = value.strip().decode("ascii")
+                value = value.strip().decode(cls.ASCII)
             headers[name] = value
         return headers
 
@@ -152,8 +194,8 @@ class WebEngine:
                         return boundary if boundary else None
         return None
 
-    @staticmethod
-    def _parse_body_part(part: memoryview) -> tuple[dict, bytes]:
+    @classmethod
+    def _parse_body_part(cls, part: memoryview) -> tuple[dict, bytes]:
         """Parse part headers and body and return them as a tuple"""
         blank_idx = -1
         for i in range(len(part) - 3):
@@ -162,7 +204,7 @@ class WebEngine:
                 break
         if blank_idx == -1:
             raise HeaderParsingError("Headers could not be parsed")
-        headers = WebEngine._parse_headers(part[:blank_idx])
+        headers = cls._parse_headers(part[:blank_idx])
         body = part[blank_idx + 4 :]
         return headers, body
 
@@ -170,7 +212,17 @@ class WebEngine:
     # Helpers for state machine termination
     # =========================================
 
-    def terminate(self, status_code: int, content_type: bytes):
+    def _set_response_header(self, key, value):
+        if (
+            key in self.response_headers
+            and (index := self.response_headers.index(key) % 2) == 0
+        ):
+            self.response_headers[index + 1] = value
+        else:
+            self.response_headers.append(key)
+            self.response_headers.append(value)
+
+    def terminate(self, status_code: int, content_type: bytes = b"text/plain"):
         """
         Terminate state machine with status code and response content-type
         :param status_code: HTTP status code
@@ -178,8 +230,8 @@ class WebEngine:
         """
         self.state = None
         self.status_code = status_code
-        self.response_headers[b"content-type"] = content_type
-        self.response_headers[b"connection"] = b"close"
+        self._set_response_header(b"content-type", content_type)
+        self._set_response_header(b"connection", b"close")
 
     def _write_response_head(self, tx, content_length: int = None):
         """
@@ -188,11 +240,13 @@ class WebEngine:
         """
         # Discard already accumulated content (e.g. 500 response on unexpected errors)
         tx.consume()
-        tx.write(WebEngine.RESP_HEADERS[self.status_code])
+        tx.write(self._get_header(self.status_code))
         if content_length is not None:
             tx.write(b"\r\n")
-            tx.write(b"content-length: %s" % str(content_length).encode("ascii"))
-        for key, value in self.response_headers.items():
+            tx.write(b"content-length: %s" % str(content_length).encode(self.ASCII))
+        for i in range(0, len(self.response_headers), 2):
+            key = self.response_headers[i]
+            value = self.response_headers[i + 1]
             tx.write(b"\r\n")
             tx.write(key)
             tx.write(b": ")
@@ -222,61 +276,53 @@ class WebEngine:
             return BytesIO(body_encoded)
         tx.write(body_encoded)
 
-    def on_client_error(self, tx, info: bytes = b""):
+    def on_client_error(self, tx, info: bytes):
         """Terminate state machine and write 400 response"""
-        self.terminate(400, b"text/plain")
-        response = b"Bad request" + b"\r\n" + info
+        self.terminate(400)
+        response = info
         self._write_response_head(tx, len(response))
         tx.write(response)
 
-    def on_missing_resource(self, tx, info: bytes = b""):
+    def on_missing_resource(self, tx):
         """Terminate state machine and write 404 response"""
-        self.terminate(404, b"text/plain")
-        response = b"Not found" + b"\r\n" + info
-        self._write_response_head(tx, len(response))
-        tx.write(response)
+        self.terminate(404)
+        self._write_response_head(tx)
+
+    def on_method_not_allowed(self, tx):
+        """Terminate state machine and write 404 response"""
+        self.terminate(405)
+        self._write_response_head(tx)
 
     def on_timeout(self, tx):
         """Terminate state machine and write 408 response"""
-        self.terminate(408, b"text/plain")
-        response = b"Request timeout"
-        self._write_response_head(tx, len(response))
-        tx.write(response)
+        self.terminate(408)
+        self._write_response_head(tx)
 
     def on_buffer_full(self, tx):
         """Terminate state machine and write 413 response"""
-        self.terminate(413, b"text/plain")
-        response = b"Content too large"
-        self._write_response_head(tx, len(response))
-        tx.write(response)
+        self.terminate(413)
+        self._write_response_head(tx)
 
-    def on_unsupported_media(self, tx, info: bytes = b""):
+    def on_unsupported_media(self, tx, info: bytes):
         """Terminate state machine and write 415 response"""
-        self.terminate(415, b"text/plain")
-        response = b"Unsupported media type" + b"\r\n" + info
-        self._write_response_head(tx, len(response))
-        tx.write(response)
+        self.terminate(415)
+        self._write_response_head(tx)
 
-    def on_failure(self, tx, info: bytes = b""):
+    def on_failure(self, tx, info: bytes):
         """Terminate state machine and write 500 response"""
-        self.terminate(500, b"text/plain")
-        response = b"Internal server error" + b"\r\n" + info
-        self._write_response_head(tx, len(response))
-        tx.write(response)
+        self.terminate(500)
+        self._write_response_head(tx, len(info))
+        tx.write(info)
 
     def on_busy(self, tx):
         """Terminate state machine and write 503 response"""
-        self.terminate(503, b"text/plain")
-        response = b"Service unavailable"
-        self._write_response_head(tx, len(response))
-        tx.write(response)
+        self.terminate(503)
+        self._write_response_head(tx)
 
-    def on_unsupported_version(self, tx, version):
+    def on_unsupported_version(self, tx):
         """Terminate state machine and write 505 response"""
-        self.terminate(505, b"text/plain")
-        response = b"Unsupported version: " + version
-        self._write_response_head(tx, len(response))
-        tx.write(response)
+        self.terminate(505)
+        self._write_response_head(tx)
 
     # ================================================================================
     # Parser states
@@ -293,19 +339,16 @@ class WebEngine:
             return
         status_parts = bytes(rx.peek(status_line_sep)).split()
         if len(status_parts) != 3:
-            if status_parts[0] not in self.METHODS:
-                self.on_client_error(tx, b"Invalid request")
-            else:
-                self.on_client_error(tx, b"Malformed request line")
+            self.on_client_error(tx, self.BAD_REQUEST_ERROR)
             return
         self.method = status_parts[0]
         self.url = status_parts[1].lstrip(b"/")
         self.version = status_parts[2]
-        if self.method not in WebEngine.METHODS:
-            self.on_client_error(tx, b"Unsupported method: %s" % self.method)
+        if self.method not in self.METHODS:
+            self.on_method_not_allowed(tx)
             return
         if self.version != b"HTTP/1.1":
-            self.on_unsupported_version(tx, self.version)
+            self.on_unsupported_version(tx)
             return
         rx.consume(status_line_sep + 2)
         self.state = self._parse_headers_st
@@ -317,7 +360,7 @@ class WebEngine:
         try:
             self.headers = self._parse_headers(rx.peek(blank_idx))
         except HeaderParsingError:
-            self.on_client_error(tx, b"Invalid headers")
+            self.on_client_error(tx, self.HEADER_ERROR)
             return
         rx.consume(blank_idx + 4)
         self.state = self._route_request_st
@@ -327,52 +370,53 @@ class WebEngine:
         State for routing requests
         - supported ways: static resources, /rest, load module callbacks
         """
-        if (
-            self.url in WebEngine.ENDPOINTS
-            and self.method in WebEngine.ENDPOINTS[self.url]
-        ):
+        if self.url in self.ENDPOINTS and self.method in self.ENDPOINTS[self.url]:
             self.state = self._app_endpoint_st
             return
-        if self.method == WebEngine.GET:
+        if self.method == self.GET:
             resource = b"index.html" if not self.url else self.url
             extension = resource.rsplit(b".", 1)[-1]
             if extension not in self.CONTENT_TYPES:
-                if WebEngine.STRICT_TYPES:
+                if self.STRICT_TYPES:
                     self.on_unsupported_media(tx, b"Not supported: %s" % extension)
                     return
                 else:
-                    # Fallback to text/plain
-                    self.CONTENT_TYPES[extension] = self.CONTENT_TYPES[b"txt"]
+                    content_type = self._get_content_type(b"txt")
+            else:
+                content_type = self._get_content_type(extension)
             self.state = lambda _rx, _tx: self._send_file_st(
-                _rx, _tx, resource.decode("ascii")
+                _rx, _tx, resource.decode(self.ASCII), content_type
             )
             return
-        self.on_client_error(tx)
+        self.on_missing_resource(tx)
 
     def _app_endpoint_st(self, rx, tx):
         """Process a request by registered load module callbacks"""
-        callback = WebEngine.ENDPOINTS[self.url][self.method]
-        if "content-length" in self.headers and self.headers["content-length"] > 0:
-            if mp_boundary := WebEngine._is_multipart(self.headers):
-                self.mp_boundary = mp_boundary.encode("ascii")
+        callback = self.ENDPOINTS[self.url][self.method]
+        if (
+            self.CONTENT_LENGTH in self.headers
+            and self.headers[self.CONTENT_LENGTH] > 0
+        ):
+            if mp_boundary := self._is_multipart(self.headers):
+                self.mp_boundary = mp_boundary.encode(self.ASCII)
                 self.state = self._start_multipart_parser_st
                 return
             else:
-                if self.headers["content-length"] > rx.size():
+                if self.headers[self.CONTENT_LENGTH] > rx.size():
                     return
-                if self.headers["content-length"] < rx.size():
-                    self.on_client_error(tx, b"Content-length mismatch")
+                if self.headers[self.CONTENT_LENGTH] < rx.size():
+                    self.on_client_error(tx, self.CONTENT_LENGTH_ERROR)
                     return
                 self.state = None
                 dtype, data = callback(self.headers, bytes(rx.peek()))
-                dtype = dtype.encode("ascii")
+                dtype = dtype.encode(self.ASCII)
         else:
             if not callable(callback):
                 # Handle endpoint callback as a static resource
                 self.state = lambda _rx, _tx: self._send_file_st(_rx, _tx, callback)
                 return
             dtype, data = callback(self.headers, b"")
-            dtype = dtype.encode("ascii")
+            dtype = dtype.encode(self.ASCII)
         # dtype:
         #   one-shot (simple MIME types): image/jpeg | text/html | text/plain
         #   - data contains the response to include in the body
@@ -381,7 +425,7 @@ class WebEngine:
         #   - data must be: dict{callback,content-type}
         #     where callback is a function object without arguments, producing data
         #     in the format indicated by the content-type (e.g. image/jpeg | audio/l16;*)
-        self.response_headers[b"content-type"] = dtype
+        self._set_response_header(b"content-type", dtype)
         if dtype == b"image/jpeg":
             self.terminate(200, dtype)
             return self._generate_response(tx, data)
@@ -390,134 +434,33 @@ class WebEngine:
                 self.on_failure(tx, b"Invalid response handler")
                 return
             self.terminate(200, dtype)
-            boundary = WebEngine.MULTIPART_BOUNDARY
-            self.response_headers[b"content-type"] += b"; boundary=" + boundary
+            boundary = self.MULTIPART_BOUNDARY
+            self._set_response_header(
+                b"content-type", dtype + b"; boundary=" + boundary
+            )
             self._write_response_head(tx)
-            return WebEngine._multipart_wrapper_factory(
-                data["callback"], data["content-type"].encode("ascii"), boundary
+            return self._multipart_wrapper_factory(
+                data["callback"], data["content-type"].encode(self.ASCII), boundary
             )
         else:  # dtype: text/html or text/plain
             self.terminate(200, dtype)
             return self._generate_response(tx, data)
 
-    @staticmethod
-    def _multipart_wrapper_factory(callback, content_type: bytes, boundary: bytes):
-        """
-        Factory method for creating closures that write multipart responses
-        :param callback: function without arguments, must return bytes-like objects
-        :param content_type: content type of body parts
-        :param boundary: boundary value
-        :return closure: closure to invoke for response generation
-        """
-        boundary = b"--" + boundary
-        content_type_header = b"content-type: %s\r\n\r\n" % content_type
-
-        def _multipart_wrapper(tx):
-            """
-            Write multipart data generated from a callback's return value
-            - if insufficient buffer space is available, the generator yields control so
-            the caller can flush or drain the buffer
-            :return bool: true if the stream is completed
-            """
-            while True:
-                tx.write(boundary)
-                part_body = callback()
-                if not part_body:
-                    tx.write(b"--")
-                    yield True
-                tx.write(b"\r\n")
-                tx.write(content_type_header)
-                written = 0
-                while written < len(part_body):
-                    to_write = tx.capacity - tx.size()
-                    if not to_write:
-                        raise BufferError("Cannot write multipart response to buffer")
-                    tx.write(part_body[written : written + to_write])
-                    written += to_write
-                    yield False
-                tx.write(b"\r\n")
-
-        return _multipart_wrapper
-
-    def _send_file_st(self, _, tx, web_resource: str):
+    def _send_file_st(self, _, tx, web_resource: str, content_type: str):
         """State for returning a static resource"""
         try:
-            self.response_headers[b"content-length"] = str(
-                stat(web_resource)[6]
-            ).encode()
-            self.terminate(200, WebEngine._file_type(web_resource))
+            self._set_response_header(
+                b"content-length", str(stat(web_resource)[6]).encode(WebEngine.ASCII)
+            )
+            self.terminate(200, content_type)
             self._write_response_head(tx)
             return open(web_resource, "rb")
         except OSError:
             self.on_missing_resource(tx)
 
     def _start_multipart_parser_st(self, rx, tx):
-        """Initial state for processing multipart requests"""
-        if not "content-length" in self.headers:
-            self.on_client_error(tx, b"Missing content-length header")
-            return
-        if (start_delimiter := rx.find(b"\r\n")) == -1:
-            return
-        self.mp_delimiter = b"--" + self.mp_boundary + b"\r\n"
-        self.mp_closing_delimiter = b"--" + self.mp_boundary + b"--"
-        if rx.peek(start_delimiter + 2) != self.mp_delimiter:
-            self.on_client_error(tx, b"Missing initial multipart boundary")
-            return
-        rx.consume(start_delimiter + 2)
-        self.content_length_cnt += start_delimiter + 2
-        self.state = self._parse_boundary_st
+        self.on_failure(tx, b"Multipart handling is disabled")
 
-    def _parse_boundary_st(self, rx, _):
-        """State for parsing multipart boundary delimiter"""
-        if (
-            rx.find(b"\r\n" + self.mp_delimiter) == -1
-            and rx.find(b"\r\n" + self.mp_closing_delimiter) == -1
-        ):
-            return
-        self.state = self._parse_complete_part_st
-
-    def _parse_complete_part_st(self, rx, tx):
-        """
-        State for processing complete parts in a multipart request
-        - registered load module callback is required to process parts
-        """
-        next_delimiter = rx.find(b"\r\n--" + self.mp_boundary)
-        part = rx.peek(next_delimiter)
-        rx.consume(next_delimiter + 2)  # Consume leading CRLF
-        self.content_length_cnt += next_delimiter + 2
-        is_final = rx.peek(len(self.mp_closing_delimiter)) == self.mp_closing_delimiter
-        # Validate part and content-length
-        if self.headers["content-length"] < self.content_length_cnt:
-            self.on_client_error(tx, b"Content-length mismatch")
-            return
-        try:
-            part_headers, part_body = WebEngine._parse_body_part(part)
-        except HeaderParsingError:
-            self.on_client_error(tx, b"Invalid part headers")
-            return
-        callback = WebEngine.ENDPOINTS[self.url][self.method]
-        # Process complete part
-        if not is_final:
-            callback(part_headers, part_body, first=self.mp_first_part, last=False)
-            if rx.peek(len(self.mp_delimiter)) != self.mp_delimiter:
-                self.on_client_error(tx, b"Invalid multipart boundary formatting")
-                return
-            rx.consume(len(self.mp_delimiter))
-            self.content_length_cnt += len(self.mp_delimiter)
-            self.mp_first_part = False
-            self.state = self._parse_boundary_st
-            return
-        # Process last part
-        rx.consume(len(self.mp_closing_delimiter))
-        self.content_length_cnt += len(self.mp_closing_delimiter)
-        if (
-            self.headers["content-length"] != self.content_length_cnt
-            and self.content_length_cnt + rx.size() != self.headers["content-length"]
-        ):
-            self.on_client_error(tx, b"Content-length mismatch")
-            return
-        dtype, data = callback(
-            part_headers, part_body, first=self.mp_first_part, last=True
-        )
-        self.terminate(200, dtype.encode("ascii"))
-        return self._generate_response(tx, data)
+    @staticmethod
+    def _multipart_wrapper_factory(callback, content_type: bytes, boundary: bytes):
+        pass

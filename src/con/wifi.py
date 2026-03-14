@@ -1,6 +1,7 @@
 from network import WLAN, STA_IF
 from utils.config import get_config
 
+
 def initialize():
     sta_if = WLAN(STA_IF)
     sta_if.active(True)
@@ -11,6 +12,7 @@ def initialize():
             sta_if.connect(net[0], get_config("wifi_password"))
             print("WLAN connection succeeded!")
             break
+
 
 def get_address():
     sta_if = WLAN(STA_IF)

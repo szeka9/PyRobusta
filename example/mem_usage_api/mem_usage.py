@@ -1,8 +1,9 @@
-from gc import mem_free, mem_alloc
+from gc import mem_free, mem_alloc, collect
 
 from protocol.web import WebEngine
 
 def mem_usage(*_):
+    collect()
     free = mem_free()
     used = mem_alloc()
     usage_percentage = 100 * used / (free + used)
