@@ -1,5 +1,5 @@
 # This file is executed on every boot (including wake-boot from deepsleep)
-from con import wifi
+from pyrobusta.con import wifi
 
 wifi.initialize()
 

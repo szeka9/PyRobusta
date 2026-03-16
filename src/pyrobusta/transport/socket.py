@@ -11,6 +11,7 @@ class SocketBase:
     """
     SocketBase class.
     """
+
     __slots__ = ("id", "connected", "reader", "writer", "last_event")
 
     def __init__(self, reader, writer):

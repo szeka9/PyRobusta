@@ -1,6 +1,6 @@
 from gc import mem_free, mem_alloc, collect
 
-from protocol.web import WebEngine
+from pyrobusta.protocol.web import WebEngine
 
 def mem_usage(*_):
     collect()

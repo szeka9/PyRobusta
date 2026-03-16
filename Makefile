@@ -1,44 +1,49 @@
-# -----------------------------
-# Configuration
-# -----------------------------
 DEVICE ?= u0
+
 SRC_DIR := src
 EXAMPLE_DIR := example/mem_usage_api
+BUILD_DIR := build
+PKG := pyrobusta
 
-PY_FILES := $(shell find $(SRC_DIR) -type f -name "*.py" ! -name "__init__.py")
-MPY_FILES := $(PY_FILES:.py=.mpy)
+PY_FILES := $(shell find $(SRC_DIR)/$(PKG) -type f -name "*.py")
+NON_INIT_PY := $(filter-out %__init__.py,$(PY_FILES))
 
-# -----------------------------
-# Default target
-# -----------------------------
+MPY_TARGETS := $(patsubst $(SRC_DIR)/%.py,$(BUILD_DIR)/%.mpy,$(NON_INIT_PY))
+INIT_TARGETS := $(patsubst $(SRC_DIR)/%.py,$(BUILD_DIR)/%.py,$(filter %__init__.py,$(PY_FILES)))
+
 .PHONY: all
-all: compile upload
+all: build upload
 
 # -----------------------------
-# Cross compile
+# Build package
 # -----------------------------
-.PHONY: compile
-compile: $(MPY_FILES)
+.PHONY: build
+build: $(MPY_TARGETS) $(INIT_TARGETS)
 
-%.mpy: %.py
+# Compile .py -> .mpy
+$(BUILD_DIR)/%.mpy: $(SRC_DIR)/%.py
+	@mkdir -p $(dir $@)
 	@echo "Compiling $< -> $@"
 	@mpy-cross $< -o $@
 
+# Copy __init__.py
+$(BUILD_DIR)/%.py: $(SRC_DIR)/%.py
+	@mkdir -p $(dir $@)
+	@echo "Copying $< -> $@"
+	@cp $< $@
+
 # -----------------------------
-# Upload compiled files
+# Upload build output
 # -----------------------------
 .PHONY: upload
 upload:
-	@echo "Uploading compiled files to device $(DEVICE)"
-	@find $(SRC_DIR) | grep -v __pycache__ | while read source; do \
-		rel=$${source#$(SRC_DIR)/}; \
+	@echo "Uploading build/$(PKG) to device $(DEVICE)"
+	@find $(BUILD_DIR)/$(PKG) | while read source; do \
+		rel=$${source#$(BUILD_DIR)/}; \
 		if [ -d "$$source" ]; then \
-			echo "================================================"; \
-			echo "Creating directory: $$rel"; \
 			mpremote $(DEVICE) mkdir "$$rel" || true; \
-		elif [ -f "$$source" ] && echo "$$source" | grep -q '\.mpy$$'; then \
-			echo "================================================"; \
-			echo "Uploading: $$rel"; \
+		elif [ -f "$$source" ]; then \
+			echo "Uploading $$rel"; \
 			mpremote $(DEVICE) rm "$$rel" || true; \
 			mpremote $(DEVICE) cp "$$source" ":$$rel"; \
 		fi; \
@@ -63,15 +68,14 @@ run-example:
 	mpremote $(DEVICE) run $(EXAMPLE_DIR)/app.py
 
 # -----------------------------
-# Clean compiled artifacts locally
+# Clean local build
 # -----------------------------
 .PHONY: clean
 clean:
-	@echo "Removing local .mpy files"
-	find $(SRC_DIR) -type f -name "*.mpy" -delete
+	rm -rf $(BUILD_DIR)
 
 # -----------------------------
-# Clean device filesystem
+# Clean package on device
 # -----------------------------
 .PHONY: clean-device
 clean-device:
@@ -81,4 +85,4 @@ clean-device:
 # Full redeploy
 # -----------------------------
 .PHONY: redeploy
-redeploy: clean compile upload
+redeploy: clean build clean-device upload

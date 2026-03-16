@@ -2,16 +2,17 @@
 Socket server application
 """
 
-from asyncio import sleep_ms, start_server # pylint: disable=E1101
+from asyncio import sleep_ms, start_server, run  # pylint: disable=E1101
 import gc
 from time import ticks_ms, ticks_diff
 
-from bindings.socket_http import SocketHttp
-from con import wifi
-from utils.config import get_config
+from ..protocol import web
+from ..bindings.socket_http import SocketHttp
+from ..con import wifi
+from ..utils.config import get_config
 
 
-class SocketServer:
+class HttpServer:
     """
     Socket server class, handling global config (timeout, port, max connections etc.),
     and managing active sockets.
@@ -32,16 +33,16 @@ class SocketServer:
     def drop_client(socket):
         """Remove socket from active list"""
         print(f"[SocketBase] {socket.id} dropped")
-        if socket in SocketServer.ACTIVE_SOCKETS:
-            socket_idx = SocketServer.ACTIVE_SOCKETS.index(socket)
-            SocketServer.ACTIVE_SOCKETS.pop(socket_idx)
+        if socket in HttpServer.ACTIVE_SOCKETS:
+            socket_idx = HttpServer.ACTIVE_SOCKETS.index(socket)
+            HttpServer.ACTIVE_SOCKETS.pop(socket_idx)
             gc.collect()
 
     def __init__(self):
         self._host = "0.0.0.0"
-        self._max_sockets = max(1, SocketServer.MAX_SOCKETS)
-        self._port = SocketServer.LISTEN_PORT
-        self._timeout = SocketServer.SOCKET_TIMEOUT_SEC
+        self._max_sockets = max(1, HttpServer.MAX_SOCKETS)
+        self._port = HttpServer.LISTEN_PORT
+        self._timeout = HttpServer.SOCKET_TIMEOUT_SEC
         self.http = None
 
     async def can_handle_new_socket(self):
@@ -53,12 +54,12 @@ class SocketServer:
         gc.collect()
         con_timestamp = ticks_ms()
         while (
-            ticks_diff(ticks_ms(), con_timestamp) < SocketServer.CON_ACCEPT_TIMEOUT_MS
+            ticks_diff(ticks_ms(), con_timestamp) < HttpServer.CON_ACCEPT_TIMEOUT_MS
         ):
-            if len(SocketServer.ACTIVE_SOCKETS) < self._max_sockets:
+            if len(HttpServer.ACTIVE_SOCKETS) < self._max_sockets:
                 return True
             # Attempt to evict inactive clients
-            for socket in SocketServer.ACTIVE_SOCKETS:
+            for socket in HttpServer.ACTIVE_SOCKETS:
                 socket_inactive = int(ticks_diff(ticks_ms(), socket.last_event) * 0.001)
                 if not socket.connected or socket_inactive > self._timeout:
                     print(
@@ -68,9 +69,9 @@ class SocketServer:
                         )
                     )
                     await socket.close()
-                    SocketServer.drop_client(socket)
+                    HttpServer.drop_client(socket)
                     return True
-            await sleep_ms(SocketServer.CON_ACCEPT_SLEEP_MS)
+            await sleep_ms(HttpServer.CON_ACCEPT_SLEEP_MS)
         return False
 
     async def accept_http(self, reader, writer):
@@ -86,7 +87,7 @@ class SocketServer:
 
         new_client = SocketHttp(reader, writer)
         print(f"[SocketServer] new client: {new_client.id}")
-        SocketServer.ACTIVE_SOCKETS.append(new_client)
+        HttpServer.ACTIVE_SOCKETS.append(new_client)
         await new_client.run()
 
     async def run_server(self):
@@ -97,6 +98,7 @@ class SocketServer:
         print(f"[SocketServer] Start SocketServer on {addr}")
         try:
             gc.collect()
+            web.enable_optional_features()
             SocketHttp.init_pools(self._max_sockets)
             self.http = start_server(
                 self.accept_http, self._host, self._port, backlog=self._max_sockets
@@ -110,3 +112,10 @@ class SocketServer:
         print("[SocketServer] Terminated")
         if self.http:
             self.http.close()
+
+
+def main():
+    """
+    Start socket server async task.
+    """
+    run(HttpServer().run_server())

@@ -1,21 +1,9 @@
+import sys
 import unittest
 from unittest import mock
 from unittest.mock import MagicMock, patch
-from pathlib import Path
 
-import sys
-import importlib.util
-
-
-def load_module(relative_path):
-    module_name = relative_path.split("/")[-1].split(".")[0]
-    here = Path(__file__).resolve()
-    buffer_path = (here.parent.parent / relative_path).resolve()
-    spec = importlib.util.spec_from_file_location(module_name, str(buffer_path))
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[module_name] = mod
-    spec.loader.exec_module(mod)
-    return mod
+from .utils import load_module
 
 
 class TestWebStateMachine(unittest.TestCase):
@@ -25,7 +13,7 @@ class TestWebStateMachine(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.config = {}
+        cls.config = {"http_multipart": "False"}
 
     def setUp(self):
         # Create mock modules
@@ -36,7 +24,10 @@ class TestWebStateMachine(unittest.TestCase):
 
         self.patcher = patch.dict(
             sys.modules,
-            {"utils": self.mock_utils, "utils.config": self.mock_utils_config},
+            {
+                "pyrobusta.utils": self.mock_utils,
+                "pyrobusta.utils.config": self.mock_utils_config,
+            },
         )
         self.patcher.start()
 
@@ -44,9 +35,9 @@ class TestWebStateMachine(unittest.TestCase):
             self.set_mock_config(key, value)
 
         # Load your web and buffer modules
-        buffer_module = load_module("src/stream/buffer.py")
-        web_module = load_module("src/protocol/web.py")
-        load_module("src/protocol/web_multipart.py")
+        buffer_module = load_module("pyrobusta/stream/buffer.py")
+        web_module = load_module("pyrobusta/protocol/web.py")
+        web_module.enable_optional_features()
 
         self.engine = web_module.WebEngine()
         self.rx = buffer_module.SlidingBuffer(bytearray(1024))

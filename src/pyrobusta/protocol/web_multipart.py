@@ -1,16 +1,18 @@
 """
 State machine extension for multipart parsing.
 """
-# pylint: disable=W0212
 
-from web import WebEngine, HeaderParsingError
+# pylint: disable=W0212,R0401
+
+from pyrobusta.protocol import web
 
 
 def add_method(cls, method_type="instance"):
     """
-    Monkey-patch decorators to extend WebEngine with
-    additional methods.
+    Monkey-patch decorators to extend web.WebEngine with
+    additional methods and states.
     """
+
     def decorator(func):
         if method_type == "instance":
             setattr(cls, func.__name__, func)
@@ -25,7 +27,7 @@ def add_method(cls, method_type="instance"):
     return decorator
 
 
-@add_method(WebEngine, "staticmethod")
+@add_method(web.WebEngine, "staticmethod")
 def _multipart_wrapper_factory(callback, content_type: bytes, boundary: bytes):
     """
     Factory method for creating closures that write multipart responses
@@ -65,25 +67,25 @@ def _multipart_wrapper_factory(callback, content_type: bytes, boundary: bytes):
     return _multipart_wrapper
 
 
-@add_method(WebEngine)
+@add_method(web.WebEngine)
 def _start_multipart_parser_st(self, rx, tx):
     """Initial state for processing multipart requests"""
-    if not WebEngine.CONTENT_LENGTH in self.headers:
-        self.on_client_error(tx, WebEngine.CONTENT_LENGTH_ERROR)
+    if not web.WebEngine.CONTENT_LENGTH in self.headers:
+        self.on_client_error(tx, web.WebEngine.CONTENT_LENGTH_ERROR)
         return
     if (start_delimiter := rx.find(b"\r\n")) == -1:
         return
     self.mp_delimiter = b"--" + self.mp_boundary + b"\r\n"
     self.mp_closing_delimiter = b"--" + self.mp_boundary + b"--"
     if rx.peek(start_delimiter + 2) != self.mp_delimiter:
-        self.on_client_error(tx, WebEngine.MULTIPART_BOUNDARY_ERROR)
+        self.on_client_error(tx, web.WebEngine.MULTIPART_BOUNDARY_ERROR)
         return
     rx.consume(start_delimiter + 2)
     self.content_length_cnt += start_delimiter + 2
     self.state = self._parse_boundary_st
 
 
-@add_method(WebEngine)
+@add_method(web.WebEngine)
 def _parse_boundary_st(self, rx, _):
     """State for parsing multipart boundary delimiter"""
     if (
@@ -94,7 +96,7 @@ def _parse_boundary_st(self, rx, _):
     self.state = self._parse_complete_part_st
 
 
-@add_method(WebEngine)
+@add_method(web.WebEngine)
 def _parse_complete_part_st(self, rx, tx):
     """
     State for processing complete parts in a multipart request
@@ -106,20 +108,20 @@ def _parse_complete_part_st(self, rx, tx):
     self.content_length_cnt += next_delimiter + 2
     is_final = rx.peek(len(self.mp_closing_delimiter)) == self.mp_closing_delimiter
     # Validate part and content-length
-    if self.headers[WebEngine.CONTENT_LENGTH] < self.content_length_cnt:
-        self.on_client_error(tx, WebEngine.CONTENT_LENGTH_ERROR)
+    if self.headers[web.WebEngine.CONTENT_LENGTH] < self.content_length_cnt:
+        self.on_client_error(tx, web.WebEngine.CONTENT_LENGTH_ERROR)
         return
     try:
-        part_headers, part_body = WebEngine._parse_body_part(part)
-    except HeaderParsingError:
-        self.on_client_error(tx, WebEngine.HEADER_ERROR)
+        part_headers, part_body = web.WebEngine._parse_body_part(part)
+    except web.HeaderParsingError:
+        self.on_client_error(tx, web.WebEngine.HEADER_ERROR)
         return
-    callback = WebEngine.ENDPOINTS[self.url][self.method]
+    callback = web.WebEngine.ENDPOINTS[self.url][self.method]
     # Process complete part
     if not is_final:
         callback(part_headers, part_body, first=self.mp_first_part, last=False)
         if rx.peek(len(self.mp_delimiter)) != self.mp_delimiter:
-            self.on_client_error(tx, WebEngine.MULTIPART_BOUNDARY_ERROR)
+            self.on_client_error(tx, web.WebEngine.MULTIPART_BOUNDARY_ERROR)
             return
         rx.consume(len(self.mp_delimiter))
         self.content_length_cnt += len(self.mp_delimiter)
@@ -130,12 +132,29 @@ def _parse_complete_part_st(self, rx, tx):
     rx.consume(len(self.mp_closing_delimiter))
     self.content_length_cnt += len(self.mp_closing_delimiter)
     if (
-        self.headers[WebEngine.CONTENT_LENGTH] != self.content_length_cnt
+        self.headers[web.WebEngine.CONTENT_LENGTH] != self.content_length_cnt
         and self.content_length_cnt + rx.size()
-        != self.headers[WebEngine.CONTENT_LENGTH]
+        != self.headers[web.WebEngine.CONTENT_LENGTH]
     ):
-        self.on_client_error(tx, WebEngine.CONTENT_LENGTH_ERROR)
+        self.on_client_error(tx, web.WebEngine.CONTENT_LENGTH_ERROR)
         return
     dtype, data = callback(part_headers, part_body, first=self.mp_first_part, last=True)
-    self.terminate(200, dtype.encode(WebEngine.ASCII))
+    self.terminate(200, dtype.encode(web.WebEngine.ASCII))
     return self._generate_response(tx, data)
+
+
+def apply_patches():
+    """
+    Apply patches to class attributes for multipart parsing.
+    """
+    cls = web.WebEngine
+
+    orig_init = cls.__init__
+
+    def new_init(self, *args, **kwargs):
+        orig_init(self, *args, **kwargs)
+        self.mp_first_part = True
+        self.mp_delimiter = None
+        self.mp_closing_delimiter = None
+
+    cls.__init__ = new_init

@@ -7,7 +7,7 @@ from json import dumps
 from io import BytesIO
 from os import stat
 
-from utils.config import get_config
+from ..utils.config import get_config
 
 
 class HeaderParsingError(ValueError):
@@ -33,8 +33,8 @@ class WebEngine:
         "method",
         "url",
         "content_length_cnt",
-        "mp_first_part",
         "mp_boundary",
+        "mp_first_part",
         "mp_delimiter",
         "mp_closing_delimiter",
     )
@@ -113,13 +113,8 @@ class WebEngine:
         self.url = None
         self.content_length_cnt = 0
 
-        if get_config("http_multipart") in ("True", "true"):
-            self.mp_first_part = True
-            self.mp_boundary = None
-            self.mp_delimiter = None
-            self.mp_closing_delimiter = None
-
-            import web_multipart  # pylint: disable=W0611
+        # [Multipart state]
+        self.mp_boundary = None
 
     # =========================================
     # Public methods for load modules
@@ -420,14 +415,6 @@ class WebEngine:
                 return
             dtype, data = callback(self.headers, b"")
             dtype = dtype.encode(self.ASCII)
-        # dtype:
-        #   one-shot (simple MIME types): image/jpeg | text/html | text/plain
-        #   - data contains the response to include in the body
-        #
-        #   task (streaming MIME types): multipart/x-mixed-replace | multipart/form-data
-        #   - data must be: dict{callback,content-type}
-        #     where callback is a function object without arguments, producing data
-        #     in the format indicated by the content-type (e.g. image/jpeg | audio/l16;*)
         self._set_response_header(b"content-type", dtype)
         if dtype == b"image/jpeg":
             self.terminate(200, dtype)
@@ -445,7 +432,6 @@ class WebEngine:
             return self._multipart_wrapper_factory(
                 data["callback"], data["content-type"].encode(self.ASCII), boundary
             )
-        # dtype: text/html or text/plain
         self.terminate(200, dtype)
         return self._generate_response(tx, data)
 
@@ -469,9 +455,19 @@ class WebEngine:
         except OSError:
             self.on_missing_resource(tx)
 
-    def _start_multipart_parser_st(self, rx, tx): # pylint: disable=W0613
+    def _start_multipart_parser_st(self, rx, tx):  # pylint: disable=W0613
         self.on_failure(tx, b"Multipart handling is disabled")
 
     @staticmethod
     def _multipart_wrapper_factory(callback, content_type: bytes, boundary: bytes):
         pass
+
+
+def enable_optional_features():
+    """
+    Enable related optional features, set in the config.
+    """
+    if get_config("http_multipart") in ("True", "true"):
+        from pyrobusta.protocol import web_multipart
+
+        web_multipart.apply_patches()

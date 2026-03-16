@@ -6,10 +6,10 @@ import asyncio
 from asyncio import sleep_ms # pylint: disable=E1101
 from gc import mem_free, collect
 
-from stream.buffer import MemoryPool, SlidingBuffer, BufferFullError
-from transport.socket import SocketBase
-from protocol.web import WebEngine
-from utils.config import get_config
+from ..stream.buffer import MemoryPool, SlidingBuffer, BufferFullError
+from ..transport.socket import SocketBase
+from ..protocol.web import WebEngine
+from ..utils.config import get_config
 
 
 class SocketHttp(SocketBase):

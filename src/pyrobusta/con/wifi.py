@@ -3,7 +3,7 @@ Helpers for setting up Wi-Fi in station mode
 """
 
 from network import WLAN, STA_IF
-from utils.config import get_config
+from ..utils.config import get_config
 
 
 def initialize():
