@@ -16,7 +16,7 @@ class HeaderParsingError(ValueError):
     pass
 
 
-class WebEngine:
+class HttpEngine:
     """
     HTTP protocol parser state machine
     - provides an adapter/routing layer
@@ -339,7 +339,7 @@ class WebEngine:
             self.on_client_error(tx, self.BAD_REQUEST_ERROR)
             return
         self.method = status_parts[0]
-        self.url = status_parts[1].lstrip(b"/")
+        self.url = status_parts[1]
         self.version = status_parts[2]
         if self.method not in self.METHODS:
             self.on_method_not_allowed(tx)
@@ -387,9 +387,7 @@ class WebEngine:
             return
         if self.method == self.GET:
             resource = b"index.html" if not self.url else self.url
-            self.state = lambda _rx, _tx: self._send_file_st(
-                _rx, _tx, resource.decode(self.ASCII)
-            )
+            self.state = lambda _rx, _tx: self._send_file_st(_rx, _tx, resource)
             return
         self.on_missing_resource(tx)
 
@@ -411,7 +409,9 @@ class WebEngine:
         else:
             if not callable(callback):
                 # Handle as a static resource
-                self.state = lambda _rx, _tx: self._send_file_st(_rx, _tx, callback)
+                self.state = lambda _rx, _tx: self._send_file_st(
+                    _rx, _tx, callback.encode(HttpEngine.ASCII)
+                )
                 return
             dtype, data = callback(self.headers, b"")
             dtype = dtype.encode(self.ASCII)
@@ -435,7 +435,7 @@ class WebEngine:
         self.terminate(200, dtype)
         return self._generate_response(tx, data)
 
-    def _send_file_st(self, _, tx, web_resource: str):
+    def _send_file_st(self, _, tx, web_resource: bytes):
         """State for returning a static resource"""
         extension = web_resource.rsplit(b".", 1)[-1]
         try:
@@ -447,7 +447,7 @@ class WebEngine:
             content_type = self._get_content_type(b"txt")
         try:
             self._set_response_header(
-                b"content-length", str(stat(web_resource)[6]).encode(WebEngine.ASCII)
+                b"content-length", str(stat(web_resource)[6]).encode(HttpEngine.ASCII)
             )
             self.terminate(200, content_type)
             self._write_response_head(tx)
@@ -468,6 +468,6 @@ def enable_optional_features():
     Enable related optional features, set in the config.
     """
     if get_config("http_multipart") in ("True", "true"):
-        from pyrobusta.protocol import web_multipart
+        from pyrobusta.protocol import http_multipart
 
-        web_multipart.apply_patches()
+        http_multipart.apply_patches()

@@ -6,7 +6,7 @@ from asyncio import sleep_ms, start_server, run  # pylint: disable=E1101
 import gc
 from time import ticks_ms, ticks_diff
 
-from ..protocol import web
+from ..protocol import http
 from ..bindings.socket_http import SocketHttp
 from ..con import wifi
 from ..utils.config import get_config
@@ -98,7 +98,7 @@ class HttpServer:
         print(f"[SocketServer] Start SocketServer on {addr}")
         try:
             gc.collect()
-            web.enable_optional_features()
+            http.enable_optional_features()
             SocketHttp.init_pools(self._max_sockets)
             self.http = start_server(
                 self.accept_http, self._host, self._port, backlog=self._max_sockets

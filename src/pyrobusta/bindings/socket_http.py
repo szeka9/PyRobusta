@@ -8,7 +8,7 @@ from gc import mem_free, collect
 
 from ..stream.buffer import MemoryPool, SlidingBuffer, BufferFullError
 from ..transport.socket import SocketBase
-from ..protocol.web import WebEngine
+from ..protocol.http import HttpEngine
 from ..utils.config import get_config
 
 
@@ -85,7 +85,7 @@ class SocketHttp(SocketBase):
 
     def __init__(self, reader, writer):
         super().__init__(reader, writer)
-        self._engine = WebEngine()
+        self._engine = HttpEngine()
         self._prev_state = None
         self._recv_buf = None
         self._send_buf = None
