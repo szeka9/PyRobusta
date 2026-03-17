@@ -19,7 +19,7 @@ def mem_usage(*_):
 
 
 http_server.main()
-HttpEngine.register("mem-usage", mem_usage)
+HttpEngine.register("/mem-usage", mem_usage)
 
 
 try:
