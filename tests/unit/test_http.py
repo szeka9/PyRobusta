@@ -36,10 +36,10 @@ class TestWebStateMachine(unittest.TestCase):
 
         # Load your web and buffer modules
         buffer_module = load_module("pyrobusta/stream/buffer.py")
-        web_module = load_module("pyrobusta/protocol/web.py")
+        web_module = load_module("pyrobusta/protocol/http.py")
         web_module.enable_optional_features()
 
-        self.engine = web_module.WebEngine()
+        self.engine = web_module.HttpEngine()
         self.rx = buffer_module.SlidingBuffer(bytearray(1024))
         self.tx = buffer_module.SlidingBuffer(bytearray(1024))
 
@@ -62,7 +62,7 @@ class TestWebStateMachine(unittest.TestCase):
             self.engine.state(self.rx, self.tx)
 
         self.assertEqual(self.engine.method, b"GET")
-        self.assertEqual(self.engine.url, b"index.html")
+        self.assertEqual(self.engine.url, b"/index.html")
         self.assertEqual(self.engine.version, b"HTTP/1.1")
         self.assertEqual(self.rx.peek(), b"Content-Length:10")
         self.assertEqual(self.engine.state, self.engine._parse_headers_st)
@@ -91,7 +91,7 @@ class TestWebStateMachine(unittest.TestCase):
                 break
 
         self.assertEqual(self.engine.method, b"TRACE")
-        self.assertEqual(self.engine.url, b"index.html")
+        self.assertEqual(self.engine.url, b"/index.html")
         self.assertEqual(self.engine.version, b"HTTP/1.1")
         self.assertEqual(self.engine.state, None)
         self.assertEqual(self.engine.status_code, 405)
@@ -106,7 +106,7 @@ class TestWebStateMachine(unittest.TestCase):
                 break
 
         self.assertEqual(self.engine.method, b"GET")
-        self.assertEqual(self.engine.url, b"index.html")
+        self.assertEqual(self.engine.url, b"/index.html")
         self.assertEqual(self.engine.version, b"HTTP/2")
         self.assertEqual(self.engine.state, None)
         self.assertEqual(self.engine.status_code, 505)

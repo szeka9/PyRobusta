@@ -5,7 +5,7 @@ from pathlib import Path
 
 def load_module(relative_path):
     here = Path(__file__).resolve()
-    src_root = here.parent.parent / "src"
+    src_root = here.parent.parent.parent / "src"
 
     if str(src_root) not in sys.path:
         sys.path.insert(0, str(src_root))

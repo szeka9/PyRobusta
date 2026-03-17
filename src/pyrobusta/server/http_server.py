@@ -8,7 +8,6 @@ from time import ticks_ms, ticks_diff
 
 from ..protocol import http
 from ..bindings.socket_http import SocketHttp
-from ..con import wifi
 from ..utils.config import get_config
 
 
@@ -53,9 +52,7 @@ class HttpServer:
         """
         gc.collect()
         con_timestamp = ticks_ms()
-        while (
-            ticks_diff(ticks_ms(), con_timestamp) < HttpServer.CON_ACCEPT_TIMEOUT_MS
-        ):
+        while ticks_diff(ticks_ms(), con_timestamp) < HttpServer.CON_ACCEPT_TIMEOUT_MS:
             if len(HttpServer.ACTIVE_SOCKETS) < self._max_sockets:
                 return True
             # Attempt to evict inactive clients
@@ -94,8 +91,6 @@ class HttpServer:
         """
         Start asyncio socket server on the specified port.
         """
-        addr = wifi.get_address()
-        print(f"[SocketServer] Start SocketServer on {addr}")
         try:
             gc.collect()
             http.enable_optional_features()
@@ -104,7 +99,6 @@ class HttpServer:
                 self.accept_http, self._host, self._port, backlog=self._max_sockets
             )
             await self.http
-            print(f"HTTP server ready, connect: http://{addr}")
         except MemoryError as e:
             print(f"Memory allocation failed: {e}")
 
