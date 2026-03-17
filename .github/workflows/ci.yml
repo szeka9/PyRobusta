@@ -8,6 +8,7 @@ on:
       - "requirements.txt"
       - ".github/workflows/build.yml"
       - "Makefile"
+      - "external/**"
 
   pull_request:
     branches: [ main ]
@@ -16,6 +17,7 @@ on:
       - "requirements.txt"
       - ".github/workflows/build.yml"
       - "Makefile"
+      - "external/**"
 
 jobs:
   test:
@@ -35,6 +37,22 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Setup toolchain
+        run: |
+          make all
+
+      - name: Static checkers
+        run: |
+          make pylint
+      
+      - name: Unit-test
+        run: |
+          make unit-test
+
       - name: Build
         run: |
           make build
+
+      - name: Functional test
+        run: |
+          make test-unix
