@@ -1,3 +1,2 @@
-mpremote
+mpremote==1.27.0
 pylint
-mpy-cross

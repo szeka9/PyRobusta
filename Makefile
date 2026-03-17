@@ -5,6 +5,13 @@ EXAMPLE_DIR := example/mem_usage_api
 BUILD_DIR := build
 PKG := pyrobusta
 
+MICROPY_ROOT := external/micropython
+MPY_CROSS := $(MICROPY_ROOT)/mpy-cross/build/mpy-cross
+MICROPYTHON := $(MICROPY_ROOT)/ports/unix/build-standard/micropython
+
+RUNTIME_DIR := runtime
+TEST_RUNTIME := runtime-test
+
 PY_FILES := $(shell find $(SRC_DIR)/$(PKG) -type f -name "*.py")
 NON_INIT_PY := $(filter-out %__init__.py,$(PY_FILES))
 
@@ -13,6 +20,19 @@ INIT_TARGETS := $(patsubst $(SRC_DIR)/%.py,$(BUILD_DIR)/%.py,$(filter %__init__.
 
 .PHONY: all
 all: build upload
+
+# ================================================
+# Build
+# ================================================
+
+# -----------------------------
+# Toolchain
+# -----------------------------
+
+.PHONY: toolchain
+toolchain:
+	$(MAKE) -C $(MICROPY_ROOT)/mpy-cross
+	$(MAKE) -C $(MICROPY_ROOT)/ports/unix
 
 # -----------------------------
 # Build package
@@ -24,7 +44,7 @@ build: $(MPY_TARGETS) $(INIT_TARGETS)
 $(BUILD_DIR)/%.mpy: $(SRC_DIR)/%.py
 	@mkdir -p $(dir $@)
 	@echo "Compiling $< -> $@"
-	@mpy-cross $< -o $@
+	@$(MPY_CROSS) $< -o $@
 
 # Copy __init__.py
 $(BUILD_DIR)/%.py: $(SRC_DIR)/%.py
