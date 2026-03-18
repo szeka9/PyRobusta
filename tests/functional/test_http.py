@@ -10,13 +10,20 @@ def run_test(name, actual, expected):
         print("OK")
     else:
         print("Fail")
+        raise AssertionError(f"{actual} != {expected}")
 
 
 async def send_request(request):
     reader, writer = await asyncio.open_connection("127.0.0.1", 8000)
     writer.write(request)
     await writer.drain()
-    response = await reader.read(1024)
+
+    to_read = True
+    response = b""
+    while to_read:
+        response_part = await reader.read(1024)
+        response += response_part
+        to_read = len(response_part)
     writer.close()
     return response
 

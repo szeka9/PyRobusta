@@ -7,27 +7,21 @@ State machine extension for multipart parsing.
 from pyrobusta.protocol import http
 
 
-def add_method(cls, method_type="instance"):
+def add_method(cls, func, method_type="instance"):
     """
-    Monkey-patch decorators to extend web.WebEngine with
+    Helper to extend web.WebEngine with
     additional methods and states.
     """
-
-    def decorator(func):
-        if method_type == "instance":
-            setattr(cls, func.__name__, func)
-        elif method_type == "staticmethod":
-            setattr(cls, func.__name__, staticmethod(func))
-        elif method_type == "classmethod":
-            setattr(cls, func.__name__, classmethod(func))
-        else:
-            raise ValueError("Invalid type")
-        return func
-
-    return decorator
+    if method_type == "instance":
+        setattr(cls, func.__name__, func)
+    elif method_type == "staticmethod":
+        setattr(cls, func.__name__, staticmethod(func))
+    elif method_type == "classmethod":
+        setattr(cls, func.__name__, classmethod(func))
+    else:
+        raise ValueError("Invalid type")
 
 
-@add_method(http.HttpEngine, "staticmethod")
 def _multipart_wrapper_factory(callback, content_type: bytes, boundary: bytes):
     """
     Factory method for creating closures that write multipart responses
@@ -67,7 +61,6 @@ def _multipart_wrapper_factory(callback, content_type: bytes, boundary: bytes):
     return _multipart_wrapper
 
 
-@add_method(http.HttpEngine)
 def _start_multipart_parser_st(self, rx, tx):
     """Initial state for processing multipart requests"""
     if not http.HttpEngine.CONTENT_LENGTH in self.headers:
@@ -85,7 +78,6 @@ def _start_multipart_parser_st(self, rx, tx):
     self.state = self._parse_boundary_st
 
 
-@add_method(http.HttpEngine)
 def _parse_boundary_st(self, rx, _):
     """State for parsing multipart boundary delimiter"""
     if (
@@ -96,7 +88,6 @@ def _parse_boundary_st(self, rx, _):
     self.state = self._parse_complete_part_st
 
 
-@add_method(http.HttpEngine)
 def _parse_complete_part_st(self, rx, tx):
     """
     State for processing complete parts in a multipart request
@@ -158,3 +149,8 @@ def apply_patches():
         self.mp_closing_delimiter = None
 
     cls.__init__ = new_init
+
+    add_method(http.HttpEngine, _multipart_wrapper_factory, "staticmethod")
+    add_method(http.HttpEngine, _start_multipart_parser_st)
+    add_method(http.HttpEngine, _parse_boundary_st)
+    add_method(http.HttpEngine, _parse_complete_part_st)

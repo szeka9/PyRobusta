@@ -420,7 +420,9 @@ class HttpEngine:
             self.terminate(200, dtype)
             return self._generate_response(tx, data)
         if dtype in (b"multipart/x-mixed-replace", b"multipart/form-data"):
-            if type(data["callback"]).__name__ not in ("function", "closure"):
+            part_content_type = data[0]
+            callback = data[1]
+            if type(callback).__name__ not in ("function", "closure"):
                 self.on_failure(tx, b"Invalid response handler")
                 return
             self.terminate(200, dtype)
@@ -430,7 +432,7 @@ class HttpEngine:
             )
             self._write_response_head(tx)
             return self._multipart_wrapper_factory(
-                data["callback"], data["content-type"].encode(self.ASCII), boundary
+                callback, part_content_type.encode(self.ASCII), boundary
             )
         self.terminate(200, dtype)
         return self._generate_response(tx, data)
