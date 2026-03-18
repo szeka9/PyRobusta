@@ -1,7 +1,8 @@
 import asyncio
 
 from pyrobusta.server import http_server
-from pyrobusta.protocol import http, http_multipart
+from pyrobusta.protocol import http_multipart
+from pyrobusta.protocol.http import HttpEngine, enable_optional_features
 from pyrobusta.utils import config
 
 
@@ -42,6 +43,7 @@ def multipart_response(num_responses):
     return response_generator
 
 
+@HttpEngine.route("/test", "GET")
 def multipart_callback(headers, body):
     part_count = int(headers["x-part-count"])
     return "multipart/form-data", ("text/plain", multipart_response(part_count))
@@ -51,7 +53,7 @@ def test_patches():
     run_test(
         "multipart state machine patches",
         http_multipart._start_multipart_parser_st,
-        http.HttpEngine._start_multipart_parser_st,
+        HttpEngine._start_multipart_parser_st,
     )
 
 
@@ -88,8 +90,7 @@ async def test_response():
 def setup():
     config_idx = config.CONFIG_CACHE.index("http_multipart")
     config.CONFIG_CACHE[config_idx + 1] = "True"
-    http.enable_optional_features()
-    http.HttpEngine.register("/test", multipart_callback)
+    enable_optional_features()
 
 
 def test():

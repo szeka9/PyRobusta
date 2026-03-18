@@ -117,7 +117,7 @@ class HttpEngine:
         self.mp_boundary = None
 
     # =========================================
-    # Public methods for load modules
+    # Methods/decorators for routing
     # =========================================
 
     @classmethod
@@ -125,9 +125,9 @@ class HttpEngine:
         cls, endpoint: str, callback: object | str, method: str = "GET"
     ) -> None:
         """
-        PUBLIC METHOD FOR LMs: Webengine endpoint registration handler
+        Register and endpoint with a callback function
         :param endpoint: name of the endpoint
-        :param callback: callback function (WebEngine compatible: return:  html_type, content)
+        :param callback: callback function
         :param method: HTTP method name
         """
         endpoint = endpoint.encode(cls.ASCII)
@@ -137,6 +137,17 @@ class HttpEngine:
         if method not in cls.METHODS:
             raise ValueError(f"method must be one of {cls.METHODS}")
         cls.ENDPOINTS[endpoint][method] = callback
+
+
+    @staticmethod
+    def route(endpoint, method):
+        """
+        Decorator for registering endpoint callback functions.
+        """
+        def decorator(func):
+            HttpEngine.register(endpoint, func, method)
+            return func
+        return decorator
 
     # =========================================
     # Static helpers for parsing

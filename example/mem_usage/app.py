@@ -5,6 +5,7 @@ import pyrobusta.server.http_server as http_server
 from pyrobusta.protocol.http import HttpEngine
 
 
+@HttpEngine.route("/mem-usage", "GET")
 def mem_usage(*_):
     collect()
     free = mem_free()
@@ -19,8 +20,6 @@ def mem_usage(*_):
 
 
 http_server.main()
-HttpEngine.register("/mem-usage", mem_usage)
-
 
 try:
     asyncio.get_event_loop().run_forever()

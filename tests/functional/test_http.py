@@ -28,6 +28,7 @@ async def send_request(request):
     return response
 
 
+@HttpEngine.route("/test", "GET")
 def test_endpoint(headers, body):
     if headers["accept"] == "text/plain":
         return "text/plain", "Test response\n"
@@ -87,7 +88,7 @@ async def test_response():
 
 
 def setup():
-    HttpEngine.register("/test", test_endpoint)
+    pass
 
 
 def test():
