@@ -337,7 +337,7 @@ class HttpEngine:
     # - all states must handle rx and tx buffer arguments for reading and writing data
     # - mandatory methods/attributes of rx: find(), peek(), consume(), size()
     # - mandatory methods/attributes of tx: capacity, consume(), write(), size()
-    # - rx/tx reference implementation: SlidingBuffer (io.Buffer)
+    # - rx/tx reference implementation: SlidingBuffer (pyrobusta.stream.buffer)
     # ================================================================================
 
     def _parse_request_line_st(self, rx, tx):
@@ -382,7 +382,7 @@ class HttpEngine:
     def _route_request_st(self, _, tx):
         """
         State for routing requests
-        - supported ways: static resources, /rest, load module callbacks
+        - supported ways: static resources, endpoint callback functions
         """
         if self.url in self.ENDPOINTS and self.method in self.ENDPOINTS[self.url]:
             if self._has_payload() and (
@@ -411,7 +411,7 @@ class HttpEngine:
         self.state = self._app_endpoint_st
 
     def _app_endpoint_st(self, rx, tx):
-        """Process a request by registered load module callbacks"""
+        """Process a request by registered callback functions"""
         callback = self.ENDPOINTS[self.url][self.method]
         if self._has_payload():
             self.state = None
