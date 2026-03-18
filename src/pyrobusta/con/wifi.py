@@ -10,6 +10,12 @@ def initialize():
     """
     Initialize WLAN interface in station mode
     """
+    ssid = get_config("wifi_ssid")
+    password = get_config("wifi_password")
+    if not ssid or not password:
+        print("Missing SSID/password, skip Wi-Fi initialization")
+        return
+
     sta_if = WLAN(STA_IF)
     sta_if.active(True)
     nets = sta_if.scan()
