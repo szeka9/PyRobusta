@@ -6,7 +6,7 @@ on:
     paths:
       - "**.py"
       - "requirements.txt"
-      - ".github/workflows/build.yml"
+      - ".github/workflows/ci.yml"
       - "Makefile"
       - "external/**"
 
@@ -15,7 +15,7 @@ on:
     paths:
       - "**.py"
       - "requirements.txt"
-      - ".github/workflows/build.yml"
+      - ".github/workflows/ci.yml"
       - "Makefile"
       - "external/**"
 
@@ -26,6 +26,9 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Checkout submodules
+        run: git submodule update --init --recursive
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -39,7 +42,7 @@ jobs:
 
       - name: Setup toolchain
         run: |
-          make all
+          make toolchain
 
       - name: Static checkers
         run: |
