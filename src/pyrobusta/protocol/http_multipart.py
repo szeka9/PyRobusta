@@ -52,7 +52,7 @@ def _multipart_wrapper_factory(callback, content_type: bytes, boundary: bytes):
             while written < len(part_body):
                 to_write = tx.capacity - tx.size()
                 if not to_write:
-                    raise BufferError("Cannot write multipart response to buffer")
+                    raise BufferError()
                 tx.write(part_body[written : written + to_write])
                 written += to_write
                 yield False
@@ -91,7 +91,7 @@ def _parse_boundary_st(self, rx, _):
 def _parse_complete_part_st(self, rx, tx):
     """
     State for processing complete parts in a multipart request
-    - registered load module callback is required to process parts
+    - registered callback is required to process parts
     """
     next_delimiter = rx.find(b"\r\n--" + self.mp_boundary)
     part = rx.peek(next_delimiter)

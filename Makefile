@@ -53,7 +53,7 @@ $(BUILD_DIR)/%.py: $(SRC_DIR)/%.py
 	@cp $< $@
 
 # -----------------------------
-# Upload build output
+# Upload build output to device
 # -----------------------------
 .PHONY: upload
 upload:

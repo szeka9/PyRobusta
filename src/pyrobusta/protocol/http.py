@@ -175,7 +175,7 @@ class HttpEngine:
             # pylint: disable=W0511
             # TODO: support for UTF-8 in field values (e.g filenames), can be board dependent
             if any(c > 127 for c in line):
-                raise HeaderParsingError("Non-ASCII character found in the request")
+                raise HeaderParsingError("Non-ASCII character")
             if b":" not in line:
                 raise HeaderParsingError()
             name, value = line.split(b":", 1)
@@ -210,7 +210,7 @@ class HttpEngine:
                 blank_idx = i
                 break
         if blank_idx == -1:
-            raise HeaderParsingError("Headers could not be parsed")
+            raise HeaderParsingError()
         headers = cls._parse_headers(part[:blank_idx])
         body = part[blank_idx + 4 :]
         return headers, body
@@ -296,7 +296,7 @@ class HttpEngine:
         self._write_response_head(tx)
 
     def on_method_not_allowed(self, tx):
-        """Terminate state machine and write 404 response"""
+        """Terminate state machine and write 405 response"""
         self.terminate(405)
         self._write_response_head(tx)
 

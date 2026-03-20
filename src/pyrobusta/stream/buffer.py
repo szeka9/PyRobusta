@@ -117,7 +117,7 @@ class SlidingBuffer:
         if n is None:
             n = self.size()
         if n > self.size() or n < 0:
-            raise IndexError("Incorrect buffer index")
+            raise IndexError()
         return self._mv[self._start : self._start + n]
 
     def write(self, data: bytes):
@@ -128,7 +128,7 @@ class SlidingBuffer:
         if needed > self.capacity - self._end:
             self._compact()
             if needed > self.capacity - self._end:
-                raise BufferFullError("Buffer full")
+                raise BufferFullError()
         buf = self._buffer
         for i in range(needed):
             buf[self._end + i] = data[i]
@@ -156,12 +156,12 @@ class SlidingBuffer:
         if n > self.writable():
             self._compact()
             if n > self.writable():
-                raise ValueError("Not enough space after compaction")
+                raise ValueError("Buffer full")
 
     def commit(self, n):
         """Increase the window size by n bytes by incrementing the 'end' index"""
         if self._end + n > self.capacity:
-            raise ValueError("Not enough space")
+            raise ValueError("Buffer full")
         self._end += n
 
     def find(self, term: bytes) -> int:
