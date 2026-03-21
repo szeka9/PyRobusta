@@ -20,7 +20,7 @@ MPY_TARGETS := $(patsubst $(SRC_DIR)/%.py,$(BUILD_DIR)/%.mpy,$(NON_INIT_PY))
 INIT_TARGETS := $(patsubst $(SRC_DIR)/%.py,$(BUILD_DIR)/%.py,$(filter %__init__.py,$(PY_FILES)))
 
 .PHONY: all
-all: clean toolchain pylint unit-test build test-unix upload
+all: clean toolchain pylint unit-test build test-unix deploy
 
 # ================================================
 # Build
@@ -54,10 +54,10 @@ $(BUILD_DIR)/%.py: $(SRC_DIR)/%.py
 	@cp $< $@
 
 # -----------------------------
-# Upload build output to device
+# Deploy build output to device
 # -----------------------------
-.PHONY: upload
-upload:
+.PHONY: deploy
+deploy:
 	@echo "Uploading build/$(PKG) to device $(DEVICE)"
 	@find $(BUILD_DIR)/$(PKG) | while read source; do \
 		rel=$${source#$(BUILD_DIR)/}; \
@@ -72,10 +72,19 @@ upload:
 	done
 
 # -----------------------------
+# Deploy custom configuration
+# -----------------------------
+.PHONY: deploy-config
+deploy-config:
+	@echo "Uploading pyrobusta.env"
+	mpremote $(DEVICE) cp pyrobusta.env :pyrobusta.env
+
+# -----------------------------
 # Full redeploy
 # -----------------------------
 .PHONY: redeploy
-redeploy: clean build clean-device upload
+redeploy: clean build clean-device deploy
+
 
 
 # ================================================
@@ -113,10 +122,10 @@ run-unix: stage-example
 	cd $(RUNTIME_DIR) && ../$(MICROPYTHON) app.py
 
 # -----------------------------
-# Upload example app
+# Deploy example app
 # -----------------------------
-.PHONY: upload-example
-upload-example:
+.PHONY: deploy-example
+deploy-example:
 	@echo "Uploading example files"
 	mpremote $(DEVICE) cp $(EXAMPLE_DIR)/boot.py :boot.py
 	mpremote $(DEVICE) cp pyrobusta.env :pyrobusta.env

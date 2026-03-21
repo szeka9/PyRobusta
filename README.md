@@ -12,16 +12,20 @@ Lightweight micropython framework for application-layer protocols.
 
 # Prerequisites
 
-## Create pyrobusta.env in the project root
+## Create pyrobusta.env in the project root (uploaded to device)
 
 ```bash
 # pyrobusta.env
 wifi_ssid="<your-wifi-ssid>"
 wifi_password="<your-wifi-password>"
+tls="true"
 socket_max_con=2
-http_multipart="false"
 http_mem_cap=0.05
+...
 ```
+Settings stored in pyrobusta.env affect example application run with ```make run-unix``` or ```make run-device```, allowing
+to experiment with different settings. These settings are ignored when running functional tests (```make test-unix```, ```make test-device```).
+Check [configuration.md](https://github.com/szeka9/PyRobusta/blob/main/docs/configuration.md) for further configuration options.
 
 ## Setup virtual environment
 ```bash
@@ -47,11 +51,13 @@ make run-unix           # Run example application on the unix port of micropytho
 ```bash
 make toolchain          # Setup mpy-cross and micropython
 make build              # Cross-compile, create build artifacts
-make upload             # Upload build artifacts to device using mpremote
-make upload-example     # Upload example application using mpremote
+make deploy             # Upload build artifacts to device using mpremote
+make tls-cert           # Optional: generate self-signed certificate for the device
+make deploy-cert        # Optional: upload generated certificate to the device
+make deploy-example     # Upload example application using mpremote
 make run-device         # Run application on the device using mpremote run
 ```
-```upload-example``` and ```run-device``` uses the DEVICE argument
+```deploy-example``` and ```run-device``` uses the DEVICE argument
 set to ```u0``` (/dev/ttyUSB0) by default, passed to mpremote.
 
 Override the DEVICE argument to select a different device, e.g.
@@ -63,7 +69,7 @@ for additional shortcuts.
 When changing the source code, run the below rule for uploading.
 
 ```bash
-make redeploy           # Will run the following rules: clean build clean-device upload
+make redeploy           # Will run the following rules: clean build clean-device deploy
 ```
 
 ## Unit tests, pylint, functional tests
