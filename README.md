@@ -1,18 +1,25 @@
 # PyRobusta
 
-Lightweight micropython framework for application-layer protocols.
+Lightweight MicroPython framework for application-layer protocol servers.
 
 ## HTTP server
-- low memory requirement (~30KB)
 - routing decorators
 - zero-copy memory footprint
-- fixed-size request/response buffers
-- optional multipart request/response handling
+- fixed-size, configurable request/response buffers
+- multipart request/response handling
+- TLS support
 
 
 # Prerequisites
 
-## Create pyrobusta.env in the project root (uploaded to device)
+## Setup virtual environment
+```bash
+python3 -m venv venv
+source venv/bin/activate
+python3 -m pip install -r requirements.txt
+```
+
+## Create pyrobusta.env in the project root
 
 ```bash
 # pyrobusta.env
@@ -23,16 +30,12 @@ socket_max_con=2
 http_mem_cap=0.05
 ...
 ```
-Settings stored in pyrobusta.env affect example application run with ```make run-unix``` or ```make run-device```, allowing
-to experiment with different settings. These settings are ignored when running functional tests (```make test-unix```, ```make test-device```).
-Check [configuration.md](https://github.com/szeka9/PyRobusta/blob/main/docs/configuration.md) for further configuration options.
+pyrobusta.env contains runtime configuration, deployed to the device. This allows the user to override default behavior and configure optional settings.
 
-## Setup virtual environment
-```bash
-python3 -m venv venv
-source venv/bin/activate
-python3 -m pip install -r requirements.txt
-```
+- rules such as ```make run-unix``` or ```make deploy-example run-device``` also rely on pyrobusta.env, allowing the user to experiment with different settings
+- pyrobusta.env is ignored when running functional tests (```make test-unix```, ```make test-device```)
+
+Check [configuration.md](https://github.com/szeka9/PyRobusta/blob/main/docs/configuration.md) for all configuration options.
 
 
 # Build and run example application

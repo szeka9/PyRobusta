@@ -3,7 +3,7 @@ DEVICE ?= u0
 SRC_DIR := src
 EXAMPLE_DIR := example/mem_usage
 BUILD_DIR := build
-DIST_DIR :=dist
+DIST_DIR := dist
 PKG := pyrobusta
 TLS_DIR := tls
 
