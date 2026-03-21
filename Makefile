@@ -3,6 +3,7 @@ DEVICE ?= u0
 SRC_DIR := src
 EXAMPLE_DIR := example/mem_usage
 BUILD_DIR := build
+DIST_DIR :=dist
 PKG := pyrobusta
 TLS_DIR := tls
 
@@ -16,8 +17,8 @@ TEST_RUNTIME := runtime-test
 PY_FILES := $(shell find $(SRC_DIR)/$(PKG) -type f -name "*.py")
 NON_INIT_PY := $(filter-out %__init__.py,$(PY_FILES))
 
-MPY_TARGETS := $(patsubst $(SRC_DIR)/%.py,$(BUILD_DIR)/%.mpy,$(NON_INIT_PY))
-INIT_TARGETS := $(patsubst $(SRC_DIR)/%.py,$(BUILD_DIR)/%.py,$(filter %__init__.py,$(PY_FILES)))
+MPY_TARGETS = $(patsubst $(SRC_DIR)/%.py,$(BUILD_DIR)/%.mpy,$(NON_INIT_PY))
+INIT_TARGETS = $(patsubst $(SRC_DIR)/%.py,$(BUILD_DIR)/%.py,$(filter %__init__.py,$(PY_FILES)))
 
 .PHONY: all
 all: clean toolchain pylint unit-test build test-unix deploy
@@ -86,6 +87,18 @@ deploy-config:
 redeploy: clean build clean-device deploy
 
 
+# ================================================
+# Rules for release
+# ================================================
+
+# -----------------------------
+# Prepare distribution
+# -----------------------------
+.PHONY: publish
+publish:
+	$(MAKE) clean
+	$(MAKE) build BUILD_DIR=$(DIST_DIR)
+	@scripts/update_package.bash $(DIST_DIR) package.json
 
 # ================================================
 # Example apps
