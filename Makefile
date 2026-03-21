@@ -4,6 +4,7 @@ SRC_DIR := src
 EXAMPLE_DIR := example/mem_usage
 BUILD_DIR := build
 PKG := pyrobusta
+TLS_DIR := tls
 
 MICROPY_ROOT := external/micropython
 MPY_CROSS := $(MICROPY_ROOT)/mpy-cross/build/mpy-cross
@@ -97,6 +98,10 @@ stage-example:
 	@cp $(EXAMPLE_DIR)/app.py $(RUNTIME_DIR)/
 	@cp $(EXAMPLE_DIR)/boot.py $(RUNTIME_DIR)/
 
+	@echo "Copying TLS certificate"
+	@cp $(TLS_DIR)/cert.der $(RUNTIME_DIR)/
+	@cp $(TLS_DIR)/key.der $(RUNTIME_DIR)/
+
 	@if [ -f pyrobusta.env ]; then cp pyrobusta.env $(RUNTIME_DIR)/; fi
 
 # -----------------------------
@@ -161,7 +166,8 @@ stage-test:
 # Run functional tests on unix port
 # -----------------------------
 .PHONY: test-unix
-test-unix: stage-test
+test-unix: TLS_DIR=$(TEST_RUNTIME)
+test-unix: stage-test tls-cert
 	@cd $(TEST_RUNTIME); \
 	for test in test_*.py; do \
 		echo "Running $$test"; \
@@ -179,6 +185,39 @@ test-device: #clean-device upload
 		mpremote $(DEVICE) run $$(basename $$test) || exit 1; \
 	done
 
+# ================================================
+# Utilities for TLS
+# ================================================
+
+# -----------------------------
+# Generate certificate
+# -----------------------------
+.PHONY: tls-cert
+tls-cert:
+	@rm -f $(TLS_DIR)/cert.der $(TLS_DIR)/key.der; \
+	mkdir -p $(TLS_DIR);
+
+	@openssl genpkey \
+    -algorithm RSA \
+    -out $(TLS_DIR)/key.der \
+    -outform DER \
+    -pkeyopt rsa_keygen_bits:2048 2>/dev/null
+	
+	@openssl req -new -x509 \
+    -key $(TLS_DIR)/key.der \
+    -keyform DER \
+    -out $(TLS_DIR)/cert.der \
+    -outform DER \
+    -days 365 \
+    -subj "/CN=localhost"
+
+# -----------------------------
+# Deploy certificate
+# -----------------------------
+.PHONY: deploy-cert
+deploy-cert:
+	@mpremote $(DEVICE) cp $(TLS_DIR)/key.der :key.der
+	@mpremote $(DEVICE) cp $(TLS_DIR)/cert.der :cert.der
 
 # ================================================
 # Cleanup

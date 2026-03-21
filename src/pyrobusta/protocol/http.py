@@ -480,7 +480,7 @@ def enable_optional_features():
     """
     Enable related optional features, set in the config.
     """
-    if get_config("http_multipart") in ("True", "true"):
+    if get_config("http_multipart").lower() == "true":
         from pyrobusta.protocol import http_multipart
 
         http_multipart.apply_patches()

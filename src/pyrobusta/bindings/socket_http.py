@@ -10,6 +10,7 @@ from ..stream.buffer import MemoryPool, SlidingBuffer, BufferFullError
 from ..transport.socket import SocketBase
 from ..protocol.http import HttpEngine
 from ..utils.config import get_config
+from ..utils import logging
 
 
 class SocketHttp(SocketBase):
@@ -51,9 +52,9 @@ class SocketHttp(SocketBase):
             + SocketHttp.CONN_OVERHEAD
         )
         if is_low_memory:
-            print(
+            logging.warning(
                 (
-                    "[INFO] SocketHttp.init_pools: low-memory mode with reduced buffer size, "
+                    "SocketHttp.init_pools: low-memory mode with reduced buffer size, "
                     "decrease max_clients to use larger buffers"
                 )
             )
@@ -77,7 +78,7 @@ class SocketHttp(SocketBase):
                 )
             )
         con_limit = min(usable // per_conn, con_limit)
-        print((f"[INFO] SocketHttp.init_pools: {con_limit} connection(s) allowed"))
+        logging.info((f"[SocketHttp.init_pools] {con_limit} connection(s) allowed"))
         SocketHttp.RECV_POOL = MemoryPool(recv_size, con_limit, wrapper=SlidingBuffer)
         SocketHttp.SEND_POOL = MemoryPool(send_size, con_limit, wrapper=SlidingBuffer)
 
@@ -111,7 +112,7 @@ class SocketHttp(SocketBase):
                 await self._run_state_machine()
                 await sleep_ms(SocketHttp.STATE_MACHINE_SLEEP_MS)
         except Exception as e: # pylint: disable=W0718
-            print(f"[SocketHttp] error in run_web: {e}")
+            logging.warning(f"[SocketHttp] error in run_web: {e}")
         finally:
             if self._send_buf:
                 self._send_buf.consume()
@@ -152,7 +153,7 @@ class SocketHttp(SocketBase):
             await self._flush_response()
             return
         except Exception as e: # pylint: disable=W0718
-            print(f"[SocketHttp] error in _run_state_machine: {e}")
+            logging.warning(f"[SocketHttp] error in _run_state_machine: {e}")
             self._engine.on_failure(self._send_buf, str(e).encode("ascii"))
             await self._flush_response()
             return

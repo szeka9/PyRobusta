@@ -4,6 +4,7 @@ Helpers for setting up Wi-Fi in station mode
 
 from network import WLAN, STA_IF
 from ..utils.config import get_config
+from ..utils import logging
 
 
 def initialize():
@@ -13,7 +14,7 @@ def initialize():
     ssid = get_config("wifi_ssid")
     password = get_config("wifi_password")
     if not ssid or not password:
-        print("Missing SSID/password, skip Wi-Fi initialization")
+        logging.warning("[Wi-Fi] Missing SSID/password, skip Wi-Fi initialization")
         return
 
     sta_if = WLAN(STA_IF)
@@ -21,9 +22,9 @@ def initialize():
     nets = sta_if.scan()
     for net in nets:
         if net[0].decode() == get_config("wifi_ssid"):
-            print(f"Network {net[0]} found!")
+            logging.info(f"[Wi-Fi] Network {net[0]} found!")
             sta_if.connect(net[0], get_config("wifi_password"))
-            print("WLAN connection succeeded!")
+            logging.info("[Wi-Fi] WLAN connection succeeded!")
             break
 
 

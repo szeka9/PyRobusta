@@ -3,6 +3,7 @@ from gc import mem_free, mem_alloc, collect
 
 import pyrobusta.server.http_server as http_server
 from pyrobusta.protocol.http import HttpEngine
+from pyrobusta.utils import logging
 
 
 @HttpEngine.route("/mem-usage", "GET")
@@ -24,5 +25,5 @@ http_server.main()
 try:
     asyncio.get_event_loop().run_forever()
 except Exception as e:
-    print(f"[asyncio] loop stopped: {e}")
+    logging.warning(f"[asyncio] loop stopped: {e}")
     asyncio.get_event_loop().close()
