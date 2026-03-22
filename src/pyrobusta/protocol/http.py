@@ -96,8 +96,9 @@ class HttpEngine:
     OPTIONS = b"OPTIONS"
     POST = b"POST"
     PUT = b"PUT"
-
     METHODS = (DELETE, GET, HEAD, OPTIONS, POST, PUT)
+    SUPPORTED_VERSIONS = (b"HTTP/1.1", b"HTTP/1.0")
+
     MULTIPART_BOUNDARY = b"pyrobusta-boundary"
 
     CONTENT_LENGTH_ERROR = b"Content-Length mismatch"
@@ -160,7 +161,7 @@ class HttpEngine:
     # =========================================
 
     @classmethod
-    def _get_header(cls, status_code):
+    def _get_status(cls, status_code):
         idx = cls.RESP_HEADERS.index(status_code)
         return cls.RESP_HEADERS[idx + 1]
 
@@ -254,7 +255,9 @@ class HttpEngine:
         """
         # Discard already accumulated content (e.g. 500 response on unexpected errors)
         tx.consume()
-        tx.write(self._get_header(self.status_code))
+        tx.write(self.version)
+        tx.write(b" ")
+        tx.write(self._get_status(self.status_code))
         if content_length is not None:
             tx.write(b"\r\n")
             tx.write(b"content-length: %s" % str(content_length).encode(self.ASCII))
@@ -360,7 +363,7 @@ class HttpEngine:
         if self.method not in self.METHODS:
             self.on_method_not_allowed(tx)
             return
-        if self.version != b"HTTP/1.1":
+        if self.version not in self.SUPPORTED_VERSIONS:
             self.on_unsupported_version(tx)
             return
         rx.consume(status_line_sep + 2)

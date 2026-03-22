@@ -142,6 +142,7 @@ class TestWebStateMachine(unittest.TestCase):
         self.engine.state = self.engine._route_request_st
         self.engine.url = b"/api/test"
         self.engine.method = b"GET"
+        self.engine.version = b"HTTP/1.1"
 
         test_callback = mock.Mock()
         self.engine.register("/api/test", test_callback, "POST")
@@ -157,6 +158,7 @@ class TestWebStateMachine(unittest.TestCase):
         self.engine.state = self.engine._route_request_st
         self.engine.url = b"/api/test"
         self.engine.method = b"OPTIONS"
+        self.engine.version = b"HTTP/1.1"
 
         test_callback = mock.Mock()
         self.engine.register("/api/test", test_callback, "GET")
@@ -174,6 +176,7 @@ class TestWebStateMachine(unittest.TestCase):
         self.engine.state = self.engine._route_request_st
         self.engine.url = b"/api/test"
         self.engine.method = b"GET"
+        self.engine.version = b"HTTP/1.1"
         test_response = b"[test-response]"
 
         test_callback = mock.Mock()
@@ -195,6 +198,7 @@ class TestWebStateMachine(unittest.TestCase):
         self.engine.state = self.engine._route_request_st
         self.engine.url = b"/api/test"
         self.engine.method = b"HEAD"
+        self.engine.version = b"HTTP/1.1"
         test_response = b"[test-response]"
 
         test_callback = mock.Mock()
@@ -261,6 +265,7 @@ class TestMultipartStateMachine(TestWebStateMachine):
 
     def test_multipart_receiver_boundary_mismatch(self):
         self.engine.state = self.engine._start_multipart_parser_st
+        self.engine.version = b"HTTP/1.1"
         self.engine.headers["content-length"] = 100
         self.engine.mp_boundary = b"test-boundary"
         body_part = b"--test-boundary-delimiter\r\nContent-Type:text/plain"
@@ -319,6 +324,7 @@ class TestMultipartStateMachine(TestWebStateMachine):
         self.engine.state = self.engine._parse_boundary_st
         self.engine.url = b"/api/test"
         self.engine.method = b"GET"
+        self.engine.version = b"HTTP/1.1"
         self.engine.headers["content-length"] = 129
         self.engine.mp_boundary = b"test-boundary"
         self.engine.mp_delimiter = b"--test-boundary\r\n"
