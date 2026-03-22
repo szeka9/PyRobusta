@@ -27,7 +27,7 @@ def append_package_files(dir, package_files, host_name, protocol):
         )
 
 
-@HttpEngine.route("/package.json", "GET")
+@HttpEngine.route("/pyrobusta/package.json", "GET")
 def self_serve_mip_package(headers, _):
     package_files = {"version": config.PYROBUSTA_VERSION, "deps": [], "urls": []}
     tls_enabled = config.get_config("tls").lower() == "true"

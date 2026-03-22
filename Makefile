@@ -97,7 +97,7 @@ redeploy: clean build clean-device deploy
 # -----------------------------
 .PHONY: publish
 publish:
-	sed -E -i.bak 's/(PYROBUSTA_VERSION[[:space:]]*=[[:space:]]*)"[^"]*"/\1"$(PYROBUSTA_VERSION)"/' \
+	@sed -E -i.bak 's/(PYROBUSTA_VERSION[[:space:]]*=[[:space:]]*)"[^"]*"/\1"$(PYROBUSTA_VERSION)"/' \
 		$(SRC_DIR)/pyrobusta/utils/config.py \
 		&& rm -f $(SRC_DIR)/pyrobusta/utils/config.py.bak
 	$(MAKE) clean

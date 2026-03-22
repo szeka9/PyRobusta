@@ -480,7 +480,7 @@ class HttpEngine:
         # Normalize path
         parts = []
         for p in web_resource.split(b"/"):
-            if p in (".", ""):
+            if p in (b".", b""):
                 continue
             if p == b"..":
                 if parts:
