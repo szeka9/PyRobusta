@@ -104,6 +104,7 @@ class HttpServer:
         try:
             gc.collect()
             http.enable_optional_features()
+            logging.debug(f"Registered endpoints: {http.HttpEngine.ENDPOINTS}")
             SocketHttp.init_pools(self._max_sockets)
             ssl_ctx = None
             if get_config("tls").lower() == "true":

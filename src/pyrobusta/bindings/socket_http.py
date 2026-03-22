@@ -55,7 +55,7 @@ class SocketHttp(SocketBase):
         if is_low_memory:
             logging.warning(
                 (
-                    "SocketHttp.init_pools: low-memory mode with reduced buffer size, "
+                    "[SocketHttp.init_pools] low-memory mode with reduced buffer size, "
                     "decrease max_clients to use larger buffers"
                 )
             )
@@ -184,6 +184,7 @@ class SocketHttp(SocketBase):
             await self._flush_response()
             return 0
         self._recv_buf.write(request)
+        logging.debug(f"[SocketHttp._read_to_buf] read new message chunk: {request}")
         return len(request)
 
     async def _response_handler(self, resp_handler):
