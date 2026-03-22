@@ -92,11 +92,12 @@ class HttpEngine:
 
     DELETE = b"DELETE"
     GET = b"GET"
+    HEAD = b"HEAD"
     OPTIONS = b"OPTIONS"
     POST = b"POST"
     PUT = b"PUT"
 
-    METHODS = (DELETE, GET, OPTIONS, POST, PUT)
+    METHODS = (DELETE, GET, HEAD, OPTIONS, POST, PUT)
     STRICT_TYPES = False
     MULTIPART_BOUNDARY = b"pyrobusta-boundary"
 
@@ -255,8 +256,9 @@ class HttpEngine:
         # Discard already accumulated content (e.g. 500 response on unexpected errors)
         tx.consume()
         tx.write(self._get_header(self.status_code))
-        tx.write(b"\r\n")
-        tx.write(b"content-length: %s" % str(content_length).encode(self.ASCII))
+        if content_length is not None:
+            tx.write(b"\r\n")
+            tx.write(b"content-length: %s" % str(content_length).encode(self.ASCII))
         for i in range(0, len(self.response_headers), 2):
             key = self.response_headers[i]
             value = self.response_headers[i + 1]
@@ -273,7 +275,10 @@ class HttpEngine:
         exceeds the remaining buffer capacity, to delegate the writing
         of the response body to the transport layer.
         """
-        if isinstance(body, (bytes, bytearray, memoryview)):
+        if not body:
+            self._write_response_head(tx, 0)
+            body_encoded = b""
+        elif isinstance(body, (bytes, bytearray, memoryview)):
             self._write_response_head(tx, len(body))
             body_encoded = body
         elif isinstance(body, str):
@@ -285,9 +290,10 @@ class HttpEngine:
         else:
             self.on_failure(tx, b"Unhandled body type")
             return
-        if len(body_encoded) > tx.capacity - tx.size():
-            return BytesIO(body_encoded)
-        tx.write(body_encoded)
+        if self.method != self.HEAD:
+            if len(body_encoded) > tx.capacity - tx.size():
+                return BytesIO(body_encoded)
+            tx.write(body_encoded)
 
     def on_client_error(self, tx, info: bytes):
         """Terminate state machine and write 400 response"""
@@ -391,21 +397,24 @@ class HttpEngine:
         - supported ways: static resources, endpoint callback functions
         """
         if self.url in self.ENDPOINTS and (
-            self.method in self.ENDPOINTS[self.url] or self.method == self.OPTIONS
+            self.method in self.ENDPOINTS[self.url]
+            or self.method == self.OPTIONS
+            or (self.method == self.HEAD and self.GET in self.ENDPOINTS[self.url])
         ):
             if self.method == self.OPTIONS:
                 supported_methods = list(self.ENDPOINTS[self.url].keys())
                 self._set_response_header(b"allow", b", ".join(supported_methods))
                 self.terminate(204, None)
-                self._write_response_head(tx)
-                return
-            if self._has_payload() and (
-                mp_boundary := self._is_multipart(self.headers)
-            ):
-                self.mp_boundary = mp_boundary.encode(self.ASCII)
-                self.state = self._start_multipart_parser_st
+                self._write_response_head(tx, None)
                 return
             if self._has_payload():
+                if self.method == self.HEAD:
+                    self.on_client_error(tx, self.BAD_REQUEST_ERROR)
+                    return
+                if mp_boundary := self._is_multipart(self.headers):
+                    self.mp_boundary = mp_boundary.encode(self.ASCII)
+                    self.state = self._start_multipart_parser_st
+                    return
                 self.state = self._recv_payload
                 return
             self.state = self._app_endpoint_st
@@ -431,7 +440,8 @@ class HttpEngine:
 
     def _app_endpoint_st(self, rx, tx):
         """Process a request by registered callback functions"""
-        callback = self.ENDPOINTS[self.url][self.method]
+        method = self.GET if self.method == self.HEAD else self.method
+        callback = self.ENDPOINTS[self.url][method]
         if self._has_payload():
             self.state = None
             dtype, data = callback(self.headers, bytes(rx.peek()))
@@ -460,10 +470,12 @@ class HttpEngine:
             self._set_response_header(
                 b"content-type", dtype + b"; boundary=" + boundary
             )
-            self._write_response_head(tx)
-            return self._multipart_wrapper_factory(
-                callback, part_content_type.encode(self.ASCII), boundary
-            )
+            self._write_response_head(tx, None)
+            if self.method != self.HEAD:
+                return self._multipart_wrapper_factory(
+                    callback, part_content_type.encode(self.ASCII), boundary
+                )
+            return
         self.terminate(200, dtype)
         return self._generate_response(tx, data)
 
@@ -482,8 +494,10 @@ class HttpEngine:
                 b"content-length", str(stat(web_resource)[6]).encode(HttpEngine.ASCII)
             )
             self.terminate(200, content_type)
-            self._write_response_head(tx)
-            return open(web_resource, "rb")
+            self._write_response_head(tx, None)
+            if self.method != self.HEAD:
+                return open(web_resource, "rb")
+            return
         except OSError:
             self.on_missing_resource(tx)
 

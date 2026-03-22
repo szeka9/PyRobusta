@@ -138,7 +138,6 @@ class TestWebStateMachine(unittest.TestCase):
         self.assertEqual(self.engine.status_code, 400)
         self.assertEqual(self.engine.state, None)
 
-
     def test_routing_unsupported_method(self):
         self.engine.state = self.engine._route_request_st
         self.engine.url = b"/api/test"
@@ -153,8 +152,6 @@ class TestWebStateMachine(unittest.TestCase):
         self.assertEqual(self.engine.state, None)
         self.assertIn(b"allow", self.engine.response_headers)
         self.assertIn(b"POST", self.engine.response_headers)
-
-
 
     def test_routing_options_method(self):
         self.engine.state = self.engine._route_request_st
@@ -172,6 +169,48 @@ class TestWebStateMachine(unittest.TestCase):
         self.assertEqual(self.engine.state, None)
         self.assertIn(b"allow", self.engine.response_headers)
         self.assertIn(b"GET, POST, PUT", self.engine.response_headers)
+
+    def test_routing_get_method(self):
+        self.engine.state = self.engine._route_request_st
+        self.engine.url = b"/api/test"
+        self.engine.method = b"GET"
+        test_response = b"[test-response]"
+
+        test_callback = mock.Mock()
+        test_callback.return_value = ("text/plain", test_response)
+        self.engine.register("/api/test", test_callback, "GET")
+
+        while self.engine.state is not None:
+            self.engine.state(self.rx, self.tx)
+
+        self.assertEqual(self.engine.status_code, 200)
+        self.assertEqual(self.engine.state, None)
+        self.assertNotEqual(
+            self.tx.find(b"content-length: " + str(len(test_response)).encode("ascii")),
+            -1,
+        )
+        self.assertNotEqual(self.tx.find(test_response), -1)
+
+    def test_routing_head_method(self):
+        self.engine.state = self.engine._route_request_st
+        self.engine.url = b"/api/test"
+        self.engine.method = b"HEAD"
+        test_response = b"[test-response]"
+
+        test_callback = mock.Mock()
+        test_callback.return_value = ("text/plain", test_response)
+        self.engine.register("/api/test", test_callback, "GET")
+
+        while self.engine.state is not None:
+            self.engine.state(self.rx, self.tx)
+
+        self.assertEqual(self.engine.status_code, 200)
+        self.assertEqual(self.engine.state, None)
+        self.assertNotEqual(
+            self.tx.find(b"content-length: " + str(len(test_response)).encode("ascii")),
+            -1,
+        )
+        self.assertEqual(self.tx.find(test_response), -1)
 
 
 class TestMultipartStateMachine(TestWebStateMachine):
