@@ -55,8 +55,6 @@ class HttpEngine:
         b"HTTP/1.1 408 Request Timeout",
         413,
         b"HTTP/1.1 413 Content Too Large",
-        415,
-        b"HTTP/1.1 415 Unsupported Media Type",
         500,
         b"HTTP/1.1 500 Internal Server Error",
         503,
@@ -65,6 +63,8 @@ class HttpEngine:
         b"HTTP/1.1 505 Version Not Supported",
     )
     CONTENT_TYPES = (
+        b"raw",
+        b"application/octet-stream",
         b"html",
         b"text/html",
         b"css",
@@ -98,7 +98,6 @@ class HttpEngine:
     PUT = b"PUT"
 
     METHODS = (DELETE, GET, HEAD, OPTIONS, POST, PUT)
-    STRICT_TYPES = False
     MULTIPART_BOUNDARY = b"pyrobusta-boundary"
 
     CONTENT_LENGTH_ERROR = b"Content-Length mismatch"
@@ -322,12 +321,6 @@ class HttpEngine:
         self.terminate(413)
         self._write_response_head(tx)
 
-    def on_unsupported_media(self, tx, info: bytes):
-        """Terminate state machine and write 415 response"""
-        self.terminate(415)
-        self._write_response_head(tx, len(info))
-        tx.write(info)
-
     def on_failure(self, tx, info: bytes):
         """Terminate state machine and write 500 response"""
         self.terminate(500)
@@ -414,10 +407,10 @@ class HttpEngine:
                 if mp_boundary := self._is_multipart(self.headers):
                     self.mp_boundary = mp_boundary.encode(self.ASCII)
                     self.state = self._start_multipart_parser_st
-                    return
-                self.state = self._recv_payload
-                return
-            self.state = self._app_endpoint_st
+                else:
+                    self.state = self._recv_payload
+            else:
+                self.state = self._app_endpoint_st
             return
         if self.url in self.ENDPOINTS and self.method not in self.ENDPOINTS[self.url]:
             supported_methods = list(self.ENDPOINTS[self.url].keys())
@@ -485,10 +478,7 @@ class HttpEngine:
         try:
             content_type = self._get_content_type(extension)
         except IndexError:
-            if self.STRICT_TYPES:
-                self.on_unsupported_media(tx, b"Not supported: %s" % extension)
-                return
-            content_type = self._get_content_type(b"txt")
+            content_type = self._get_content_type(b"raw")
         try:
             self._set_response_header(
                 b"content-length", str(stat(web_resource)[6]).encode(HttpEngine.ASCII)
