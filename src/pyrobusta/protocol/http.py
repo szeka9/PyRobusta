@@ -474,19 +474,34 @@ class HttpEngine:
 
     def _send_file_st(self, _, tx, web_resource: bytes):
         """State for returning a static resource"""
+        # Normalize path
+        parts = []
+        for p in web_resource.split(b"/"):
+            if p in (".", ""):
+                continue
+            if p == b"..":
+                if parts:
+                    parts.pop()
+            else:
+                parts.append(p)
+        if parts[0].decode(self.ASCII) not in get_config("http_served_paths").split():
+            self.on_missing_resource(tx)
+            return
         extension = web_resource.rsplit(b".", 1)[-1]
+        norm_path = b"/".join(parts)
+
         try:
             content_type = self._get_content_type(extension)
-        except IndexError:
+        except ValueError:
             content_type = self._get_content_type(b"raw")
         try:
             self._set_response_header(
-                b"content-length", str(stat(web_resource)[6]).encode(HttpEngine.ASCII)
+                b"content-length", str(stat(norm_path)[6]).encode(HttpEngine.ASCII)
             )
             self.terminate(200, content_type)
             self._write_response_head(tx, None)
             if self.method != self.HEAD:
-                return open(web_resource, "rb")
+                return open(norm_path, "rb")
             return
         except OSError:
             self.on_missing_resource(tx)
