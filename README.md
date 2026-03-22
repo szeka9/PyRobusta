@@ -10,6 +10,7 @@ Lightweight MicroPython framework for application-layer protocol servers.
 - robust byte-stream handling with FSM parser & linear sliding buffer
 - TLS support
 
+**Further protcol server options are coming soon!**
 
 # Prerequisites
 
@@ -70,7 +71,7 @@ for additional shortcuts.
 
 ## Redeploy
 
-When changing the source code, run the below rule for uploading.
+When changing the source code, run the below rule for redeploying to the device.
 
 ```bash
 make redeploy           # Will run the following rules: clean build clean-device deploy

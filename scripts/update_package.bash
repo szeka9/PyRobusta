@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 
-dist_dir="${1:?dist_dir parameter is missing}"
-package_json="${2:?package_json parameter is missing}"
+dist_dir="${1:?dist_dir argument is missing}"
+package_json="${2:?package_json argument is missing}"
+version="${3:?version argument is missing}"
 
-which jq || { echo "jq dependency is missing"; exit 1; }
+which jq 1>/dev/null || { echo "jq dependency is missing"; exit 1; }
 
-find "$dist_dir" -type f -printf '%P\n' | jq -Rn '[inputs] |
+find "$dist_dir" -type f -printf '%P\n' | jq -Rn --arg version "${version}" '[inputs] |
     {
-        version: "0.2",
+        version: $version,
         urls: map([., ("github:szeka9/PyRobusta/dist/" + .)]),
         deps: []
     }

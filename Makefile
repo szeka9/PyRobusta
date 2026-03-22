@@ -1,3 +1,4 @@
+PYROBUSTA_VERSION := 0.1.0
 DEVICE ?= u0
 
 SRC_DIR := src
@@ -96,9 +97,13 @@ redeploy: clean build clean-device deploy
 # -----------------------------
 .PHONY: publish
 publish:
+	sed -E -i.bak 's/(PYROBUSTA_VERSION[[:space:]]*=[[:space:]]*)"[^"]*"/\1"$(PYROBUSTA_VERSION)"/' \
+		$(SRC_DIR)/pyrobusta/utils/config.py \
+		&& rm -f $(SRC_DIR)/pyrobusta/utils/config.py.bak
 	$(MAKE) clean
 	$(MAKE) build BUILD_DIR=$(DIST_DIR)
-	@scripts/update_package.bash $(DIST_DIR) package.json
+	scripts/update_package.bash $(DIST_DIR) package.json $(PYROBUSTA_VERSION)
+
 
 # ================================================
 # Example apps
@@ -139,8 +144,10 @@ run-unix: stage-example
 # -----------------------------
 .PHONY: deploy-example
 deploy-example:
-	@echo "Uploading example files"
+	@echo "Uploading boot.py"
 	mpremote $(DEVICE) cp $(EXAMPLE_DIR)/boot.py :boot.py
+
+	@echo "Uploading pyrobusta.env"
 	mpremote $(DEVICE) cp pyrobusta.env :pyrobusta.env
 
 # -----------------------------
