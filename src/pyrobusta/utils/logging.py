@@ -13,7 +13,7 @@ def current_log_level():
     """
     Determine current log level from the config
     """
-    current =  get_config("log_level").lower()
+    current = get_config("log_level").lower()
     if current == "debug":
         return _LOG_LEVEL_DEBUG
     if current == "info":

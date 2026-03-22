@@ -8,19 +8,19 @@ CONFIG_LOADED = False
 CONFIG_LOCATION = "pyrobusta.env"
 CONFIG_CACHE = [
     "wifi_ssid",
-        None,
+    None,
     "wifi_password",
-        None,
+    None,
     "http_multipart",
-        "False",
+    "False",
     "http_mem_cap",
-        0.1,
+    0.1,
     "socket_max_con",
-        2,
+    2,
     "tls",
-        "False",
+    "False",
     "log_level",
-        "warning"
+    "warning",
 ]
 
 

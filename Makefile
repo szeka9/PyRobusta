@@ -160,14 +160,32 @@ run-device:
 # -----------------------------
 .PHONY: pylint
 pylint:
+	@echo "Running Pylint"
 	@python3 -m pylint $(SRC_DIR)
+
+
+# -----------------------------
+# Black formatter
+# -----------------------------
+.PHONY: black
+black:
+	@echo "Running black formatter"
+	@python3 -m black --check $(SRC_DIR)
 
 # -----------------------------
 # Run unit tests
 # -----------------------------
 .PHONY: unit-test
 unit-test:
-	@python3 -m unittest
+	@echo "Running unit tests"
+	@python3 -m unittest -v
+
+# -----------------------------
+# Run all static checkers
+# -----------------------------
+.PHONY: static-checkers
+static-checkers: pylint black
+
 
 # ================================================
 # Functional tests

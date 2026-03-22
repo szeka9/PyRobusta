@@ -3,7 +3,7 @@ HTTP application-layer interface for socket connections.
 """
 
 import asyncio
-from asyncio import sleep_ms # pylint: disable=E1101
+from asyncio import sleep_ms  # pylint: disable=E1101
 from gc import mem_free, collect
 
 from ..stream.buffer import MemoryPool, SlidingBuffer, BufferFullError
@@ -18,6 +18,7 @@ class SocketHttp(SocketBase):
     HTTP wrapper class for representing HTTP socket connections, with
     buffer management and state machine parser.
     """
+
     # Constants for memory footprint
     MEM_CAP = float(
         get_config("http_mem_cap")
@@ -111,7 +112,7 @@ class SocketHttp(SocketBase):
             while self._engine.state is not None:
                 await self._run_state_machine()
                 await sleep_ms(SocketHttp.STATE_MACHINE_SLEEP_MS)
-        except Exception as e: # pylint: disable=W0718
+        except Exception as e:  # pylint: disable=W0718
             logging.warning(f"[SocketHttp] error in run_web: {e}")
         finally:
             if self._send_buf:
@@ -152,7 +153,7 @@ class SocketHttp(SocketBase):
             self._engine.on_failure(self._send_buf, b"Buffer full")
             await self._flush_response()
             return
-        except Exception as e: # pylint: disable=W0718
+        except Exception as e:  # pylint: disable=W0718
             logging.warning(f"[SocketHttp] error in _run_state_machine: {e}")
             self._engine.on_failure(self._send_buf, str(e).encode("ascii"))
             await self._flush_response()
@@ -176,7 +177,7 @@ class SocketHttp(SocketBase):
             self._engine.on_timeout(self._send_buf)
             await self._flush_response()
             return 0
-        except Exception as e: # pylint: disable=W0718
+        except Exception as e:  # pylint: disable=W0718
             self._engine.on_failure(
                 self._send_buf, b"Read error: " + str(e).encode("ascii")
             )

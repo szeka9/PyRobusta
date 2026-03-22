@@ -40,17 +40,17 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Setup toolchain
-        run: |
-          make toolchain
-
       - name: Static checkers
         run: |
-          make pylint
+          make static-checkers
       
       - name: Unit-test
         run: |
           make unit-test
+
+      - name: Setup toolchain
+        run: |
+          make toolchain
 
       - name: Build
         run: |

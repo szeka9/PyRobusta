@@ -138,15 +138,16 @@ class HttpEngine:
             raise ValueError(f"method must be one of {cls.METHODS}")
         cls.ENDPOINTS[endpoint][method] = callback
 
-
     @staticmethod
     def route(endpoint, method):
         """
         Decorator for registering endpoint callback functions.
         """
+
         def decorator(func):
             HttpEngine.register(endpoint, func, method)
             return func
+
         return decorator
 
     # =========================================

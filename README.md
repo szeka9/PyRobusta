@@ -4,9 +4,10 @@ Lightweight MicroPython framework for application-layer protocol servers.
 
 ## HTTP server
 - routing decorators
-- zero-copy memory footprint
 - fixed-size, configurable request/response buffers
 - multipart request/response handling
+- bounded-copy memory footprint
+- robust byte-stream handling with FSM parser & linear sliding buffer
 - TLS support
 
 
@@ -78,7 +79,7 @@ make redeploy           # Will run the following rules: clean build clean-device
 ## Unit tests, pylint, functional tests
 
 ```bash
-make pylint             # Run pylint
+make static-checkers    # Run static checkers (Pylint, black formatter)
 make unit-test          # Run unit tests
 make test-unix          # Run functional tests on the unix port
 make test-device        # Run functional tests on a device

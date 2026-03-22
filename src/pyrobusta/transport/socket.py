@@ -8,6 +8,7 @@ from time import ticks_ms
 
 from ..utils import logging
 
+
 class SocketBase:
     """
     SocketBase class.
