@@ -82,7 +82,7 @@ class TestWebStateMachine(unittest.TestCase):
         self.assertEqual(self.engine.state, self.engine._parse_request_line_st)
 
     def test_status_parsing_unsupported_method(self):
-        request = b"TRACE /index.html HTTP/1.1\r\n"
+        request = b"NOTSUPORTED /index.html HTTP/1.1\r\n"
 
         for i in range(len(request)):
             self.rx.write(request[i : i + 1])
@@ -90,7 +90,7 @@ class TestWebStateMachine(unittest.TestCase):
             if self.engine.state is None:
                 break
 
-        self.assertEqual(self.engine.method, b"TRACE")
+        self.assertEqual(self.engine.method, b"NOTSUPORTED")
         self.assertEqual(self.engine.url, b"/index.html")
         self.assertEqual(self.engine.version, b"HTTP/1.1")
         self.assertEqual(self.engine.state, None)
@@ -137,6 +137,41 @@ class TestWebStateMachine(unittest.TestCase):
 
         self.assertEqual(self.engine.status_code, 400)
         self.assertEqual(self.engine.state, None)
+
+
+    def test_routing_unsupported_method(self):
+        self.engine.state = self.engine._route_request_st
+        self.engine.url = b"/api/test"
+        self.engine.method = b"GET"
+
+        test_callback = mock.Mock()
+        self.engine.register("/api/test", test_callback, "POST")
+
+        self.engine.state(self.rx, self.tx)
+
+        self.assertEqual(self.engine.status_code, 405)
+        self.assertEqual(self.engine.state, None)
+        self.assertIn(b"allow", self.engine.response_headers)
+        self.assertIn(b"POST", self.engine.response_headers)
+
+
+
+    def test_routing_options_method(self):
+        self.engine.state = self.engine._route_request_st
+        self.engine.url = b"/api/test"
+        self.engine.method = b"OPTIONS"
+
+        test_callback = mock.Mock()
+        self.engine.register("/api/test", test_callback, "GET")
+        self.engine.register("/api/test", test_callback, "POST")
+        self.engine.register("/api/test", test_callback, "PUT")
+
+        self.engine.state(self.rx, self.tx)
+
+        self.assertEqual(self.engine.status_code, 204)
+        self.assertEqual(self.engine.state, None)
+        self.assertIn(b"allow", self.engine.response_headers)
+        self.assertIn(b"GET, POST, PUT", self.engine.response_headers)
 
 
 class TestMultipartStateMachine(TestWebStateMachine):

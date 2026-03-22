@@ -43,6 +43,8 @@ class HttpEngine:
     RESP_HEADERS = (
         200,
         b"HTTP/1.1 200 OK",
+        204,
+        b"HTTP/1.1 204 No Content",
         400,
         b"HTTP/1.1 400 Bad Request",
         404,
@@ -88,10 +90,13 @@ class HttpEngine:
     ASCII = "ascii"
     CONTENT_LENGTH = "content-length"
 
-    GET = b"GET"
-    POST = b"POST"
     DELETE = b"DELETE"
-    METHODS = (GET, POST, DELETE)
+    GET = b"GET"
+    OPTIONS = b"OPTIONS"
+    POST = b"POST"
+    PUT = b"PUT"
+
+    METHODS = (DELETE, GET, OPTIONS, POST, PUT)
     STRICT_TYPES = False
     MULTIPART_BOUNDARY = b"pyrobusta-boundary"
 
@@ -125,7 +130,7 @@ class HttpEngine:
         cls, endpoint: str, callback: object | str, method: str = "GET"
     ) -> None:
         """
-        Register and endpoint with a callback function
+        Register an endpoint with a callback function
         :param endpoint: name of the endpoint
         :param callback: callback function
         :param method: HTTP method name
@@ -238,10 +243,11 @@ class HttpEngine:
         """
         self.state = None
         self.status_code = status_code
-        self._set_response_header(b"content-type", content_type)
+        if content_type:
+            self._set_response_header(b"content-type", content_type)
         self._set_response_header(b"connection", b"close")
 
-    def _write_response_head(self, tx, content_length: int = None):
+    def _write_response_head(self, tx, content_length: int = 0):
         """
         Write response status & header to the output,
         with optional content-length value
@@ -249,9 +255,8 @@ class HttpEngine:
         # Discard already accumulated content (e.g. 500 response on unexpected errors)
         tx.consume()
         tx.write(self._get_header(self.status_code))
-        if content_length is not None:
-            tx.write(b"\r\n")
-            tx.write(b"content-length: %s" % str(content_length).encode(self.ASCII))
+        tx.write(b"\r\n")
+        tx.write(b"content-length: %s" % str(content_length).encode(self.ASCII))
         for i in range(0, len(self.response_headers), 2):
             key = self.response_headers[i]
             value = self.response_headers[i + 1]
@@ -385,7 +390,15 @@ class HttpEngine:
         State for routing requests
         - supported ways: static resources, endpoint callback functions
         """
-        if self.url in self.ENDPOINTS and self.method in self.ENDPOINTS[self.url]:
+        if self.url in self.ENDPOINTS and (
+            self.method in self.ENDPOINTS[self.url] or self.method == self.OPTIONS
+        ):
+            if self.method == self.OPTIONS:
+                supported_methods = list(self.ENDPOINTS[self.url].keys())
+                self._set_response_header(b"allow", b", ".join(supported_methods))
+                self.terminate(204, None)
+                self._write_response_head(tx)
+                return
             if self._has_payload() and (
                 mp_boundary := self._is_multipart(self.headers)
             ):
@@ -396,6 +409,11 @@ class HttpEngine:
                 self.state = self._recv_payload
                 return
             self.state = self._app_endpoint_st
+            return
+        if self.url in self.ENDPOINTS and self.method not in self.ENDPOINTS[self.url]:
+            supported_methods = list(self.ENDPOINTS[self.url].keys())
+            self._set_response_header(b"allow", b", ".join(supported_methods))
+            self.on_method_not_allowed(tx)
             return
         if self.method == self.GET:
             resource = b"index.html" if not self.url else self.url
