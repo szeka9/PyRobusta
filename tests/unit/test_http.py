@@ -47,7 +47,7 @@ class TestWebStateMachine(unittest.TestCase):
         self.patcher.stop()
 
     def set_mock_config(self, key, value):
-        def side_effect(input_arg, *args, **kwargs):
+        def side_effect(input_arg, *_, **__):
             if input_arg == key:
                 return value
             raise ValueError(f"Unexpected argument: {input_arg}")
@@ -294,8 +294,8 @@ class TestMultipartStateMachine(TestWebStateMachine):
         self.engine.mp_closing_delimiter = b"--test-boundary--"
 
         body_part = (
-            b"Content-Disposition:form-data;"
-            b'name="file-chunk";filename="upload.txt"Content-Type:text/plain\r\n\r\n'
+            b'Content-Disposition:form-data;name="file-chunk";filename="upload.txt"\r\n'
+            b"Content-Type:text/plain\r\n\r\n"
             b"Upload content\r\n"
             b"--test-boundary\r\n"
         )
@@ -313,7 +313,8 @@ class TestMultipartStateMachine(TestWebStateMachine):
         self.assertEqual(self.engine.state, self.engine._parse_boundary_st)
         test_callback.assert_called_once_with(
             {
-                "content-disposition": 'form-data;name="file-chunk";filename="upload.txt"Content-Type:text/plain'
+                "content-disposition": 'form-data;name="file-chunk";filename="upload.txt"',
+                "content-type": "text/plain",
             },
             b"Upload content",
             first=True,
@@ -325,7 +326,7 @@ class TestMultipartStateMachine(TestWebStateMachine):
         self.engine.url = b"/api/test"
         self.engine.method = b"GET"
         self.engine.version = b"HTTP/1.1"
-        self.engine.headers["content-length"] = 129
+        self.engine.headers["content-length"] = 131
         self.engine.mp_boundary = b"test-boundary"
         self.engine.mp_delimiter = b"--test-boundary\r\n"
         self.engine.mp_closing_delimiter = b"--test-boundary--"
@@ -334,8 +335,8 @@ class TestMultipartStateMachine(TestWebStateMachine):
         self.engine.register("/api/test", test_callback)
 
         body_part = (
-            b"Content-Disposition:form-data;"
-            b'name="file-chunk";filename="upload.txt"Content-Type:text/plain\r\n\r\n'
+            b'Content-Disposition:form-data;name="file-chunk";filename="upload.txt"\r\n'
+            b"Content-Type:text/plain\r\n\r\n"
             b"Upload content\r\n"
             b"--test-boundary--"
         )
@@ -354,7 +355,8 @@ class TestMultipartStateMachine(TestWebStateMachine):
         self.assertEqual(self.engine.status_code, 200)
         test_callback.assert_called_once_with(
             {
-                "content-disposition": 'form-data;name="file-chunk";filename="upload.txt"Content-Type:text/plain'
+                "content-disposition": 'form-data;name="file-chunk";filename="upload.txt"',
+                "content-type": "text/plain",
             },
             b"Upload content",
             first=True,

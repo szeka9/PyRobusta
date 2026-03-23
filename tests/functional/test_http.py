@@ -6,7 +6,6 @@ from pyrobusta.protocol import http_multipart
 from pyrobusta.protocol.http import HttpEngine, enable_optional_features
 from pyrobusta.utils import config
 
-
 #################################################
 # Test helpers
 #################################################

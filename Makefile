@@ -2,6 +2,7 @@ PYROBUSTA_VERSION := 0.1.0
 DEVICE ?= u0
 
 SRC_DIR := src
+TEST_DIR := tests
 EXAMPLE_DIR := example/mem_usage
 BUILD_DIR := build
 DIST_DIR := dist
@@ -34,6 +35,10 @@ all: clean toolchain static-checkers unit-test build test-unix deploy publish
 
 .PHONY: toolchain
 toolchain:
+	git submodule update --init
+	git -C $(MICROPY_ROOT) submodule update --init
+	$(MAKE) -C $(MICROPY_ROOT)/mpy-cross clean
+	$(MAKE) -C $(MICROPY_ROOT)/ports/unix clean
 	$(MAKE) -C $(MICROPY_ROOT)/mpy-cross
 	$(MAKE) -C $(MICROPY_ROOT)/ports/unix
 
@@ -167,8 +172,10 @@ run-device:
 # -----------------------------
 .PHONY: pylint
 pylint:
-	@echo "Running Pylint"
+	@echo "Running Pylint in $(SRC_DIR)/"
 	@python3 -m pylint $(SRC_DIR)
+	@echo "Running Pylint in $(TEST_DIR)/"
+	@python3 -m pylint --rc-file=$(TEST_DIR)/.pylintrc $(TEST_DIR)
 
 
 # -----------------------------
@@ -177,7 +184,7 @@ pylint:
 .PHONY: black
 black:
 	@echo "Running black formatter"
-	@python3 -m black --check $(SRC_DIR)
+	@python3 -m black --check $(SRC_DIR) $(TEST_DIR)
 
 # -----------------------------
 # Run unit tests

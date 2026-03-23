@@ -1,15 +1,22 @@
+"""
+Utility scripts used by unit tests.
+"""
+
 import sys
 import importlib.util
 from pathlib import Path
 
 
 def load_module(relative_path):
+    """
+    Resolve and create a module from a path.
+    """
     here = Path(__file__).resolve()
     src_root = here.parent.parent.parent / "src"
 
     if str(src_root) not in sys.path:
         sys.path.insert(0, str(src_root))
-        
+
     full_path = (src_root / relative_path).resolve()
     rel = full_path.relative_to(src_root)
     module_name = ".".join(rel.with_suffix("").parts)

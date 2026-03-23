@@ -27,11 +27,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Checkout submodules
-        run: |
-          git submodule update --init
-          git -C external/micropython submodule update --init
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
