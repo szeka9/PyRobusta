@@ -1,16 +1,18 @@
 # PyRobusta
 
-Lightweight MicroPython framework for application-layer protocol servers.
+A lightweight HTTP server library for MicroPython designed for constrained embedded systems.
 
-## HTTP server
-- routing decorators
-- fixed-size, configurable request/response buffers
-- multipart request/response handling
-- bounded-copy memory footprint
-- robust byte-stream handling with FSM parser & linear sliding buffer
+## HTTP features
+- Routing decorators
+- Fixed-size, configurable request/response buffers
+- Multipart request and response handling
+- Bounded-copy memory footprint
+- Finite-state-machine parser with linear sliding buffer
+- Robust byte-stream handling
 - TLS support
 
-**Further protcol server options are coming soon!**
+## Current limitation
+- Query parameter parsing is not yet implemented
 
 # Prerequisites
 
@@ -21,7 +23,7 @@ source venv/bin/activate
 python3 -m pip install -r requirements.txt
 ```
 
-## Create pyrobusta.env in the project root
+## Create pyrobusta.env in the project root (optional)
 
 ```bash
 # pyrobusta.env
@@ -34,7 +36,7 @@ http_mem_cap=0.05
 ```
 pyrobusta.env contains runtime configuration, deployed to the device. This allows the user to override default behavior and configure optional settings.
 
-- rules such as ```make run-unix``` or ```make deploy-example run-device``` also rely on pyrobusta.env, allowing the user to experiment with different settings
+- rules such as ```make run-unix``` or ```make run-device``` also rely on pyrobusta.env, allowing the user to experiment with different settings
 - pyrobusta.env is ignored when running functional tests (```make test-unix```, ```make test-device```)
 
 Check [configuration.md](https://github.com/szeka9/PyRobusta/blob/main/docs/configuration.md) for all configuration options.
