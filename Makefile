@@ -22,7 +22,7 @@ MPY_TARGETS = $(patsubst $(SRC_DIR)/%.py,$(BUILD_DIR)/%.mpy,$(NON_INIT_PY))
 INIT_TARGETS = $(patsubst $(SRC_DIR)/%.py,$(BUILD_DIR)/%.py,$(filter %__init__.py,$(PY_FILES)))
 
 .PHONY: all
-all: clean toolchain pylint unit-test build test-unix deploy
+all: clean toolchain static-checkers unit-test build test-unix deploy publish
 
 # ================================================
 # Build
@@ -79,7 +79,7 @@ deploy:
 .PHONY: deploy-config
 deploy-config:
 	@echo "Uploading pyrobusta.env"
-	mpremote $(DEVICE) cp pyrobusta.env :pyrobusta.env
+	@if [ -f pyrobusta.env ]; then mpremote $(DEVICE) cp pyrobusta.env :pyrobusta.env; fi
 
 # -----------------------------
 # Full redeploy
@@ -148,7 +148,7 @@ deploy-example:
 	mpremote $(DEVICE) cp $(EXAMPLE_DIR)/boot.py :boot.py
 
 	@echo "Uploading pyrobusta.env"
-	mpremote $(DEVICE) cp pyrobusta.env :pyrobusta.env
+	@if [ -f pyrobusta.env ]; then mpremote $(DEVICE) cp pyrobusta.env :pyrobusta.env; fi
 
 # -----------------------------
 # Run example directly
