@@ -3,7 +3,11 @@ import ssl
 
 from pyrobusta.server import http_server
 from pyrobusta.protocol import http_multipart
-from pyrobusta.protocol.http import HttpEngine, enable_optional_features
+from pyrobusta.protocol.http import (
+    HttpEngine,
+    enable_optional_features,
+    ServerBusyError,
+)
 from pyrobusta.utils import config
 
 #################################################
@@ -20,7 +24,7 @@ def test_assert(name, actual, expected):
         raise AssertionError(f"{actual} != {expected}")
 
 
-async def send_request(request, tls):
+async def send_request(request, tls=False):
     port = (
         http_server.HttpServer.LISTEN_PORT_HTTPS
         if tls
@@ -78,6 +82,11 @@ def simple_callback(headers, body):
 def multipart_callback(headers, body):
     part_count = int(headers["x-part-count"])
     return "multipart/form-data", ("text/plain", multipart_response(part_count))
+
+
+@HttpEngine.route("/test/busy", "POST")
+def busy_callback(headers, body):
+    raise ServerBusyError()
 
 
 async def test_simple_response(tls_enabled):
@@ -164,6 +173,27 @@ async def test_multipart_response(tls_enabled):
     await server.terminate()
 
 
+async def test_server_busy():
+    setup_config()
+
+    server = http_server.HttpServer()
+    server_task = asyncio.create_task(server.run_server())
+    await asyncio.sleep_ms(100)
+
+    # Test: 1 part
+    plain_response = await send_request(
+        b"POST /test/busy HTTP/1.1\r\n" b"Host: localhost\r\n\r\n"
+    )
+    test_assert(
+        f"response is rejected by busy service with 503",
+        b"503 Service Unavailable" in plain_response,
+        True,
+    )
+
+    server_task.cancel()
+    await server.terminate()
+
+
 #################################################
 # Test methods
 #################################################
@@ -190,6 +220,12 @@ def test_registration():
         HttpEngine.ENDPOINTS[b"/test/multipart"][b"GET"],
     )
 
+    test_assert(
+        "busy endpoint registration",
+        busy_callback,
+        HttpEngine.ENDPOINTS[b"/test/busy"][b"POST"],
+    )
+
 
 def test_multipart_patches():
     setup_config(multipart=True)
@@ -208,6 +244,8 @@ def test_main():
     test_multipart_patches()
     asyncio.run(test_multipart_response(tls_enabled=False))
     asyncio.run(test_multipart_response(tls_enabled=True))
+
+    asyncio.run(test_server_busy())
 
 
 test_main()

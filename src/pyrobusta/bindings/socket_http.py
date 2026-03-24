@@ -8,7 +8,7 @@ from gc import mem_free, collect
 
 from ..stream.buffer import MemoryPool, SlidingBuffer, BufferFullError
 from ..transport.socket import SocketBase
-from ..protocol.http import HttpEngine
+from ..protocol.http import HttpEngine, ServerBusyError
 from ..utils.config import get_config
 from ..utils import logging
 
@@ -151,6 +151,10 @@ class SocketHttp(SocketBase):
                 await sleep_ms(SocketHttp.STATE_MACHINE_SLEEP_MS)
         except BufferFullError:
             self._engine.on_failure(self._send_buf, b"Buffer full")
+            await self._flush_response()
+            return
+        except ServerBusyError:
+            self._engine.on_busy(self._send_buf)
             await self._flush_response()
             return
         except Exception as e:  # pylint: disable=W0718
