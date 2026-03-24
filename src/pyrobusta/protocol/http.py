@@ -16,6 +16,12 @@ class HeaderParsingError(ValueError):
     pass
 
 
+class ServerBusyError(RuntimeError):
+    """Exception for applications to indicate busy state"""
+
+    pass
+
+
 class HttpEngine:
     """
     HTTP protocol parser state machine
