@@ -110,7 +110,7 @@ def _parse_complete_part_st(self, rx, tx):
     callback = http.HttpEngine._get_callback(self.url, self.method)
     # Process complete part
     if not is_final:
-        callback(part_headers, part_body, first=self.mp_first_part, last=False)
+        callback(self, (part_headers, part_body))
         if rx.peek(len(self.mp_delimiter)) != self.mp_delimiter:
             self.on_client_error(tx, http.HttpEngine.MULTIPART_BOUNDARY_ERROR)
             return
@@ -129,7 +129,8 @@ def _parse_complete_part_st(self, rx, tx):
     ):
         self.on_client_error(tx, http.HttpEngine.CONTENT_LENGTH_ERROR)
         return
-    dtype, data = callback(part_headers, part_body, first=self.mp_first_part, last=True)
+    self.mp_last_part = True
+    dtype, data = callback(self, (part_headers, part_body))
     self.terminate(200, dtype.encode(http.HttpEngine.ASCII))
     return self._generate_response(tx, data)
 
@@ -145,6 +146,7 @@ def apply_patches():
     def new_init(self, *args, **kwargs):
         orig_init(self, *args, **kwargs)
         self.mp_first_part = True
+        self.mp_last_part = False
         self.mp_delimiter = None
         self.mp_closing_delimiter = None
 

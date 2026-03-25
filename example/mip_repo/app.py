@@ -28,10 +28,10 @@ def append_package_files(dir, package_files, host_name, protocol):
 
 
 @HttpEngine.route("/pyrobusta/package.json", "GET")
-def self_serve_mip_package(headers, _):
+def self_serve_mip_package(http_ctx, _):
     package_files = {"version": config.PYROBUSTA_VERSION, "deps": [], "urls": []}
     tls_enabled = config.get_config("tls").lower() == "true"
-    server_addr = headers["host"]
+    server_addr = http_ctx.headers["host"]
     if ":" not in server_addr:
         port = (
             http_server.HttpServer.LISTEN_PORT_HTTPS

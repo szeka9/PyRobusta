@@ -307,19 +307,23 @@ class TestMultipartStateMachine(TestWebStateMachine):
 
         self.assertEqual(self.engine.state, self.engine._parse_complete_part_st)
         self.assertEqual(self.rx.peek(), body_part)
+        self.assertEqual(self.engine.mp_first_part, True)
 
         self.engine.state(self.rx, self.tx)
 
         self.assertEqual(self.engine.state, self.engine._parse_boundary_st)
         test_callback.assert_called_once_with(
-            {
-                "content-disposition": 'form-data;name="file-chunk";filename="upload.txt"',
-                "content-type": "text/plain",
-            },
-            b"Upload content",
-            first=True,
-            last=False,
+            self.engine,
+            (
+                {
+                    "content-disposition": 'form-data;name="file-chunk";filename="upload.txt"',
+                    "content-type": "text/plain",
+                },
+                b"Upload content",
+            ),
         )
+        self.assertEqual(self.engine.mp_first_part, False)
+        self.assertEqual(self.engine.mp_last_part, False)
 
     def test_multipart_receiver_last_part(self):
         self.engine.state = self.engine._parse_boundary_st
@@ -354,14 +358,17 @@ class TestMultipartStateMachine(TestWebStateMachine):
         self.assertEqual(self.engine.state, None)
         self.assertEqual(self.engine.status_code, 200)
         test_callback.assert_called_once_with(
-            {
-                "content-disposition": 'form-data;name="file-chunk";filename="upload.txt"',
-                "content-type": "text/plain",
-            },
-            b"Upload content",
-            first=True,
-            last=True,
+            self.engine,
+            (
+                {
+                    "content-disposition": 'form-data;name="file-chunk";filename="upload.txt"',
+                    "content-type": "text/plain",
+                },
+                b"Upload content",
+            ),
         )
+        self.assertEqual(self.engine.mp_first_part, True)
+        self.assertEqual(self.engine.mp_last_part, True)
 
 
 if __name__ == "__main__":

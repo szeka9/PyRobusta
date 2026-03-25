@@ -41,6 +41,7 @@ class HttpEngine:
         "content_length_cnt",
         "mp_boundary",
         "mp_first_part",
+        "mp_last_part",
         "mp_delimiter",
         "mp_closing_delimiter",
     )
@@ -471,7 +472,7 @@ class HttpEngine:
         callback = self._get_callback(self.url, method)
         if self._has_payload():
             self.state = None
-            dtype, data = callback(self.headers, bytes(rx.peek()))
+            dtype, data = callback(self, bytes(rx.peek()))
             dtype = dtype.encode(self.ASCII)
         else:
             if not callable(callback):
@@ -480,7 +481,7 @@ class HttpEngine:
                     _rx, _tx, callback.encode(HttpEngine.ASCII)
                 )
                 return
-            dtype, data = callback(self.headers, b"")
+            dtype, data = callback(self, b"")
             dtype = dtype.encode(self.ASCII)
         self._set_response_header(b"content-type", dtype)
         if dtype == b"image/jpeg":
