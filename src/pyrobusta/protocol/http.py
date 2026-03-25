@@ -45,7 +45,7 @@ class HttpEngine:
         "mp_closing_delimiter",
     )
 
-    ENDPOINTS = {}
+    ENDPOINTS = []  # (endpoint, callback, method)
     RESP_HEADERS = (
         200,
         b"200 OK",
@@ -144,11 +144,13 @@ class HttpEngine:
         """
         endpoint = endpoint.encode(cls.ASCII)
         method = method.encode(cls.ASCII)
-        if not endpoint in cls.ENDPOINTS:
-            cls.ENDPOINTS[endpoint] = {}
+        endpoint_exists = cls._get_callback(endpoint, method) is not None
+
         if method not in cls.METHODS:
             raise ValueError(f"method must be one of {cls.METHODS}")
-        cls.ENDPOINTS[endpoint][method] = callback
+        if endpoint_exists:
+            raise ValueError("endpoint exists")
+        cls.ENDPOINTS.append((endpoint, callback, method))
 
     @staticmethod
     def route(endpoint, method):
@@ -166,15 +168,31 @@ class HttpEngine:
     # Static helpers for parsing
     # =========================================
 
-    @classmethod
-    def _get_status(cls, status_code):
-        idx = cls.RESP_HEADERS.index(status_code)
-        return cls.RESP_HEADERS[idx + 1]
+    @staticmethod
+    def _lookup(tuple_, key):
+        idx = tuple_.index(key)
+        return tuple_[idx + 1]
 
     @classmethod
-    def _get_content_type(cls, extension):
-        idx = cls.CONTENT_TYPES.index(extension)
-        return cls.CONTENT_TYPES[idx + 1]
+    def _get_callback(cls, endpoint, method):
+        for e in cls.ENDPOINTS:
+            if endpoint == e[0] and method == e[2]:
+                return e[1]
+
+    @classmethod
+    def _has_endpoint(cls, endpoint):
+        for e in cls.ENDPOINTS:
+            if endpoint == e[0]:
+                return True
+        return False
+
+    @classmethod
+    def _supported_methods(cls, endpoint):
+        supported_methods = []
+        for method in cls.METHODS:
+            if cls._get_callback(endpoint, method) is not None:
+                supported_methods.append(method)
+        return supported_methods
 
     @classmethod
     def _parse_headers(cls, raw_headers: memoryview) -> dict[str, str | int]:
@@ -263,7 +281,7 @@ class HttpEngine:
         tx.consume()
         tx.write(self.version)
         tx.write(b" ")
-        tx.write(self._get_status(self.status_code))
+        tx.write(self._lookup(self.RESP_HEADERS, self.status_code))
         if content_length is not None:
             tx.write(b"\r\n")
             tx.write(b"content-length: %s" % str(content_length).encode(self.ASCII))
@@ -398,13 +416,16 @@ class HttpEngine:
         State for routing requests
         - supported ways: static resources, endpoint callback functions
         """
-        if self.url in self.ENDPOINTS and (
-            self.method in self.ENDPOINTS[self.url]
+        if self._has_endpoint(self.url) and (
+            self._get_callback(self.url, self.method) is not None
             or self.method == self.OPTIONS
-            or (self.method == self.HEAD and self.GET in self.ENDPOINTS[self.url])
+            or (
+                self.method == self.HEAD
+                and self._get_callback(self.url, self.GET) is not None
+            )
         ):
             if self.method == self.OPTIONS:
-                supported_methods = list(self.ENDPOINTS[self.url].keys())
+                supported_methods = self._supported_methods(self.url)
                 self._set_response_header(b"allow", b", ".join(supported_methods))
                 self.terminate(204, None)
                 self._write_response_head(tx, None)
@@ -421,8 +442,12 @@ class HttpEngine:
             else:
                 self.state = self._app_endpoint_st
             return
-        if self.url in self.ENDPOINTS and self.method not in self.ENDPOINTS[self.url]:
-            supported_methods = list(self.ENDPOINTS[self.url].keys())
+
+        if (
+            self._has_endpoint(self.url)
+            and self._get_callback(self.method, self.url) is None
+        ):
+            supported_methods = self._supported_methods(self.url)
             self._set_response_header(b"allow", b", ".join(supported_methods))
             self.on_method_not_allowed(tx)
             return
@@ -443,7 +468,7 @@ class HttpEngine:
     def _app_endpoint_st(self, rx, tx):
         """Process a request by registered callback functions"""
         method = self.GET if self.method == self.HEAD else self.method
-        callback = self.ENDPOINTS[self.url][method]
+        callback = self._get_callback(self.url, method)
         if self._has_payload():
             self.state = None
             dtype, data = callback(self.headers, bytes(rx.peek()))
@@ -500,9 +525,9 @@ class HttpEngine:
         norm_path = b"/".join(parts)
 
         try:
-            content_type = self._get_content_type(extension)
+            content_type = self._lookup(self.CONTENT_TYPES, extension)
         except ValueError:
-            content_type = self._get_content_type(b"raw")
+            content_type = self._lookup(self.CONTENT_TYPES, b"raw")
         try:
             self._set_response_header(
                 b"content-length", str(stat(norm_path)[6]).encode(HttpEngine.ASCII)

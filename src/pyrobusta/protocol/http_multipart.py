@@ -107,7 +107,7 @@ def _parse_complete_part_st(self, rx, tx):
     except http.HeaderParsingError:
         self.on_client_error(tx, http.HttpEngine.HEADER_ERROR)
         return
-    callback = http.HttpEngine.ENDPOINTS[self.url][self.method]
+    callback = http.HttpEngine._get_callback(self.url, self.method)
     # Process complete part
     if not is_final:
         callback(part_headers, part_body, first=self.mp_first_part, last=False)
