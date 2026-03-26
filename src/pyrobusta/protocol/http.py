@@ -452,7 +452,7 @@ class HttpEngine:
             self._set_response_header(b"allow", b", ".join(supported_methods))
             self.on_method_not_allowed(tx)
             return
-        if self.method == self.GET:
+        if self.method in (self.GET, self.HEAD):
             resource = b"index.html" if not self.url else self.url
             self.state = lambda _rx, _tx: self._send_file_st(_rx, _tx, resource)
             return
