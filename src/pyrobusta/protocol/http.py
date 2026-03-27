@@ -194,14 +194,15 @@ class HttpEngine:
         :param key: key to parse from the query
         :param default: default value to return when key is not present
         """
-        idx_start = query.index(key + "=")
-        idx_end = -1
-        idx_end = query.find("&", idx_start)
-        if idx_start > -1:
-            if idx_end > -1:
-                return query[idx_start + len(key) + 1 : idx_end]
-            return query[idx_start + len(key) + 1 :]
-        if not default:
+        idx_start = query.find(key + "=")
+        if idx_start != -1:
+            idx_end = -1
+            idx_end = query.find("&", idx_start)
+            if idx_start > -1:
+                if idx_end > -1:
+                    return query[idx_start + len(key) + 1 : idx_end]
+                return query[idx_start + len(key) + 1 :]
+        if default is None:
             raise KeyError()
         return default
 

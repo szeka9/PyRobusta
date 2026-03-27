@@ -7,11 +7,34 @@ from pyrobusta.utils import logging
 
 
 @HttpEngine.route("/mem-usage", "GET")
-def mem_usage(*_):
+def mem_usage(http_ctx, _):
     collect()
     free = mem_free()
     used = mem_alloc()
     usage_percentage = 100 * used / (free + used)
+
+    if http_ctx.query:
+        value_format = http_ctx.get_url_encoded_query_param(
+            http_ctx.query, "format", "bytes"
+        )
+        if value_format not in ("%", "bytes"):
+            raise ValueError("invalid format")
+
+        selector = http_ctx.get_url_encoded_query_param(http_ctx.query, "key", "")
+        if selector == "free":
+            if value_format == "%":
+                free = 100 * free / (used + free)
+            return "text/plain", f"Free   [{value_format}]: {free}\n"
+        if selector == "used":
+            if value_format == "%":
+                used = 100 * used / (used + free)
+            return "text/plain", f"Used   [{value_format}]: {used}\n"
+        if selector == "total":
+            return "text/plain", f"Total  [bytes]: {used + free}\n"
+
+        if selector:
+            raise ValueError("invalid key")
+
     return "text/plain", (
         f"Currently used: {usage_percentage:.2f}%\n"
         f"Free   [bytes]: {free}\n"

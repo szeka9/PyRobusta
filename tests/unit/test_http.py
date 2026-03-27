@@ -286,6 +286,31 @@ class TestWebStateMachine(TestWebStateMachineBase):
             "value3",
         )
 
+    def test_empty_or_missing_url_encoded_query_parameter(self):
+        request = (
+            b"GET /api/test?param1=&param2= HTTP/1.1\r\n"
+        )
+
+        for i in range(len(request)):
+            self.rx.write(request[i : i + 1])
+            self.engine.state(self.rx, self.tx)
+
+        self.assertEqual(
+            self.engine.get_url_encoded_query_param(self.engine.query, "param1"),
+            "",
+        )
+        self.assertEqual(
+            self.engine.get_url_encoded_query_param(self.engine.query, "param2"),
+            "",
+        )
+        self.assertEqual(
+            self.engine.get_url_encoded_query_param(self.engine.query, "param3", "default"),
+            "default",
+        )
+
+        with self.assertRaises(KeyError):
+            self.engine.get_url_encoded_query_param(self.engine.query, "param3")
+
 
 class TestMultipartStateMachine(TestWebStateMachineBase):
     """
