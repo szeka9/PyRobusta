@@ -38,6 +38,7 @@ class HttpEngine:
         "headers",
         "method",
         "url",
+        "query",
         "content_length_cnt",
         "mp_boundary",
         "mp_first_part",
@@ -124,6 +125,7 @@ class HttpEngine:
         self.headers = {}
         self.method = None
         self.url = None
+        self.query = None
         self.content_length_cnt = 0
 
         # [Multipart state]
@@ -154,7 +156,7 @@ class HttpEngine:
         cls.ENDPOINTS.append((endpoint, callback, method))
 
     @staticmethod
-    def route(endpoint, method):
+    def route(endpoint: str, method: str):
         """
         Decorator for registering endpoint callback functions.
         """
@@ -168,6 +170,40 @@ class HttpEngine:
     # =========================================
     # Static helpers for parsing
     # =========================================
+
+    @staticmethod
+    def percent_decode(s: str):
+        """Decode percent-encoded input"""
+        out = []
+        i = 0
+        while i < len(s):
+            if s[i] == "%" and i + 2 < len(s):
+                out.append(chr(int(s[i + 1 : i + 3], 16)))
+                i += 3
+            else:
+                out.append(s[i])
+                i += 1
+        return "".join(out)
+
+    @staticmethod
+    def get_url_encoded_query_param(query: str, key: str, default: str = None):
+        """
+        Parse query and return the value belonging to a key
+        according to x-www-form-urlencoded
+        :param query: query part
+        :param key: key to parse from the query
+        :param default: default value to return when key is not present
+        """
+        idx_start = query.index(key + "=")
+        idx_end = -1
+        idx_end = query.find("&", idx_start)
+        if idx_start > -1:
+            if idx_end > -1:
+                return query[idx_start + len(key) + 1 : idx_end]
+            return query[idx_start + len(key) + 1 :]
+        if not default:
+            raise KeyError()
+        return default
 
     @staticmethod
     def _lookup(tuple_, key):
@@ -383,7 +419,13 @@ class HttpEngine:
             self.on_client_error(tx, self.BAD_REQUEST_ERROR)
             return
         self.method = status_parts[0]
-        self.url = status_parts[1]
+        url_parts = status_parts[1].split(b"?", 1)
+        self.url = url_parts[0]
+        self.query = (
+            ""
+            if len(url_parts) == 1
+            else self.percent_decode(url_parts[1].decode(self.ASCII))
+        )
         self.version = status_parts[2]
         if self.method not in self.METHODS:
             self.on_method_not_allowed(tx)

@@ -6,14 +6,14 @@ from unittest.mock import MagicMock, patch
 from .utils import load_module
 
 
-class TestWebStateMachine(unittest.TestCase):
+class TestWebStateMachineBase(unittest.TestCase):
     """
-    Tests for the core functionality of the state machine.
+    Base class for stat machine tests.
     """
 
     @classmethod
     def setUpClass(cls):
-        cls.config = {"http_multipart": "False"}
+        cls.config = {}
 
     def setUp(self):
         # Create mock modules
@@ -53,6 +53,16 @@ class TestWebStateMachine(unittest.TestCase):
             raise ValueError(f"Unexpected argument: {input_arg}")
 
         self.mock_utils_config.get_config.side_effect = side_effect
+
+
+class TestWebStateMachine(TestWebStateMachineBase):
+    """
+    Tests for the core functionality of the state machine.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.config = {"http_multipart": "False"}
 
     def test_status_parsing_valid(self):
         request = b"GET /index.html HTTP/1.1\r\nContent-Length:10"
@@ -216,8 +226,71 @@ class TestWebStateMachine(unittest.TestCase):
         )
         self.assertEqual(self.tx.find(test_response), -1)
 
+    def test_simple_query_parameter(self):
+        request = b"GET /api/test?param HTTP/1.1\r\n"
 
-class TestMultipartStateMachine(TestWebStateMachine):
+        for i in range(len(request)):
+            self.rx.write(request[i : i + 1])
+            self.engine.state(self.rx, self.tx)
+
+        self.assertEqual(self.engine.query, "param")
+
+    def test_pct_encoded_query_parameter(self):
+        def pct_encode(b):
+            out = []
+            for c in b:
+                out.append(f"%{ord(c):02X}")
+            return "".join(out)
+
+        unsafe_chars = ":/?#[]@!$&'()*+,;=% "
+        request = b"GET /api/test?safe_chars.%s HTTP/1.1\r\n" % pct_encode(
+            unsafe_chars
+        ).encode("ascii")
+
+        for i in range(len(request)):
+            self.rx.write(request[i : i + 1])
+            self.engine.state(self.rx, self.tx)
+
+        self.assertEqual(self.engine.query, f"safe_chars.{unsafe_chars}")
+
+    def test_single_url_encoded_query_parameter(self):
+        request = b"GET /api/test?param=value HTTP/1.1\r\n"
+
+        for i in range(len(request)):
+            self.rx.write(request[i : i + 1])
+            self.engine.state(self.rx, self.tx)
+
+        self.assertEqual(
+            self.engine.get_url_encoded_query_param(self.engine.query, "param"), "value"
+        )
+
+    def test_multiple_url_encoded_query_parameter(self):
+        request = (
+            b"GET /api/test?param1=value1&param2=value2&param3=value3 HTTP/1.1\r\n"
+        )
+
+        for i in range(len(request)):
+            self.rx.write(request[i : i + 1])
+            self.engine.state(self.rx, self.tx)
+
+        self.assertEqual(
+            self.engine.get_url_encoded_query_param(self.engine.query, "param1"),
+            "value1",
+        )
+        self.assertEqual(
+            self.engine.get_url_encoded_query_param(self.engine.query, "param2"),
+            "value2",
+        )
+        self.assertEqual(
+            self.engine.get_url_encoded_query_param(self.engine.query, "param3"),
+            "value3",
+        )
+
+
+class TestMultipartStateMachine(TestWebStateMachineBase):
+    """
+    Tests for multipart handling
+    """
 
     @classmethod
     def setUpClass(cls):
