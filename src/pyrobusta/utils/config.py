@@ -4,7 +4,7 @@ configuration is read from /pyrobusta.env.
 Values can be encapsulated by single or double quotes.
 """
 
-PYROBUSTA_VERSION = "0.1.0"
+PYROBUSTA_VERSION = "0.2.0"
 CONFIG_LOADED = False
 CONFIG_LOCATION = "pyrobusta.env"
 CONFIG_CACHE = [
