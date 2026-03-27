@@ -4,7 +4,7 @@ configuration is read from /pyrobusta.env.
 Values can be encapsulated by single or double quotes.
 """
 
-PYROBUSTA_VERSION = "0.1.0"
+PYROBUSTA_VERSION = "0.2.0"
 CONFIG_LOADED = False
 CONFIG_LOCATION = "pyrobusta.env"
 CONFIG_CACHE = [
@@ -36,7 +36,7 @@ def read_config(config=CONFIG_LOCATION):
         with open(config, encoding="utf-8") as conf:
             for line in conf.read().splitlines("\n"):
                 key = line.split("=")[0].strip()
-                if key.startswith("#"):
+                if key.startswith("#") or not line.strip():
                     continue
                 value = line.split("=")[1].strip().strip("'").strip('"')
                 if key and value:

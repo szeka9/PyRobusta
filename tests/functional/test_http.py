@@ -70,22 +70,22 @@ def multipart_response(num_responses):
 
 
 @HttpEngine.route("/test/simple", "GET")
-def simple_callback(headers, body):
-    if headers["accept"] == "text/plain":
+def simple_callback(http_ctx, _):
+    if http_ctx.headers["accept"] == "text/plain":
         return "text/plain", "Test response\n"
-    elif headers["accept"] == "application/json":
+    elif http_ctx.headers["accept"] == "application/json":
         return "application/json", '{"response": "Test response"}'
     raise ValueError("Unhandled content-type")
 
 
 @HttpEngine.route("/test/multipart", "GET")
-def multipart_callback(headers, body):
-    part_count = int(headers["x-part-count"])
+def multipart_callback(http_ctx, _):
+    part_count = int(http_ctx.headers["x-part-count"])
     return "multipart/form-data", ("text/plain", multipart_response(part_count))
 
 
 @HttpEngine.route("/test/busy", "POST")
-def busy_callback(headers, body):
+def busy_callback(*_):
     raise ServerBusyError()
 
 
@@ -211,19 +211,19 @@ def test_registration():
     test_assert(
         "simple endpoint registration",
         simple_callback,
-        HttpEngine.ENDPOINTS[b"/test/simple"][b"GET"],
+        HttpEngine._get_callback(b"/test/simple", b"GET"),
     )
 
     test_assert(
         "multipart endpoint registration",
         multipart_callback,
-        HttpEngine.ENDPOINTS[b"/test/multipart"][b"GET"],
+        HttpEngine._get_callback(b"/test/multipart", b"GET"),
     )
 
     test_assert(
         "busy endpoint registration",
         busy_callback,
-        HttpEngine.ENDPOINTS[b"/test/busy"][b"POST"],
+        HttpEngine._get_callback(b"/test/busy", b"POST"),
     )
 
 
