@@ -311,6 +311,76 @@ class TestWebStateMachine(TestWebStateMachineBase):
         with self.assertRaises(KeyError):
             self.engine.get_url_encoded_query_param(self.engine.query, "param3")
 
+    def test_chunked_transfer_encoding_valid(self):
+        self.engine.url = b"/api/test"
+        self.engine.method = b"GET"
+        self.engine.version = b"HTTP/1.1"
+        self.engine.headers["transfer-encoding"] = "chunked"
+        self.engine.state = self.engine._recv_chunked_size_st
+
+        test_callback = mock.Mock(return_value=("text/plain", "OK"))
+        self.engine.register("/api/test", test_callback, "GET")
+
+        for chunk in (
+            b"14\r\nchunking\r\ntest\r\ncase\r\n",
+            b"E\r\nchunking\r\ntest\r\n",
+            b"8\r\nchunking\r\n",
+            b"0\r\n\r\n",
+        ):
+            for i in range(len(chunk)):
+                self.rx.write(chunk[i : i + 1])
+                self.engine.state(self.rx, self.tx)
+
+            self.assertEqual(self.engine.state, self.engine._app_endpoint_st)
+            self.engine.state(self.rx, self.tx)
+            size_delimiter = chunk.find(b"\r\n")
+            test_callback.assert_called_with(
+                self.engine, chunk[size_delimiter + 2 : -2]
+            )
+
+        self.assertEqual(self.engine.status_code, 200)
+        self.assertEqual(self.engine.state, None)
+
+    def test_chunked_transfer_encoding_invalid_chunk_size_smaller(self):
+        self.engine.url = b"/api/test"
+        self.engine.method = b"GET"
+        self.engine.version = b"HTTP/1.1"
+        self.engine.headers["transfer-encoding"] = "chunked"
+        self.engine.state = self.engine._recv_chunked_size_st
+
+        test_callback = mock.Mock(return_value=("text/plain", "OK"))
+        self.engine.register("/api/test", test_callback, "GET")
+
+        chunk = b"2\r\nchunking\r\n"
+        for i in range(len(chunk)):
+            self.rx.write(chunk[i : i + 1])
+            self.engine.state(self.rx, self.tx)
+            if self.engine.state is None:
+                break
+
+        self.assertEqual(self.engine.status_code, 400)
+        self.assertEqual(self.engine.state, None)
+
+    def test_chunked_transfer_encoding_chunk_incomplete(self):
+        self.engine.url = b"/api/test"
+        self.engine.method = b"GET"
+        self.engine.version = b"HTTP/1.1"
+        self.engine.headers["transfer-encoding"] = "chunked"
+        self.engine.state = self.engine._recv_chunked_size_st
+
+        test_callback = mock.Mock(return_value=("text/plain", "OK"))
+        self.engine.register("/api/test", test_callback, "GET")
+
+        chunk = b"FF\r\nchunking\r\n"
+        for i in range(len(chunk)):
+            self.rx.write(chunk[i : i + 1])
+            self.engine.state(self.rx, self.tx)
+            if self.engine.state is None:
+                break
+
+        self.assertEqual(self.engine.status_code, None)
+        self.assertEqual(self.engine.state, self.engine._recv_chunk_st)
+
 
 class TestMultipartStateMachine(TestWebStateMachineBase):
     """

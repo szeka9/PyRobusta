@@ -40,6 +40,7 @@ class HttpEngine:
         "url",
         "query",
         "content_length_cnt",
+        "recv_chunk_size",
         "mp_boundary",
         "mp_first_part",
         "mp_last_part",
@@ -109,7 +110,7 @@ class HttpEngine:
 
     MULTIPART_BOUNDARY = b"pyrobusta-boundary"
 
-    CONTENT_LENGTH_ERROR = b"Content-Length mismatch"
+    CONTENT_LENGTH_ERROR = b"content length mismatch"
     HEADER_ERROR = b"Invalid headers"
     MULTIPART_BOUNDARY_ERROR = b"Invalid multipart boundary"
     BAD_REQUEST_ERROR = b"Bad request"
@@ -127,6 +128,7 @@ class HttpEngine:
         self.url = None
         self.query = None
         self.content_length_cnt = 0
+        self.recv_chunk_size = 0
 
         # [Multipart state]
         self.mp_boundary = None
@@ -443,17 +445,22 @@ class HttpEngine:
             return
         try:
             self.headers = self._parse_headers(rx.peek(blank_idx))
+            if self.version == b"HTTP/1.1" and "host" not in self.headers:
+                raise HeaderParsingError()
         except HeaderParsingError:
             self.on_client_error(tx, self.HEADER_ERROR)
             return
         rx.consume(blank_idx + 4)
         self.state = self._route_request_st
 
+    def _is_chunked(self):
+        return self.headers.get("transfer-encoding") == "chunked"
+
     def _has_payload(self):
         return (
             self.CONTENT_LENGTH in self.headers
             and self.headers[self.CONTENT_LENGTH] > 0
-        )
+        ) or self._is_chunked()
 
     def _route_request_st(self, _, tx):
         """
@@ -481,8 +488,10 @@ class HttpEngine:
                 if mp_boundary := self._is_multipart(self.headers):
                     self.mp_boundary = mp_boundary.encode(self.ASCII)
                     self.state = self._start_multipart_parser_st
+                elif self._is_chunked():
+                    self.state = self._recv_chunked_size_st
                 else:
-                    self.state = self._recv_payload
+                    self.state = self._recv_payload_st
             else:
                 self.state = self._app_endpoint_st
             return
@@ -501,7 +510,23 @@ class HttpEngine:
             return
         self.on_missing_resource(tx)
 
-    def _recv_payload(self, rx, tx):
+    def _recv_chunked_size_st(self, rx, _):
+        if (blank_idx := rx.find(b"\r\n")) == -1:
+            return
+        self.recv_chunk_size = int(bytes(rx.peek(blank_idx)), 16)
+        rx.consume(blank_idx + 2)
+        self.state = self._recv_chunk_st
+
+    def _recv_chunk_st(self, rx, tx):
+        if self.recv_chunk_size + 2 > rx.size():
+            return
+        if self.recv_chunk_size + 2 <= rx.size():
+            if rx.peek()[self.recv_chunk_size : self.recv_chunk_size + 2] != b"\r\n":
+                self.on_client_error(tx, self.CONTENT_LENGTH_ERROR)
+                return
+            self.state = self._app_endpoint_st
+
+    def _recv_payload_st(self, rx, tx):
         if self.headers[self.CONTENT_LENGTH] > rx.size():
             return
         if self.headers[self.CONTENT_LENGTH] < rx.size():
@@ -514,8 +539,16 @@ class HttpEngine:
         method = self.GET if self.method == self.HEAD else self.method
         callback = self._get_callback(self.url, method)
         if self._has_payload():
-            self.state = None
-            dtype, data = callback(self, bytes(rx.peek()))
+            if self._is_chunked():
+                if self.recv_chunk_size:
+                    callback(self, bytes(rx.peek(self.recv_chunk_size)))
+                    rx.consume(self.recv_chunk_size + 2)
+                    self.state = self._recv_chunked_size_st
+                    return
+                dtype, data = callback(self, bytes(rx.peek(self.recv_chunk_size)))
+                rx.consume(self.recv_chunk_size + 2)
+            else:
+                dtype, data = callback(self, bytes(rx.peek()))
             dtype = dtype.encode(self.ASCII)
         else:
             if not callable(callback):
@@ -527,9 +560,7 @@ class HttpEngine:
             dtype, data = callback(self, b"")
             dtype = dtype.encode(self.ASCII)
         self._set_response_header(b"content-type", dtype)
-        if dtype == b"image/jpeg":
-            self.terminate(200, dtype)
-            return self._generate_response(tx, data)
+
         if dtype in (b"multipart/x-mixed-replace", b"multipart/form-data"):
             part_content_type = data[0]
             callback = data[1]

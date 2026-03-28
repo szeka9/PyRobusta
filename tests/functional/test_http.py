@@ -1,5 +1,6 @@
 import asyncio
 import ssl
+import json
 
 from pyrobusta.server import http_server
 from pyrobusta.protocol import http_multipart
@@ -87,6 +88,16 @@ def multipart_callback(http_ctx, _):
 @HttpEngine.route("/test/busy", "POST")
 def busy_callback(*_):
     raise ServerBusyError()
+
+
+def create_chunked_app_endpoint(endpoint):
+    recv_chunks = []
+
+    @HttpEngine.route(endpoint, "POST")
+    def chunked_callback(http_ctx, chunk):
+        if not chunk:  # Received terminating chunk
+            return "application/json", recv_chunks
+        recv_chunks.append(chunk.decode("utf8"))
 
 
 async def test_simple_response(tls_enabled):
@@ -180,7 +191,6 @@ async def test_server_busy():
     server_task = asyncio.create_task(server.run_server())
     await asyncio.sleep_ms(100)
 
-    # Test: 1 part
     plain_response = await send_request(
         b"POST /test/busy HTTP/1.1\r\n" b"Host: localhost\r\n\r\n"
     )
@@ -188,6 +198,36 @@ async def test_server_busy():
         f"response is rejected by busy service with 503",
         b"503 Service Unavailable" in plain_response,
         True,
+    )
+
+    server_task.cancel()
+    await server.terminate()
+
+
+async def test_chunked_transfer_encoding():
+    setup_config()
+    create_chunked_app_endpoint("/test/chunked")
+
+    server = http_server.HttpServer()
+    server_task = asyncio.create_task(server.run_server())
+    await asyncio.sleep_ms(100)
+
+    json_response = await send_request(
+        (
+            b"POST /test/chunked HTTP/1.1\r\n"
+            b"Host: localhost\r\n"
+            b"Transfer-Encoding: chunked\r\n\r\n"
+            b"14\r\nchunking\r\ntest\r\ncase\r\n"
+            b"E\r\nchunking\r\ntest\r\n"
+            b"8\r\nchunking\r\n"
+            b"0\r\n\r\n"
+        )
+    )
+    response_body = json.loads(json_response.split(b"\r\n\r\n")[1])
+    test_assert(
+        f"chunked transfer encoding - all chunks are received",
+        response_body,
+        ["chunking\r\ntest\r\ncase", "chunking\r\ntest", "chunking"],
     )
 
     server_task.cancel()
@@ -246,6 +286,7 @@ def test_main():
     asyncio.run(test_multipart_response(tls_enabled=True))
 
     asyncio.run(test_server_busy())
+    asyncio.run(test_chunked_transfer_encoding())
 
 
 test_main()

@@ -6,6 +6,7 @@ A lightweight HTTP server library for MicroPython designed for constrained embed
 - Routing decorators
 - Fixed-size, configurable request/response buffers
 - Multipart request and response handling
+- Chunked transfer decoding for streamed request bodies
 - Bounded-copy memory footprint
 - Finite-state-machine parser with linear sliding buffer
 - Robust byte-stream handling
