@@ -17,7 +17,7 @@ CONFIG_CACHE = [
     "http_mem_cap",
     0.1,
     "http_served_paths",
-    "pyrobusta lib package.json",
+    "/lib/pyrobusta",
     "socket_max_con",
     2,
     "tls",
