@@ -4,6 +4,8 @@ configuration is read from /pyrobusta.env.
 Values can be encapsulated by single or double quotes.
 """
 
+from .helpers import normalize_path
+
 PYROBUSTA_VERSION = "0.2.0"
 CONFIG_LOADED = False
 CONFIG_LOCATION = "pyrobusta.env"
@@ -27,6 +29,15 @@ CONFIG_CACHE = [
 ]
 
 
+def normalize(key, value):
+    """
+    Normalize a configuration value depending on the key.
+    """
+    if key == "http_served_paths":
+        return " ".join([normalize_path(p) for p in value.split()])
+    return value
+
+
 def read_config(config=CONFIG_LOCATION):
     """
     Read configuration from a file and update CONFIG_CACHE.
@@ -40,6 +51,7 @@ def read_config(config=CONFIG_LOCATION):
                     continue
                 value = line.split("=")[1].strip().strip("'").strip('"')
                 if key and value:
+                    value = normalize(key, value)
                     if (
                         key in CONFIG_CACHE
                         and (conf_idx := CONFIG_CACHE.index(key)) % 2 == 0

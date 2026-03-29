@@ -8,6 +8,7 @@ from io import BytesIO
 from os import stat
 
 from ..utils.config import get_config
+from ..utils.helpers import normalize_path
 
 
 class HeaderParsingError(ValueError):
@@ -56,6 +57,8 @@ class HttpEngine:
         b"204 No Content",
         400,
         b"400 Bad Request",
+        403,
+        b"403 Forbidden",
         404,
         b"404 Not Found",
         405,
@@ -207,6 +210,21 @@ class HttpEngine:
         if default is None:
             raise KeyError()
         return default
+
+    @classmethod
+    def is_norm_path_served(cls, path: str):
+        """
+        Returns true if a normalized path is configured to be served
+        """
+        served_paths = set(get_config("http_served_paths").split())
+        parts = path.split("/")
+        for i, _ in enumerate(parts):
+            current_path = "/".join(parts[: i + 1])
+            if not current_path:
+                current_path = "/"
+            if current_path in served_paths:
+                return True
+        return False
 
     @staticmethod
     def _lookup(tuple_, key):
@@ -367,6 +385,11 @@ class HttpEngine:
         response = info
         self._write_response_head(tx, len(response))
         tx.write(response)
+
+    def on_forbidden(self, tx):
+        """Terminate state machine and write 403 response"""
+        self.terminate(403)
+        self._write_response_head(tx)
 
     def on_missing_resource(self, tx):
         """Terminate state machine and write 404 response"""
@@ -583,22 +606,17 @@ class HttpEngine:
 
     def _send_file_st(self, _, tx, web_resource: bytes):
         """State for returning a static resource"""
-        # Normalize path
-        parts = []
-        for p in web_resource.split(b"/"):
-            if p in (b".", b""):
-                continue
-            if p == b"..":
-                if parts:
-                    parts.pop()
-            else:
-                parts.append(p)
-        if parts[0].decode(self.ASCII) not in get_config("http_served_paths").split():
-            self.on_missing_resource(tx)
-            return
         extension = web_resource.rsplit(b".", 1)[-1]
-        norm_path = b"/".join(parts)
-
+        norm_path = normalize_path(web_resource.decode(self.ASCII))
+        is_path_served = self.is_norm_path_served(norm_path)
+        if not is_path_served:
+            try:
+                stat(norm_path)
+                self.on_forbidden(tx)
+                return
+            except OSError:
+                self.on_missing_resource(tx)
+                return
         try:
             content_type = self._lookup(self.CONTENT_TYPES, extension)
         except ValueError:
