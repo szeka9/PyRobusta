@@ -151,17 +151,17 @@ class SlidingBuffer:
         otherwise attempt to compact the buffer
         """
         if n > self.capacity:
-            raise ValueError("Requested size exceeds capacity")
+            raise ValueError("Capacity exceeded")
 
         if n > self.writable():
             self._compact()
             if n > self.writable():
-                raise ValueError("Buffer full")
+                raise ValueError("Capacity exceeded")
 
     def commit(self, n):
         """Increase the window size by n bytes by incrementing the 'end' index"""
         if self._end + n > self.capacity:
-            raise ValueError("Buffer full")
+            raise ValueError("Capacity exceeded")
         self._end += n
 
     def find(self, term: bytes) -> int:

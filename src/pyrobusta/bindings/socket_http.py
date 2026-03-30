@@ -55,7 +55,7 @@ class SocketHttp(SocketBase):
         if is_low_memory:
             logging.warning(
                 (
-                    "[SocketHttp.init_pools] low-memory mode with reduced buffer size, "
+                    __name__ + ".init_pools: low-memory mode with reduced buffer size, "
                     "decrease max_clients to use larger buffers"
                 )
             )
@@ -73,13 +73,13 @@ class SocketHttp(SocketBase):
         if usable < per_conn:
             raise MemoryError(
                 (
-                    f"Insufficient memory for webserver: {mem_available // 1024} KB "
+                    f"Insufficient memory: {mem_available // 1024} KB "
                     f"at {SocketHttp.MEM_CAP*100}% cap, "
                     f"at least {per_conn // 1024} KB required"
                 )
             )
         con_limit = min(usable // per_conn, con_limit)
-        logging.info((f"[SocketHttp.init_pools] {con_limit} connection(s) allowed"))
+        logging.info((__name__ + f".init_pools: {con_limit} connection(s) allowed"))
         SocketHttp.RECV_POOL = MemoryPool(recv_size, con_limit, wrapper=SlidingBuffer)
         SocketHttp.SEND_POOL = MemoryPool(send_size, con_limit, wrapper=SlidingBuffer)
 
@@ -113,7 +113,7 @@ class SocketHttp(SocketBase):
                 await self._run_state_machine()
                 await sleep_ms(SocketHttp.STATE_MACHINE_SLEEP_MS)
         except Exception as e:  # pylint: disable=W0718
-            logging.warning(f"[SocketHttp] error in run_web: {e}")
+            logging.warning(__name__ + f": error in run_web: {e}")
         finally:
             if self._send_buf:
                 self._send_buf.consume()
@@ -126,7 +126,7 @@ class SocketHttp(SocketBase):
 
     async def _reserve_buffers(self):
         if SocketHttp.SEND_POOL is None or SocketHttp.RECV_POOL is None:
-            raise RuntimeError("Buffer pools are uninitialized")
+            raise RuntimeError("Pools are ninitialized")
 
         while not self._recv_buf or not self._send_buf:
             if not self._recv_buf:
@@ -158,7 +158,7 @@ class SocketHttp(SocketBase):
             await self._flush_response()
             return
         except Exception as e:  # pylint: disable=W0718
-            logging.warning(f"[SocketHttp] error in _run_state_machine: {e}")
+            logging.warning(__name__ + f"._run_state_machine: {e}")
             self._engine.on_failure(self._send_buf, str(e).encode("ascii"))
             await self._flush_response()
             return
@@ -188,7 +188,7 @@ class SocketHttp(SocketBase):
             await self._flush_response()
             return 0
         self._recv_buf.write(request)
-        logging.debug(f"[SocketHttp._read_to_buf] read new message chunk: {request}")
+        logging.debug(__name__ + f"._read_to_buf: [{request}]")
         return len(request)
 
     async def _response_handler(self, resp_handler):

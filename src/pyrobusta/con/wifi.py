@@ -14,7 +14,7 @@ def initialize():
     ssid = get_config("wifi_ssid")
     password = get_config("wifi_password")
     if not ssid or not password:
-        logging.warning("[Wi-Fi] Missing SSID/password, skip Wi-Fi initialization")
+        logging.warning(__name__ + ": missing SSID/password, skip initialization")
         return
 
     sta_if = WLAN(STA_IF)
@@ -22,9 +22,9 @@ def initialize():
     nets = sta_if.scan()
     for net in nets:
         if net[0].decode() == get_config("wifi_ssid"):
-            logging.info(f"[Wi-Fi] Network {net[0]} found!")
+            logging.info(__name__ + f": network {net[0]} found!")
             sta_if.connect(net[0], get_config("wifi_password"))
-            logging.info("[Wi-Fi] WLAN connection succeeded!")
+            logging.info(__name__ + ": connection succeeded!")
             break
 
 
