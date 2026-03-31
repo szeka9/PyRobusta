@@ -66,6 +66,7 @@ $(BUILD_DIR)/%.py: $(SRC_DIR)/%.py
 .PHONY: deploy
 deploy:
 	@echo "Uploading build/$(PKG) to device $(DEVICE)"
+	@mpremote $(DEVICE) mkdir :/lib  || true
 	@find $(BUILD_DIR)/$(PKG) | while read source; do \
 		rel=$${source#$(BUILD_DIR)/}; \
 		remote="/lib/$${rel}"; \
