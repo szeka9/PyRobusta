@@ -45,7 +45,8 @@ def read_config(config=CONFIG_LOCATION):
     """
     try:
         with open(config, encoding="utf-8") as conf:
-            for line in conf.read().splitlines("\n"):
+            for line in conf:
+                line = line.rstrip("\r\n")
                 key = line.split("=")[0].strip()
                 if key.startswith("#") or not line.strip():
                     continue
