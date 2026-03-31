@@ -34,19 +34,19 @@ class HttpEngine:
     __slots__ = (
         "state",
         "status_code",
-        "response_headers",
+        "resp_headers",
         "version",
         "headers",
         "method",
         "url",
         "query",
-        "content_length_cnt",
+        "content_len_cnt",
         "recv_chunk_size",
         "mp_boundary",
-        "mp_first_part",
-        "mp_last_part",
+        "mp_is_first",
+        "mp_is_last",
         "mp_delimiter",
-        "mp_closing_delimiter",
+        "mp_last_delimiter",
     )
 
     ENDPOINTS = []  # (endpoint, callback, method)
@@ -122,7 +122,7 @@ class HttpEngine:
         # [State machine]
         self.state = self._parse_request_line_st
         self.status_code = None
-        self.response_headers = []
+        self.resp_headers = []
 
         # [Recived request]
         self.version = None
@@ -130,7 +130,7 @@ class HttpEngine:
         self.method = None
         self.url = None
         self.query = None
-        self.content_length_cnt = 0
+        self.content_len_cnt = 0
         self.recv_chunk_size = 0
 
         # [Multipart state]
@@ -310,13 +310,13 @@ class HttpEngine:
 
     def _set_response_header(self, key, value):
         if (
-            key in self.response_headers
-            and (index := self.response_headers.index(key) % 2) == 0
+            key in self.resp_headers
+            and (index := self.resp_headers.index(key) % 2) == 0
         ):
-            self.response_headers[index + 1] = value
+            self.resp_headers[index + 1] = value
         else:
-            self.response_headers.append(key)
-            self.response_headers.append(value)
+            self.resp_headers.append(key)
+            self.resp_headers.append(value)
 
     def terminate(self, status_code: int, content_type: bytes = b"text/plain"):
         """
@@ -343,9 +343,9 @@ class HttpEngine:
         if content_length is not None:
             tx.write(b"\r\n")
             tx.write(b"content-length: %s" % str(content_length).encode(self.ASCII))
-        for i in range(0, len(self.response_headers), 2):
-            key = self.response_headers[i]
-            value = self.response_headers[i + 1]
+        for i in range(0, len(self.resp_headers), 2):
+            key = self.resp_headers[i]
+            value = self.resp_headers[i + 1]
             tx.write(b"\r\n")
             tx.write(key)
             tx.write(b": ")

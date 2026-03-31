@@ -24,7 +24,7 @@ def initialize():
         if net[0].decode() == get_config("wifi_ssid"):
             logging.info(__name__ + f": network {net[0]} found!")
             sta_if.connect(net[0], get_config("wifi_password"))
-            logging.info(__name__ + ": connection succeeded!")
+            logging.info(__name__ + f": connected, available at {sta_if.ifconfig()[0]}")
             break
 
 

@@ -14,9 +14,9 @@ def add_method(cls, func, method_type="instance"):
     """
     if method_type == "instance":
         setattr(cls, func.__name__, func)
-    elif method_type == "staticmethod":
+    elif method_type == "static":
         setattr(cls, func.__name__, staticmethod(func))
-    elif method_type == "classmethod":
+    elif method_type == "class":
         setattr(cls, func.__name__, classmethod(func))
     else:
         raise ValueError("Invalid type")
@@ -69,12 +69,12 @@ def _start_multipart_parser_st(self, rx, tx):
     if (start_delimiter := rx.find(b"\r\n")) == -1:
         return
     self.mp_delimiter = b"--" + self.mp_boundary + b"\r\n"
-    self.mp_closing_delimiter = b"--" + self.mp_boundary + b"--"
+    self.mp_last_delimiter = b"--" + self.mp_boundary + b"--"
     if rx.peek(start_delimiter + 2) != self.mp_delimiter:
         self.on_client_error(tx, http.HttpEngine.MULTIPART_BOUNDARY_ERROR)
         return
     rx.consume(start_delimiter + 2)
-    self.content_length_cnt += start_delimiter + 2
+    self.content_len_cnt += start_delimiter + 2
     self.state = self._parse_boundary_st
 
 
@@ -82,7 +82,7 @@ def _parse_boundary_st(self, rx, _):
     """State for parsing multipart boundary delimiter"""
     if (
         rx.find(b"\r\n" + self.mp_delimiter) == -1
-        and rx.find(b"\r\n" + self.mp_closing_delimiter) == -1
+        and rx.find(b"\r\n" + self.mp_last_delimiter) == -1
     ):
         return
     self.state = self._parse_complete_part_st
@@ -96,10 +96,10 @@ def _parse_complete_part_st(self, rx, tx):
     next_delimiter = rx.find(b"\r\n--" + self.mp_boundary)
     part = rx.peek(next_delimiter)
     rx.consume(next_delimiter + 2)  # Consume leading CRLF
-    self.content_length_cnt += next_delimiter + 2
-    is_final = rx.peek(len(self.mp_closing_delimiter)) == self.mp_closing_delimiter
+    self.content_len_cnt += next_delimiter + 2
+    is_final = rx.peek(len(self.mp_last_delimiter)) == self.mp_last_delimiter
     # Validate part and content-length
-    if self.headers[http.HttpEngine.CONTENT_LENGTH] < self.content_length_cnt:
+    if self.headers[http.HttpEngine.CONTENT_LENGTH] < self.content_len_cnt:
         self.on_client_error(tx, http.HttpEngine.CONTENT_LENGTH_ERROR)
         return
     try:
@@ -115,21 +115,21 @@ def _parse_complete_part_st(self, rx, tx):
             self.on_client_error(tx, http.HttpEngine.MULTIPART_BOUNDARY_ERROR)
             return
         rx.consume(len(self.mp_delimiter))
-        self.content_length_cnt += len(self.mp_delimiter)
-        self.mp_first_part = False
+        self.content_len_cnt += len(self.mp_delimiter)
+        self.mp_is_first = False
         self.state = self._parse_boundary_st
         return
     # Process last part
-    rx.consume(len(self.mp_closing_delimiter))
-    self.content_length_cnt += len(self.mp_closing_delimiter)
+    rx.consume(len(self.mp_last_delimiter))
+    self.content_len_cnt += len(self.mp_last_delimiter)
     if (
-        self.headers[http.HttpEngine.CONTENT_LENGTH] != self.content_length_cnt
-        and self.content_length_cnt + rx.size()
+        self.headers[http.HttpEngine.CONTENT_LENGTH] != self.content_len_cnt
+        and self.content_len_cnt + rx.size()
         != self.headers[http.HttpEngine.CONTENT_LENGTH]
     ):
         self.on_client_error(tx, http.HttpEngine.CONTENT_LENGTH_ERROR)
         return
-    self.mp_last_part = True
+    self.mp_is_last = True
     dtype, data = callback(self, (part_headers, part_body))
     self.terminate(200, dtype.encode(http.HttpEngine.ASCII))
     return self._generate_response(tx, data)
@@ -145,14 +145,14 @@ def apply_patches():
 
     def new_init(self, *args, **kwargs):
         orig_init(self, *args, **kwargs)
-        self.mp_first_part = True
-        self.mp_last_part = False
+        self.mp_is_first = True
+        self.mp_is_last = False
         self.mp_delimiter = None
-        self.mp_closing_delimiter = None
+        self.mp_last_delimiter = None
 
     cls.__init__ = new_init
 
-    add_method(http.HttpEngine, _multipart_wrapper_factory, "staticmethod")
+    add_method(http.HttpEngine, _multipart_wrapper_factory, "static")
     add_method(http.HttpEngine, _start_multipart_parser_st)
     add_method(http.HttpEngine, _parse_boundary_st)
     add_method(http.HttpEngine, _parse_complete_part_st)

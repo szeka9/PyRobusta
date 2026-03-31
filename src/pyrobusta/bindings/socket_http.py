@@ -54,10 +54,7 @@ class SocketHttp(SocketBase):
         )
         if is_low_memory:
             logging.warning(
-                (
-                    __name__ + ".init_pools: low-memory mode with reduced buffer size, "
-                    "decrease max_clients to use larger buffers"
-                )
+                __name__ + ".init_pools: low-memory mode with reduced buffer size"
             )
         recv_size = (
             SocketHttp.RECV_BUF_MIN_BYTES

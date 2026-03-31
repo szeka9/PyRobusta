@@ -162,8 +162,8 @@ class TestWebStateMachine(TestWebStateMachineBase):
 
         self.assertEqual(self.engine.status_code, 405)
         self.assertEqual(self.engine.state, None)
-        self.assertIn(b"allow", self.engine.response_headers)
-        self.assertIn(b"POST", self.engine.response_headers)
+        self.assertIn(b"allow", self.engine.resp_headers)
+        self.assertIn(b"POST", self.engine.resp_headers)
 
     def test_routing_options_method(self):
         self.engine.state = self.engine._route_request_st
@@ -180,8 +180,8 @@ class TestWebStateMachine(TestWebStateMachineBase):
 
         self.assertEqual(self.engine.status_code, 204)
         self.assertEqual(self.engine.state, None)
-        self.assertIn(b"allow", self.engine.response_headers)
-        self.assertIn(b"GET, POST, PUT", self.engine.response_headers)
+        self.assertIn(b"allow", self.engine.resp_headers)
+        self.assertIn(b"GET, POST, PUT", self.engine.resp_headers)
 
     def test_routing_get_method(self):
         self.engine.state = self.engine._route_request_st
@@ -484,7 +484,7 @@ class TestMultipartStateMachine(TestWebStateMachineBase):
         self.engine.headers["content-length"] = 1000
         self.engine.mp_boundary = b"test-boundary"
         self.engine.mp_delimiter = b"--test-boundary\r\n"
-        self.engine.mp_closing_delimiter = b"--test-boundary--"
+        self.engine.mp_last_delimiter = b"--test-boundary--"
 
         body_part = (
             b'Content-Disposition:form-data;name="file-chunk";filename="upload.txt"\r\n'
@@ -500,7 +500,7 @@ class TestMultipartStateMachine(TestWebStateMachineBase):
 
         self.assertEqual(self.engine.state, self.engine._parse_complete_part_st)
         self.assertEqual(self.rx.peek(), body_part)
-        self.assertEqual(self.engine.mp_first_part, True)
+        self.assertEqual(self.engine.mp_is_first, True)
 
         self.engine.state(self.rx, self.tx)
 
@@ -515,8 +515,8 @@ class TestMultipartStateMachine(TestWebStateMachineBase):
                 b"Upload content",
             ),
         )
-        self.assertEqual(self.engine.mp_first_part, False)
-        self.assertEqual(self.engine.mp_last_part, False)
+        self.assertEqual(self.engine.mp_is_first, False)
+        self.assertEqual(self.engine.mp_is_last, False)
 
     def test_multipart_receiver_last_part(self):
         self.engine.state = self.engine._parse_boundary_st
@@ -526,7 +526,7 @@ class TestMultipartStateMachine(TestWebStateMachineBase):
         self.engine.headers["content-length"] = 131
         self.engine.mp_boundary = b"test-boundary"
         self.engine.mp_delimiter = b"--test-boundary\r\n"
-        self.engine.mp_closing_delimiter = b"--test-boundary--"
+        self.engine.mp_last_delimiter = b"--test-boundary--"
 
         test_callback = mock.Mock(return_value=("text/plain", "OK"))
         self.engine.register("/api/test", test_callback)
@@ -560,8 +560,8 @@ class TestMultipartStateMachine(TestWebStateMachineBase):
                 b"Upload content",
             ),
         )
-        self.assertEqual(self.engine.mp_first_part, True)
-        self.assertEqual(self.engine.mp_last_part, True)
+        self.assertEqual(self.engine.mp_is_first, True)
+        self.assertEqual(self.engine.mp_is_last, True)
 
 
 if __name__ == "__main__":
