@@ -8,6 +8,7 @@ from io import BytesIO
 from os import stat
 
 from ..utils.config import get_config
+from ..utils.helpers import normalize_path
 
 
 class HeaderParsingError(ValueError):
@@ -33,18 +34,19 @@ class HttpEngine:
     __slots__ = (
         "state",
         "status_code",
-        "response_headers",
+        "resp_headers",
         "version",
         "headers",
         "method",
         "url",
         "query",
-        "content_length_cnt",
+        "content_len_cnt",
+        "recv_chunk_size",
         "mp_boundary",
-        "mp_first_part",
-        "mp_last_part",
+        "mp_is_first",
+        "mp_is_last",
         "mp_delimiter",
-        "mp_closing_delimiter",
+        "mp_last_delimiter",
     )
 
     ENDPOINTS = []  # (endpoint, callback, method)
@@ -55,6 +57,8 @@ class HttpEngine:
         b"204 No Content",
         400,
         b"400 Bad Request",
+        403,
+        b"403 Forbidden",
         404,
         b"404 Not Found",
         405,
@@ -109,7 +113,7 @@ class HttpEngine:
 
     MULTIPART_BOUNDARY = b"pyrobusta-boundary"
 
-    CONTENT_LENGTH_ERROR = b"Content-Length mismatch"
+    CONTENT_LENGTH_ERROR = b"content length mismatch"
     HEADER_ERROR = b"Invalid headers"
     MULTIPART_BOUNDARY_ERROR = b"Invalid multipart boundary"
     BAD_REQUEST_ERROR = b"Bad request"
@@ -118,7 +122,7 @@ class HttpEngine:
         # [State machine]
         self.state = self._parse_request_line_st
         self.status_code = None
-        self.response_headers = []
+        self.resp_headers = []
 
         # [Recived request]
         self.version = None
@@ -126,7 +130,8 @@ class HttpEngine:
         self.method = None
         self.url = None
         self.query = None
-        self.content_length_cnt = 0
+        self.content_len_cnt = 0
+        self.recv_chunk_size = 0
 
         # [Multipart state]
         self.mp_boundary = None
@@ -205,6 +210,21 @@ class HttpEngine:
         if default is None:
             raise KeyError()
         return default
+
+    @classmethod
+    def is_norm_path_served(cls, path: str):
+        """
+        Returns true if a normalized path is configured to be served
+        """
+        served_paths = set(get_config("http_served_paths").split())
+        parts = path.split("/")
+        for i, _ in enumerate(parts):
+            current_path = "/".join(parts[: i + 1])
+            if not current_path:
+                current_path = "/"
+            if current_path in served_paths:
+                return True
+        return False
 
     @staticmethod
     def _lookup(tuple_, key):
@@ -290,13 +310,13 @@ class HttpEngine:
 
     def _set_response_header(self, key, value):
         if (
-            key in self.response_headers
-            and (index := self.response_headers.index(key) % 2) == 0
+            key in self.resp_headers
+            and (index := self.resp_headers.index(key) % 2) == 0
         ):
-            self.response_headers[index + 1] = value
+            self.resp_headers[index + 1] = value
         else:
-            self.response_headers.append(key)
-            self.response_headers.append(value)
+            self.resp_headers.append(key)
+            self.resp_headers.append(value)
 
     def terminate(self, status_code: int, content_type: bytes = b"text/plain"):
         """
@@ -323,9 +343,9 @@ class HttpEngine:
         if content_length is not None:
             tx.write(b"\r\n")
             tx.write(b"content-length: %s" % str(content_length).encode(self.ASCII))
-        for i in range(0, len(self.response_headers), 2):
-            key = self.response_headers[i]
-            value = self.response_headers[i + 1]
+        for i in range(0, len(self.resp_headers), 2):
+            key = self.resp_headers[i]
+            value = self.resp_headers[i + 1]
             tx.write(b"\r\n")
             tx.write(key)
             tx.write(b": ")
@@ -365,6 +385,11 @@ class HttpEngine:
         response = info
         self._write_response_head(tx, len(response))
         tx.write(response)
+
+    def on_forbidden(self, tx):
+        """Terminate state machine and write 403 response"""
+        self.terminate(403)
+        self._write_response_head(tx)
 
     def on_missing_resource(self, tx):
         """Terminate state machine and write 404 response"""
@@ -443,17 +468,22 @@ class HttpEngine:
             return
         try:
             self.headers = self._parse_headers(rx.peek(blank_idx))
+            if self.version == b"HTTP/1.1" and "host" not in self.headers:
+                raise HeaderParsingError()
         except HeaderParsingError:
             self.on_client_error(tx, self.HEADER_ERROR)
             return
         rx.consume(blank_idx + 4)
         self.state = self._route_request_st
 
+    def _is_chunked(self):
+        return self.headers.get("transfer-encoding") == "chunked"
+
     def _has_payload(self):
         return (
             self.CONTENT_LENGTH in self.headers
             and self.headers[self.CONTENT_LENGTH] > 0
-        )
+        ) or self._is_chunked()
 
     def _route_request_st(self, _, tx):
         """
@@ -481,8 +511,10 @@ class HttpEngine:
                 if mp_boundary := self._is_multipart(self.headers):
                     self.mp_boundary = mp_boundary.encode(self.ASCII)
                     self.state = self._start_multipart_parser_st
+                elif self._is_chunked():
+                    self.state = self._recv_chunked_size_st
                 else:
-                    self.state = self._recv_payload
+                    self.state = self._recv_payload_st
             else:
                 self.state = self._app_endpoint_st
             return
@@ -501,7 +533,23 @@ class HttpEngine:
             return
         self.on_missing_resource(tx)
 
-    def _recv_payload(self, rx, tx):
+    def _recv_chunked_size_st(self, rx, _):
+        if (blank_idx := rx.find(b"\r\n")) == -1:
+            return
+        self.recv_chunk_size = int(bytes(rx.peek(blank_idx)), 16)
+        rx.consume(blank_idx + 2)
+        self.state = self._recv_chunk_st
+
+    def _recv_chunk_st(self, rx, tx):
+        if self.recv_chunk_size + 2 > rx.size():
+            return
+        if self.recv_chunk_size + 2 <= rx.size():
+            if rx.peek()[self.recv_chunk_size : self.recv_chunk_size + 2] != b"\r\n":
+                self.on_client_error(tx, self.CONTENT_LENGTH_ERROR)
+                return
+            self.state = self._app_endpoint_st
+
+    def _recv_payload_st(self, rx, tx):
         if self.headers[self.CONTENT_LENGTH] > rx.size():
             return
         if self.headers[self.CONTENT_LENGTH] < rx.size():
@@ -514,8 +562,16 @@ class HttpEngine:
         method = self.GET if self.method == self.HEAD else self.method
         callback = self._get_callback(self.url, method)
         if self._has_payload():
-            self.state = None
-            dtype, data = callback(self, bytes(rx.peek()))
+            if self._is_chunked():
+                if self.recv_chunk_size:
+                    callback(self, bytes(rx.peek(self.recv_chunk_size)))
+                    rx.consume(self.recv_chunk_size + 2)
+                    self.state = self._recv_chunked_size_st
+                    return
+                dtype, data = callback(self, bytes(rx.peek(self.recv_chunk_size)))
+                rx.consume(self.recv_chunk_size + 2)
+            else:
+                dtype, data = callback(self, bytes(rx.peek()))
             dtype = dtype.encode(self.ASCII)
         else:
             if not callable(callback):
@@ -527,9 +583,7 @@ class HttpEngine:
             dtype, data = callback(self, b"")
             dtype = dtype.encode(self.ASCII)
         self._set_response_header(b"content-type", dtype)
-        if dtype == b"image/jpeg":
-            self.terminate(200, dtype)
-            return self._generate_response(tx, data)
+
         if dtype in (b"multipart/x-mixed-replace", b"multipart/form-data"):
             part_content_type = data[0]
             callback = data[1]
@@ -552,22 +606,17 @@ class HttpEngine:
 
     def _send_file_st(self, _, tx, web_resource: bytes):
         """State for returning a static resource"""
-        # Normalize path
-        parts = []
-        for p in web_resource.split(b"/"):
-            if p in (b".", b""):
-                continue
-            if p == b"..":
-                if parts:
-                    parts.pop()
-            else:
-                parts.append(p)
-        if parts[0].decode(self.ASCII) not in get_config("http_served_paths").split():
-            self.on_missing_resource(tx)
-            return
         extension = web_resource.rsplit(b".", 1)[-1]
-        norm_path = b"/".join(parts)
-
+        norm_path = normalize_path(web_resource.decode(self.ASCII))
+        is_path_served = self.is_norm_path_served(norm_path)
+        if not is_path_served:
+            try:
+                stat(norm_path)
+                self.on_forbidden(tx)
+                return
+            except OSError:
+                self.on_missing_resource(tx)
+                return
         try:
             content_type = self._lookup(self.CONTENT_TYPES, extension)
         except ValueError:

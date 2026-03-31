@@ -36,7 +36,7 @@ class SocketBase:
         - read_error is set to true upon timeout or other exception
         - data holds bytes or decoded string read from the socket
         """
-        logging.debug(f"[SocketBase] read from {self.id}")
+        logging.debug(__name__ + f": read from {self.id}")
         self.last_event = ticks_ms()
         if timeout_seconds:
             request = await asyncio.wait_for(
@@ -52,10 +52,10 @@ class SocketBase:
         """
         Async socket close method
         """
-        logging.debug(f"[SocketBase] close connection: {self.id}")
+        logging.debug(__name__ + f": close connection: {self.id}")
         try:
             self.writer.close()
             await self.writer.wait_closed()
         except OSError as e:
-            logging.warning(f"[SocketBase] Error while closing {self.id}: {e}")
+            logging.warning(__name__ + f": error while closing {self.id}: {e}")
         self.connected = False

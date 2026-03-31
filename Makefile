@@ -1,4 +1,4 @@
-PYROBUSTA_VERSION := 0.2.0
+PYROBUSTA_VERSION := 0.3.0
 DEVICE ?= u0
 
 SRC_DIR := src
@@ -66,14 +66,16 @@ $(BUILD_DIR)/%.py: $(SRC_DIR)/%.py
 .PHONY: deploy
 deploy:
 	@echo "Uploading build/$(PKG) to device $(DEVICE)"
+	@mpremote $(DEVICE) mkdir :/lib  || true
 	@find $(BUILD_DIR)/$(PKG) | while read source; do \
 		rel=$${source#$(BUILD_DIR)/}; \
+		remote="/lib/$${rel}"; \
 		if [ -d "$$source" ]; then \
-			mpremote $(DEVICE) mkdir "$$rel" || true; \
+			mpremote $(DEVICE) mkdir "$$remote" || true; \
 		elif [ -f "$$source" ]; then \
-			echo "Uploading $$rel"; \
-			mpremote $(DEVICE) rm "$$rel" || true; \
-			mpremote $(DEVICE) cp "$$source" ":$$rel"; \
+			echo "Uploading $$remote"; \
+			mpremote $(DEVICE) rm ":$$remote" || true; \
+			mpremote $(DEVICE) cp "$$source" ":$$remote"; \
 		fi; \
 		sleep 1; \
 	done
@@ -121,10 +123,10 @@ publish:
 stage-example:
 	@echo "Preparing unix runtime in $(RUNTIME_DIR)"
 	@rm -rf $(RUNTIME_DIR)
-	@mkdir -p $(RUNTIME_DIR)
+	@mkdir -p $(RUNTIME_DIR)/lib
 
 	@echo "Copying built package"
-	@cp -r build/pyrobusta $(RUNTIME_DIR)/
+	@cp -r build/pyrobusta $(RUNTIME_DIR)/lib
 
 	@echo "Copying example files"
 	@cp $(EXAMPLE_DIR)/app.py $(RUNTIME_DIR)/
@@ -142,7 +144,7 @@ stage-example:
 .PHONY: run-unix
 run-unix: stage-example
 	@echo "Running example with unix micropython"
-	cd $(RUNTIME_DIR) && ../$(MICROPYTHON) app.py
+	cd $(RUNTIME_DIR) && MICROPYPATH=":.frozen:lib" ../$(MICROPYTHON) app.py
 
 # -----------------------------
 # Deploy example app
@@ -211,9 +213,9 @@ static-checkers: pylint black
 .PHONY: stage-test
 stage-test:
 	@rm -rf $(TEST_RUNTIME)
-	@mkdir -p $(TEST_RUNTIME)
+	@mkdir -p $(TEST_RUNTIME)/lib
 
-	@cp -r build/pyrobusta $(TEST_RUNTIME)/
+	@cp -r build/pyrobusta $(TEST_RUNTIME)/lib
 	@cp tests/functional/*.py $(TEST_RUNTIME)/
 
 # -----------------------------
@@ -225,7 +227,7 @@ test-unix: stage-test tls-cert
 	@cd $(TEST_RUNTIME); \
 	for test in test_*.py; do \
 		echo "Running $$test"; \
-		../$(MICROPYTHON) $$(basename $$test) || exit 1; \
+		MICROPYPATH=":.frozen:lib" ../$(MICROPYTHON) $$(basename $$test) || exit 1; \
 	done
 
 # -----------------------------

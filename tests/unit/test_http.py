@@ -35,6 +35,7 @@ class TestWebStateMachineBase(unittest.TestCase):
             self.set_mock_config(key, value)
 
         # Load your web and buffer modules
+        self.helpers_module = load_module("pyrobusta/utils/helpers.py")
         buffer_module = load_module("pyrobusta/stream/buffer.py")
         web_module = load_module("pyrobusta/protocol/http.py")
         web_module.enable_optional_features()
@@ -62,7 +63,7 @@ class TestWebStateMachine(TestWebStateMachineBase):
 
     @classmethod
     def setUpClass(cls):
-        cls.config = {"http_multipart": "False"}
+        cls.config = {}
 
     def test_status_parsing_valid(self):
         request = b"GET /index.html HTTP/1.1\r\nContent-Length:10"
@@ -161,8 +162,8 @@ class TestWebStateMachine(TestWebStateMachineBase):
 
         self.assertEqual(self.engine.status_code, 405)
         self.assertEqual(self.engine.state, None)
-        self.assertIn(b"allow", self.engine.response_headers)
-        self.assertIn(b"POST", self.engine.response_headers)
+        self.assertIn(b"allow", self.engine.resp_headers)
+        self.assertIn(b"POST", self.engine.resp_headers)
 
     def test_routing_options_method(self):
         self.engine.state = self.engine._route_request_st
@@ -179,8 +180,8 @@ class TestWebStateMachine(TestWebStateMachineBase):
 
         self.assertEqual(self.engine.status_code, 204)
         self.assertEqual(self.engine.state, None)
-        self.assertIn(b"allow", self.engine.response_headers)
-        self.assertIn(b"GET, POST, PUT", self.engine.response_headers)
+        self.assertIn(b"allow", self.engine.resp_headers)
+        self.assertIn(b"GET, POST, PUT", self.engine.resp_headers)
 
     def test_routing_get_method(self):
         self.engine.state = self.engine._route_request_st
@@ -311,6 +312,100 @@ class TestWebStateMachine(TestWebStateMachineBase):
         with self.assertRaises(KeyError):
             self.engine.get_url_encoded_query_param(self.engine.query, "param3")
 
+    def test_chunked_transfer_encoding_valid(self):
+        self.engine.url = b"/api/test"
+        self.engine.method = b"GET"
+        self.engine.version = b"HTTP/1.1"
+        self.engine.headers["transfer-encoding"] = "chunked"
+        self.engine.state = self.engine._recv_chunked_size_st
+
+        test_callback = mock.Mock(return_value=("text/plain", "OK"))
+        self.engine.register("/api/test", test_callback, "GET")
+
+        for chunk in (
+            b"14\r\nchunking\r\ntest\r\ncase\r\n",
+            b"E\r\nchunking\r\ntest\r\n",
+            b"8\r\nchunking\r\n",
+            b"0\r\n\r\n",
+        ):
+            for i in range(len(chunk)):
+                self.rx.write(chunk[i : i + 1])
+                self.engine.state(self.rx, self.tx)
+
+            self.assertEqual(self.engine.state, self.engine._app_endpoint_st)
+            self.engine.state(self.rx, self.tx)
+            size_delimiter = chunk.find(b"\r\n")
+            test_callback.assert_called_with(
+                self.engine, chunk[size_delimiter + 2 : -2]
+            )
+
+        self.assertEqual(self.engine.status_code, 200)
+        self.assertEqual(self.engine.state, None)
+
+    def test_chunked_transfer_encoding_invalid_chunk_size_smaller(self):
+        self.engine.url = b"/api/test"
+        self.engine.method = b"GET"
+        self.engine.version = b"HTTP/1.1"
+        self.engine.headers["transfer-encoding"] = "chunked"
+        self.engine.state = self.engine._recv_chunked_size_st
+
+        test_callback = mock.Mock(return_value=("text/plain", "OK"))
+        self.engine.register("/api/test", test_callback, "GET")
+
+        chunk = b"2\r\nchunking\r\n"
+        for i in range(len(chunk)):
+            self.rx.write(chunk[i : i + 1])
+            self.engine.state(self.rx, self.tx)
+            if self.engine.state is None:
+                break
+
+        self.assertEqual(self.engine.status_code, 400)
+        self.assertEqual(self.engine.state, None)
+
+    def test_chunked_transfer_encoding_chunk_incomplete(self):
+        self.engine.url = b"/api/test"
+        self.engine.method = b"GET"
+        self.engine.version = b"HTTP/1.1"
+        self.engine.headers["transfer-encoding"] = "chunked"
+        self.engine.state = self.engine._recv_chunked_size_st
+
+        test_callback = mock.Mock(return_value=("text/plain", "OK"))
+        self.engine.register("/api/test", test_callback, "GET")
+
+        chunk = b"FF\r\nchunking\r\n"
+        for i in range(len(chunk)):
+            self.rx.write(chunk[i : i + 1])
+            self.engine.state(self.rx, self.tx)
+            if self.engine.state is None:
+                break
+
+        self.assertEqual(self.engine.status_code, None)
+        self.assertEqual(self.engine.state, self.engine._recv_chunk_st)
+
+    def test_path_serving_list(self):
+        self.set_mock_config("http_served_paths", "/path/to/dir1 /path/to/dir2")
+        self.assertEqual(self.engine.is_norm_path_served(""), False)
+        self.assertEqual(self.engine.is_norm_path_served("/"), False)
+        self.assertEqual(self.engine.is_norm_path_served("/path/to/dir1"), True)
+        self.assertEqual(self.engine.is_norm_path_served("/path/to/dir2"), True)
+        self.assertEqual(self.engine.is_norm_path_served("/path/to/dir12"), False)
+        self.assertEqual(self.engine.is_norm_path_served("/path/to/dir1/file"), True)
+        self.assertEqual(self.engine.is_norm_path_served("/path/to/dir2/file"), True)
+        self.assertEqual(self.engine.is_norm_path_served("/path/to/other"), False)
+        self.assertEqual(self.engine.is_norm_path_served("/path/to"), False)
+
+    def test_path_serving_root(self):
+        self.set_mock_config("http_served_paths", "/")
+        self.assertEqual(self.engine.is_norm_path_served(""), True)
+        self.assertEqual(self.engine.is_norm_path_served("/"), True)
+        self.assertEqual(self.engine.is_norm_path_served("/path/to/served"), True)
+
+    def test_path_serving_none(self):
+        self.set_mock_config("http_served_paths", "")
+        self.assertEqual(self.engine.is_norm_path_served(""), False)
+        self.assertEqual(self.engine.is_norm_path_served("/"), False)
+        self.assertEqual(self.engine.is_norm_path_served("/path/to/served"), False)
+
 
 class TestMultipartStateMachine(TestWebStateMachineBase):
     """
@@ -389,7 +484,7 @@ class TestMultipartStateMachine(TestWebStateMachineBase):
         self.engine.headers["content-length"] = 1000
         self.engine.mp_boundary = b"test-boundary"
         self.engine.mp_delimiter = b"--test-boundary\r\n"
-        self.engine.mp_closing_delimiter = b"--test-boundary--"
+        self.engine.mp_last_delimiter = b"--test-boundary--"
 
         body_part = (
             b'Content-Disposition:form-data;name="file-chunk";filename="upload.txt"\r\n'
@@ -405,7 +500,7 @@ class TestMultipartStateMachine(TestWebStateMachineBase):
 
         self.assertEqual(self.engine.state, self.engine._parse_complete_part_st)
         self.assertEqual(self.rx.peek(), body_part)
-        self.assertEqual(self.engine.mp_first_part, True)
+        self.assertEqual(self.engine.mp_is_first, True)
 
         self.engine.state(self.rx, self.tx)
 
@@ -420,8 +515,8 @@ class TestMultipartStateMachine(TestWebStateMachineBase):
                 b"Upload content",
             ),
         )
-        self.assertEqual(self.engine.mp_first_part, False)
-        self.assertEqual(self.engine.mp_last_part, False)
+        self.assertEqual(self.engine.mp_is_first, False)
+        self.assertEqual(self.engine.mp_is_last, False)
 
     def test_multipart_receiver_last_part(self):
         self.engine.state = self.engine._parse_boundary_st
@@ -431,7 +526,7 @@ class TestMultipartStateMachine(TestWebStateMachineBase):
         self.engine.headers["content-length"] = 131
         self.engine.mp_boundary = b"test-boundary"
         self.engine.mp_delimiter = b"--test-boundary\r\n"
-        self.engine.mp_closing_delimiter = b"--test-boundary--"
+        self.engine.mp_last_delimiter = b"--test-boundary--"
 
         test_callback = mock.Mock(return_value=("text/plain", "OK"))
         self.engine.register("/api/test", test_callback)
@@ -465,8 +560,8 @@ class TestMultipartStateMachine(TestWebStateMachineBase):
                 b"Upload content",
             ),
         )
-        self.assertEqual(self.engine.mp_first_part, True)
-        self.assertEqual(self.engine.mp_last_part, True)
+        self.assertEqual(self.engine.mp_is_first, True)
+        self.assertEqual(self.engine.mp_is_last, True)
 
 
 if __name__ == "__main__":

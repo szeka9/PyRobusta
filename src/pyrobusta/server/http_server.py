@@ -2,9 +2,8 @@
 Socket server application
 """
 
-from asyncio import sleep_ms, start_server, run  # pylint: disable=E1101
 import gc
-import ssl
+from asyncio import sleep_ms, start_server, run  # pylint: disable=E1101
 from time import ticks_ms, ticks_diff
 
 from ..protocol import http
@@ -38,7 +37,7 @@ class HttpServer:
         """Remove socket from active list"""
         if socket not in cls.ACTIVE_SOCKETS:
             return
-        logging.debug(f"[HttpServer] {socket.id} dropped")
+        logging.debug(__name__ + f": {socket.id} dropped")
         await socket.close()
         cls.ACTIVE_SOCKETS.remove(socket)
         del socket
@@ -72,8 +71,8 @@ class HttpServer:
                 if not socket.connected or socket_inactive > self._timeout:
                     logging.debug(
                         (
-                            f"[HttpSever] evicted {socket.id} "
-                            f"timeout:{self._timeout - socket_inactive}s"
+                            __name__ + f": evicted {socket.id} "
+                            f"timeout: {self._timeout - socket_inactive}s"
                         )
                     )
                     await self.drop_client(socket)
@@ -87,13 +86,13 @@ class HttpServer:
         - creates SocketHttp object
         """
         if not await self.can_handle_new_socket():
-            logging.debug("[HttpSever] cannot accept new client")
+            logging.debug(__name__ + ": cannot accept new client")
             writer.close()
             await writer.wait_closed()
             return
 
         new_client = SocketHttp(reader, writer)
-        logging.debug(f"[HttpSever] new client: {new_client.id}")
+        logging.debug(__name__ + f": accept {new_client.id}")
         self.ACTIVE_SOCKETS.append(new_client)
         await new_client.run()
 
@@ -108,6 +107,8 @@ class HttpServer:
             SocketHttp.init_pools(self._max_sockets)
             ssl_ctx = None
             if get_config("tls").lower() == "true":
+                import ssl
+
                 ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
                 ssl_ctx.load_cert_chain(self.TLS_CERT_PATH, self.TLS_KEY_PATH)
             self._server = await start_server(
@@ -117,15 +118,15 @@ class HttpServer:
                 backlog=self._max_sockets,
                 ssl=ssl_ctx,
             )
-            logging.info("[HttpSever] Started")
+            logging.info(__name__ + ": started")
         except MemoryError as e:
-            logging.warning(f"[HttpSever] Memory allocation failed: {e}")
+            logging.warning(__name__ + f": allocation failed - {e}")
 
     async def terminate(self):
         """
         Terminate HTTP server and close sockets
         """
-        logging.info("[HttpSever] Terminated")
+        logging.info(__name__ + ": terminated")
         while self.ACTIVE_SOCKETS:
             await self.drop_client(self.ACTIVE_SOCKETS[0])
         if self._server:
