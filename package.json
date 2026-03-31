@@ -1,5 +1,5 @@
 {
-  "version": "0.2.0",
+  "version": "0.3.0",
   "urls": [
     [
       "pyrobusta/transport/socket.mpy",
@@ -8,6 +8,10 @@
     [
       "pyrobusta/transport/__init__.py",
       "github:szeka9/PyRobusta/dist/pyrobusta/transport/__init__.py"
+    ],
+    [
+      "pyrobusta/utils/helpers.mpy",
+      "github:szeka9/PyRobusta/dist/pyrobusta/utils/helpers.mpy"
     ],
     [
       "pyrobusta/utils/__init__.py",
