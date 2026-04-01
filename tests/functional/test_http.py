@@ -108,7 +108,7 @@ async def start_server():
     Start an HTTP server as a background task
     """
     server = http_server.HttpServer()
-    server_task = asyncio.create_task(server.run_server())
+    server_task = asyncio.create_task(server.start_socket_server())
     await asyncio.sleep_ms(100)
     return server, server_task
 
