@@ -37,10 +37,10 @@ class TestWebStateMachineBase(unittest.TestCase):
         # Load your web and buffer modules
         self.helpers_module = load_module("pyrobusta/utils/helpers.py")
         buffer_module = load_module("pyrobusta/stream/buffer.py")
-        web_module = load_module("pyrobusta/protocol/http.py")
-        web_module.enable_optional_features()
+        self.web_module = load_module("pyrobusta/protocol/http.py")
+        self.web_module.enable_optional_features()
 
-        self.engine = web_module.HttpEngine()
+        self.engine = self.web_module.HttpEngine()
         self.rx = buffer_module.SlidingBuffer(bytearray(1024))
         self.tx = buffer_module.SlidingBuffer(bytearray(1024))
 
@@ -148,6 +148,18 @@ class TestWebStateMachine(TestWebStateMachineBase):
 
         self.assertEqual(self.engine.status_code, 400)
         self.assertEqual(self.engine.state, None)
+
+    def test_header_parsing_error(self):
+        for case in (
+            b"",
+            b":",
+            b": value",
+            b" leading-space: value",
+            b"space in header name: value",
+            b"new-line-in-header:\nvalue",
+        ):
+            with self.assertRaises(self.web_module.HeaderParsingError):
+                self.engine._parse_headers(case)
 
     def test_routing_unsupported_method(self):
         self.engine.state = self.engine._route_request_st
@@ -312,6 +324,26 @@ class TestWebStateMachine(TestWebStateMachineBase):
         with self.assertRaises(KeyError):
             self.engine.get_url_encoded_query_param(self.engine.query, "param3")
 
+    def test_overlapping_url_encoded_query_parameter(self):
+        request = b"GET /api/test?data=value1&ta=value2&a=value3 HTTP/1.1\r\n"
+
+        for i in range(len(request)):
+            self.rx.write(request[i : i + 1])
+            self.engine.state(self.rx, self.tx)
+
+        self.assertEqual(
+            self.engine.get_url_encoded_query_param(self.engine.query, "data"),
+            "value1",
+        )
+        self.assertEqual(
+            self.engine.get_url_encoded_query_param(self.engine.query, "ta"),
+            "value2",
+        )
+        self.assertEqual(
+            self.engine.get_url_encoded_query_param(self.engine.query, "a"),
+            "value3",
+        )
+
     def test_chunked_transfer_encoding_valid(self):
         self.engine.url = b"/api/test"
         self.engine.method = b"GET"
@@ -418,9 +450,14 @@ class TestMultipartStateMachine(TestWebStateMachineBase):
 
     def test_multipart_parser(self):
         for case in [
+            ({}, None),
             (
                 {"content-type": 'multipart/form-data; boundary ="test-boundary"'},
                 "test-boundary",
+            ),
+            (
+                {"content-type": 'multipart/form-data; boundary =" test-boundary "'},
+                " test-boundary ",
             ),
             (
                 {"content-type": "multipart/form-data ;boundary= test-boundary "},
@@ -432,16 +469,18 @@ class TestMultipartStateMachine(TestWebStateMachineBase):
             ),
         ]:
             with self.subTest(headers=case[0], expected=case[1]):
-                self.assertEqual(self.engine._is_multipart(case[0]), case[1])
+                self.assertEqual(self.engine._get_mp_boundary(case[0]), case[1])
 
         for case in [
-            {},
             {"content-type": "multipart/form-data"},
             {"content-type": 'multipart/form-data;boundary=""'},
             {"content-type": "multipart/form-data;boundary=\r\n"},
+            {"content-type": 'multipart/form-data;boundary="missing-quote'},
+            {"content-type": 'multipart/form-data;boundary=missing-quote"'},
         ]:
-            with self.subTest(headers=case, expected=None):
-                self.assertEqual(self.engine._is_multipart(case), None)
+            with self.subTest(headers=case):
+                with self.assertRaises(self.web_module.HeaderParsingError):
+                    self.engine._get_mp_boundary(case)
 
     def test_multipart_receiver_valid(self):
         self.engine.state = self.engine._start_multipart_parser_st

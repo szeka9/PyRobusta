@@ -199,17 +199,20 @@ class HttpEngine:
         :param key: key to parse from the query
         :param default: default value to return when key is not present
         """
-        idx_start = query.find(key + "=")
-        if idx_start != -1:
-            idx_end = -1
-            idx_end = query.find("&", idx_start)
-            if idx_start > -1:
-                if idx_end > -1:
-                    return query[idx_start + len(key) + 1 : idx_end]
-                return query[idx_start + len(key) + 1 :]
-        if default is None:
+        if query.startswith(key + "="):
+            idx_start = 0
+        elif (idx_start := query.find("&" + key + "=")) != -1:
+            idx_start += 1
+        elif default is None:
             raise KeyError()
-        return default
+        else:
+            return default
+
+        idx_end = -1
+        idx_end = query.find("&", idx_start)
+        if idx_end > -1:
+            return query[idx_start + len(key) + 1 : idx_end]
+        return query[idx_start + len(key) + 1 :]
 
     @classmethod
     def is_norm_path_served(cls, path: str):
@@ -262,13 +265,25 @@ class HttpEngine:
         headers = {}
         for line in header_lines:
             # pylint: disable=W0511
-            # TODO: support for UTF-8 in field values (e.g filenames), can be board dependent
             if any(c > 127 for c in line):
                 raise HeaderParsingError("Non-ASCII character")
             if b":" not in line:
                 raise HeaderParsingError()
             name, value = line.split(b":", 1)
+            if not name:
+                raise HeaderParsingError("Empty header name")
+            for c in name:
+                if (
+                    48 <= c <= 57  # 0-9
+                    or 65 <= c <= 90  # A-Z
+                    or 97 <= c <= 122  # a-z
+                    or c in (45, 95)  # -_
+                ):
+                    continue
+                raise HeaderParsingError("Invalid header name")
             name = name.strip().lower().decode(cls.ASCII)
+            if any((c < 32 and c != 9) or c == 127 for c in value):
+                raise HeaderParsingError("Invalid header value")
             if name == cls.CONTENT_LENGTH:
                 value = int(value.strip())
             else:
@@ -277,18 +292,35 @@ class HttpEngine:
         return headers
 
     @staticmethod
-    def _is_multipart(headers: dict) -> str:
+    def _get_mp_boundary(headers: dict) -> str:
         """Determine from the headers if a request is multipart, and return the boundary value"""
         content_type = headers.get("content-type")
-        if content_type and content_type.lower().startswith("multipart/form-data"):
-            parts = content_type.split(";")
-            for part in parts[1:]:
-                if "=" in part:
-                    key, value = part.strip().split("=", 1)
-                    if key.strip().lower() == "boundary":
-                        boundary = value.strip().strip('"')
-                        return boundary if boundary else None
-        return None
+        if not content_type or not content_type.lower().startswith(
+            "multipart/form-data"
+        ):
+            return None
+
+        parts = content_type.split(";")
+        for part in parts[1:]:
+            if "=" not in part:
+                continue
+            key, value = part.strip().split("=", 1)
+
+            if key.strip().lower() != "boundary":
+                continue
+            value = value.strip()
+
+            if value.startswith('"'):
+                if len(value) < 2 or not value.endswith('"'):
+                    raise HeaderParsingError()
+                value = value[1:-1]
+            elif value.endswith('"'):
+                raise HeaderParsingError()
+
+            if not value:
+                raise HeaderParsingError()
+            return value
+        raise HeaderParsingError()
 
     @classmethod
     def _parse_body_part(cls, part: memoryview) -> tuple[dict, bytes]:
@@ -508,10 +540,13 @@ class HttpEngine:
                 if self.method == self.HEAD:
                     self.on_client_error(tx, self.BAD_REQUEST_ERROR)
                     return
-                if mp_boundary := self._is_multipart(self.headers):
+                if mp_boundary := self._get_mp_boundary(self.headers):
                     self.mp_boundary = mp_boundary.encode(self.ASCII)
                     self.state = self._start_multipart_parser_st
                 elif self._is_chunked():
+                    if self.CONTENT_LENGTH in self.headers:
+                        self.on_client_error(tx, self.BAD_REQUEST_ERROR)
+                        return
                     self.state = self._recv_chunked_size_st
                 else:
                     self.state = self._recv_payload_st
