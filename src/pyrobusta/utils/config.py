@@ -27,7 +27,7 @@ CONFIG_CACHE = [
     "tls",
     "False",
     "log_level",
-    "warning",
+    "info",
 ]
 
 
@@ -48,11 +48,12 @@ def read_config(config=CONFIG_LOCATION):
     try:
         with open(config, encoding="utf-8") as conf:
             for line in conf:
-                line = line.rstrip("\r\n")
-                key = line.split("=")[0].strip()
-                if key.startswith("#") or not line.strip():
+                line = line.rstrip("\r\n").split("#")[0]
+                if not line.strip():
                     continue
-                value = line.split("=")[1].strip().strip("'").strip('"')
+                parts = line.split("=")
+                key = parts[0].strip()
+                value = parts[1].strip().strip("'").strip('"')
                 if key and value:
                     value = normalize(key, value)
                     if (

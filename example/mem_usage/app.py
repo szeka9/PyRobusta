@@ -23,11 +23,11 @@ def mem_usage(http_ctx, _):
         selector = http_ctx.get_url_encoded_query_param(http_ctx.query, "key", "")
         if selector == "free":
             if value_format == "%":
-                free = 100 * free / (used + free)
+                free = round(100 * free / (used + free),2)
             return "text/plain", f"Free   [{value_format}]: {free}\n"
         if selector == "used":
             if value_format == "%":
-                used = 100 * used / (used + free)
+                used = round(100 * used / (used + free),2)
             return "text/plain", f"Used   [{value_format}]: {used}\n"
         if selector == "total":
             return "text/plain", f"Total  [bytes]: {used + free}\n"

@@ -3,11 +3,13 @@ DEVICE ?= u0
 
 SRC_DIR := src
 TEST_DIR := tests
-EXAMPLE_DIR := example/mem_usage
+EXAMPLE_DIR := example/mip_repo
 BUILD_DIR := build
 DIST_DIR := dist
-PKG := pyrobusta
 TLS_DIR := tls
+ASSETS_DIR := assets
+
+PKG := pyrobusta
 
 MICROPY_ROOT := external/micropython
 MPY_CROSS := $(MICROPY_ROOT)/mpy-cross/build/mpy-cross
@@ -131,7 +133,7 @@ stage-example:
 	@echo "Copying built package"
 	@cp -r build/pyrobusta $(RUNTIME_DIR)/lib
 
-	@echo "Copying example files"
+	@echo "Copying example app"
 	@cp $(EXAMPLE_DIR)/app.py $(RUNTIME_DIR)/
 	@cp $(EXAMPLE_DIR)/boot.py $(RUNTIME_DIR)/
 
@@ -233,7 +235,9 @@ test-unix: TLS_DIR=$(TEST_RUNTIME)
 test-unix: stage-test tls-cert
 	@cd $(TEST_RUNTIME); \
 	for test in test_*.py; do \
+		echo "\n==================================="; \
 		echo "Running $$test"; \
+		echo "==================================="; \
 		MICROPYPATH=":.frozen:lib" ../$(MICROPYTHON) $$(basename $$test) || exit 1; \
 	done
 
@@ -245,7 +249,9 @@ test-device: stage-test #clean-device upload
 	@mpremote $(DEVICE) soft-reset
 	@cd $(TEST_RUNTIME); \
 	for test in test_*.py; do \
+		echo "\n==================================="; \
 		echo "Running $$test"; \
+		echo "==================================="; \
 		mpremote $(DEVICE) run $$(basename $$test) || exit 1; \
 	done
 	@mpremote $(DEVICE) reset

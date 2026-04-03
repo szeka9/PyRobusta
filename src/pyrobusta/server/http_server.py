@@ -178,6 +178,7 @@ class HttpServer:
             if recv_buf:
                 recv_buf.consume()
                 self.RECV_POOL.release(recv_buf)
+            collect()
 
     async def start_socket_server(self):
         """

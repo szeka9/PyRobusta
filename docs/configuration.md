@@ -13,4 +13,4 @@ to upload it to the root directory of the target device.
 | http_serve_files  | Enable/disable file serving.                                                                          | "True"                        |
 | socket_max_con    | Max number of socket connections of any enabled application server.                                   | 2                             |
 | tls               | Enable/disable TLS. When turned on, cert.der/key.der must be installed at the root.                   | "False"                       |
-| log_level         | Can be one of: warning, info, debug.                                                                  | "warning"                     |
+| log_level         | Can be one of: warning, info, debug.                                                                  | "info"                        |
