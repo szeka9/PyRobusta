@@ -26,6 +26,7 @@ class TestHelpers(unittest.TestCase):
         cwd = getcwd()
         for case in (
             ("", ""),
+            ("/", f"{cwd}"),
             ("/path/to/resource", f"{cwd}/path/to/resource"),
             ("/path/to/resource/", f"{cwd}/path/to/resource"),
             ("///path///to///resource///", f"{cwd}/path/to/resource"),
@@ -45,6 +46,7 @@ class TestHelpers(unittest.TestCase):
         """
         for case in (
             ("", ""),
+            ("/", "/"),
             ("/path/to/resource", "/path/to/resource"),
             ("/path/to/resource/", "/path/to/resource"),
             ("///path///to///resource///", "/path/to/resource"),

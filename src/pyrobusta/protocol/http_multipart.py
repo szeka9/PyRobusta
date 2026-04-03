@@ -5,24 +5,23 @@ State machine extension for multipart parsing.
 # pylint: disable=W0212,R0401
 
 from pyrobusta.protocol import http
+from pyrobusta.utils.helpers import add_method
 
 
-def add_method(cls, func, method_type="instance"):
-    """
-    Helper to extend web.WebEngine with
-    additional methods and states.
-    """
-    if method_type == "instance":
-        setattr(cls, func.__name__, func)
-    elif method_type == "static":
-        setattr(cls, func.__name__, staticmethod(func))
-    elif method_type == "class":
-        setattr(cls, func.__name__, classmethod(func))
-    else:
-        raise ValueError("Invalid type")
+def _generate_multipart_response(self, _, tx, callback, dtype):
+    """Generate multipart response depening on the exact content type"""
+    if type(callback).__name__ not in ("function", "closure"):
+        self.on_failure(tx, b"Invalid response handler")
+        return
+    self.terminate(200, dtype)
+    boundary = self.MULTIPART_BOUNDARY
+    self._set_response_header(b"content-type", dtype + b"; boundary=" + boundary)
+    self._write_response_head(tx, None)
+    if self.method != self.HEAD:
+        return self._multipart_wrapper_factory(callback, boundary)
 
 
-def _multipart_wrapper_factory(callback, content_type: bytes, boundary: bytes):
+def _multipart_wrapper_factory(callback, boundary: bytes):
     """
     Factory method for creating closures that write multipart responses
     :param callback: function without arguments, must return bytes-like objects
@@ -30,8 +29,7 @@ def _multipart_wrapper_factory(callback, content_type: bytes, boundary: bytes):
     :param boundary: boundary value
     :return closure: closure to invoke for response generation
     """
-    boundary = b"--" + boundary
-    content_type_header = b"content-type: %s\r\n\r\n" % content_type
+    delimiter = b"--" + boundary
 
     def _multipart_wrapper(tx):
         """
@@ -41,13 +39,16 @@ def _multipart_wrapper_factory(callback, content_type: bytes, boundary: bytes):
         :return bool: true if the stream is completed
         """
         while True:
-            tx.write(boundary)
-            part_body = callback()
-            if not part_body:
+            tx.write(delimiter)
+            part = callback()
+            if not part:
                 tx.write(b"--")
                 yield True
+            content_type, part_body = part
             tx.write(b"\r\n")
-            tx.write(content_type_header)
+            tx.write(b"content-type:")
+            tx.write(content_type.encode("ascii"))
+            tx.write(b"\r\n\r\n")
             written = 0
             while written < len(part_body):
                 to_write = tx.capacity - tx.size()
@@ -139,9 +140,7 @@ def apply_patches():
     """
     Apply patches to class attributes for multipart parsing.
     """
-    cls = http.HttpEngine
-
-    orig_init = cls.__init__
+    orig_init = http.HttpEngine.__init__
 
     def new_init(self, *args, **kwargs):
         orig_init(self, *args, **kwargs)
@@ -150,8 +149,9 @@ def apply_patches():
         self.mp_delimiter = None
         self.mp_last_delimiter = None
 
-    cls.__init__ = new_init
+    http.HttpEngine.__init__ = new_init
 
+    add_method(http.HttpEngine, _generate_multipart_response)
     add_method(http.HttpEngine, _multipart_wrapper_factory, "static")
     add_method(http.HttpEngine, _start_multipart_parser_st)
     add_method(http.HttpEngine, _parse_boundary_st)

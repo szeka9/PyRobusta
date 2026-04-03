@@ -1,13 +1,15 @@
-PYROBUSTA_VERSION := 0.3.0
+PYROBUSTA_VERSION := v0.4.0
 DEVICE ?= u0
 
 SRC_DIR := src
 TEST_DIR := tests
-EXAMPLE_DIR := example/mem_usage
+EXAMPLE_DIR := example/mip_repo
 BUILD_DIR := build
 DIST_DIR := dist
-PKG := pyrobusta
 TLS_DIR := tls
+ASSETS_DIR := assets
+
+PKG := pyrobusta
 
 MICROPY_ROOT := external/micropython
 MPY_CROSS := $(MICROPY_ROOT)/mpy-cross/build/mpy-cross
@@ -47,6 +49,11 @@ toolchain:
 # -----------------------------
 .PHONY: build
 build: $(MPY_TARGETS) $(INIT_TARGETS)
+	@mkdir -p $(BUILD_DIR)
+	@if [ -d assets ]; then \
+		echo "Copying assets/ -> $(BUILD_DIR)"; \
+		cp -r assets $(BUILD_DIR)/${PKG}/; \
+	fi
 
 # Compile .py -> .mpy
 $(BUILD_DIR)/%.mpy: $(SRC_DIR)/%.py
@@ -66,6 +73,7 @@ $(BUILD_DIR)/%.py: $(SRC_DIR)/%.py
 .PHONY: deploy
 deploy:
 	@echo "Uploading build/$(PKG) to device $(DEVICE)"
+	@mpremote $(DEVICE) soft-reset
 	@mpremote $(DEVICE) mkdir :/lib  || true
 	@find $(BUILD_DIR)/$(PKG) | while read source; do \
 		rel=$${source#$(BUILD_DIR)/}; \
@@ -79,6 +87,7 @@ deploy:
 		fi; \
 		sleep 1; \
 	done
+	@mpremote $(DEVICE) reset
 
 # -----------------------------
 # Deploy custom configuration
@@ -86,7 +95,20 @@ deploy:
 .PHONY: deploy-config
 deploy-config:
 	@echo "Uploading pyrobusta.env"
+	@mpremote $(DEVICE) soft-reset
 	@if [ -f pyrobusta.env ]; then mpremote $(DEVICE) cp pyrobusta.env :pyrobusta.env; fi
+	@mpremote $(DEVICE) reset
+
+
+# -----------------------------
+# Deploy index page # TODO use install_www from assets module
+# -----------------------------
+.PHONY: deploy-www
+deploy-www:
+	@echo "Deploying /www"
+	@mpremote $(DEVICE) soft-reset
+	@mpremote $(DEVICE) run scripts/install_www.py
+	@mpremote $(DEVICE) reset
 
 # -----------------------------
 # Full redeploy
@@ -107,6 +129,9 @@ publish:
 	@sed -E -i.bak 's/(PYROBUSTA_VERSION[[:space:]]*=[[:space:]]*)"[^"]*"/\1"$(PYROBUSTA_VERSION)"/' \
 		$(SRC_DIR)/pyrobusta/utils/config.py \
 		&& rm -f $(SRC_DIR)/pyrobusta/utils/config.py.bak
+	@sed -E -i.bak 's/(PyRobusta[[:space:]]).+([[:space:]]Web Server)/\1$(PYROBUSTA_VERSION)\2/' \
+		$(ASSETS_DIR)/www/*.html \
+		&& rm -f $(ASSETS_DIR)/www/*.html.bak
 	$(MAKE) clean
 	$(MAKE) build BUILD_DIR=$(DIST_DIR)
 	scripts/update_package.bash $(DIST_DIR) package.json $(PYROBUSTA_VERSION)
@@ -128,7 +153,7 @@ stage-example:
 	@echo "Copying built package"
 	@cp -r build/pyrobusta $(RUNTIME_DIR)/lib
 
-	@echo "Copying example files"
+	@echo "Copying example app"
 	@cp $(EXAMPLE_DIR)/app.py $(RUNTIME_DIR)/
 	@cp $(EXAMPLE_DIR)/boot.py $(RUNTIME_DIR)/
 
@@ -152,16 +177,20 @@ run-unix: stage-example
 .PHONY: deploy-example
 deploy-example:
 	@echo "Uploading boot.py"
+	@mpremote $(DEVICE) soft-reset
 	mpremote $(DEVICE) cp $(EXAMPLE_DIR)/boot.py :boot.py
+	mpremote $(DEVICE) cp $(EXAMPLE_DIR)/app.py :app.py
 
 	@echo "Uploading pyrobusta.env"
 	@if [ -f pyrobusta.env ]; then mpremote $(DEVICE) cp pyrobusta.env :pyrobusta.env; fi
+	@mpremote $(DEVICE) reset
 
 # -----------------------------
 # Run example directly
 # -----------------------------
 .PHONY: run-device
 run-device:
+	@mpremote $(DEVICE) soft-reset
 	mpremote $(DEVICE) run $(EXAMPLE_DIR)/app.py
 
 
@@ -226,7 +255,9 @@ test-unix: TLS_DIR=$(TEST_RUNTIME)
 test-unix: stage-test tls-cert
 	@cd $(TEST_RUNTIME); \
 	for test in test_*.py; do \
+		echo "\n==================================="; \
 		echo "Running $$test"; \
+		echo "==================================="; \
 		MICROPYPATH=":.frozen:lib" ../$(MICROPYTHON) $$(basename $$test) || exit 1; \
 	done
 
@@ -234,12 +265,16 @@ test-unix: stage-test tls-cert
 # Run functional tests on device
 # -----------------------------
 .PHONY: test-device
-test-device: #clean-device upload
+test-device: stage-test #clean-device upload
+	@mpremote $(DEVICE) soft-reset
 	@cd $(TEST_RUNTIME); \
 	for test in test_*.py; do \
+		echo "\n==================================="; \
 		echo "Running $$test"; \
+		echo "==================================="; \
 		mpremote $(DEVICE) run $$(basename $$test) || exit 1; \
 	done
+	@mpremote $(DEVICE) reset
 
 # ================================================
 # Utilities for TLS
@@ -272,8 +307,10 @@ tls-cert:
 # -----------------------------
 .PHONY: deploy-cert
 deploy-cert:
+	@mpremote $(DEVICE) soft-reset
 	@mpremote $(DEVICE) cp $(TLS_DIR)/key.der :key.der
 	@mpremote $(DEVICE) cp $(TLS_DIR)/cert.der :cert.der
+	@mpremote $(DEVICE) reset
 
 # ================================================
 # Cleanup
@@ -305,4 +342,6 @@ clean: clean-build clean-runtime
 # -----------------------------
 .PHONY: clean-device
 clean-device:
+	@mpremote $(DEVICE) soft-reset
 	mpremote $(DEVICE) run scripts/clean_device.py
+	@mpremote $(DEVICE) reset
