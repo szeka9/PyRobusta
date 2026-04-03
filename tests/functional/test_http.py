@@ -282,6 +282,9 @@ async def test_fs_access_control():
 
 
 def setup_config(multipart=False, tls_enabled=False, served_paths=""):
+    http_server.HttpServer.LISTEN_PORT_HTTP = 8080
+    http_server.HttpServer.LISTEN_PORT_HTTPS = 4443
+
     config_idx = config.CONFIG_CACHE.index("http_multipart")
     config.CONFIG_CACHE[config_idx + 1] = str(multipart)
     config_idx = config.CONFIG_CACHE.index("tls")

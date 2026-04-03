@@ -38,7 +38,8 @@ def self_serve_mip_package(http_ctx, _):
             if tls_enabled
             else http_server.HttpServer.LISTEN_PORT_HTTP
         )
-        server_addr += f":{port}"
+        if not server_addr in (80, 443):
+            server_addr += f":{port}"
 
     protocol = "https" if tls_enabled else "http"
 

@@ -30,10 +30,10 @@ class HttpServer:
     CON_ACCEPT_SLEEP_MS = (
         100  # Duration of sleep between attempts to accept new connection
     )
-    LISTEN_PORT_HTTP = 8080
-    LISTEN_PORT_HTTPS = 4443
-    TLS_CERT_PATH = "cert.der"
-    TLS_KEY_PATH = "key.der"
+    LISTEN_PORT_HTTP = 80
+    LISTEN_PORT_HTTPS = 443
+    TLS_CERT_PATH = "/cert.der"
+    TLS_KEY_PATH = "/key.der"
     CON_TIMEOUT_S = 30
 
     # -----------------------------------------
