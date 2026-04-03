@@ -6,7 +6,7 @@ Values can be encapsulated by single or double quotes.
 
 from .helpers import normalize_path
 
-PYROBUSTA_VERSION = "v0.3.0"
+PYROBUSTA_VERSION = "v0.4.0"
 CONFIG_LOADED = False
 CONFIG_LOCATION = "pyrobusta.env"
 CONFIG_CACHE = [

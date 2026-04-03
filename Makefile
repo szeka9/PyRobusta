@@ -1,4 +1,4 @@
-PYROBUSTA_VERSION := v0.3.0
+PYROBUSTA_VERSION := v0.4.0
 DEVICE ?= u0
 
 SRC_DIR := src
@@ -131,7 +131,7 @@ publish:
 		&& rm -f $(SRC_DIR)/pyrobusta/utils/config.py.bak
 	@sed -E -i.bak 's/(PyRobusta[[:space:]]).+([[:space:]]Web Server)/\1$(PYROBUSTA_VERSION)\2/' \
 		$(ASSETS_DIR)/www/*.html \
-		&& rm -f $(SRC_DIR)/www/*.bak
+		&& rm -f $(ASSETS_DIR)/www/*.html.bak
 	$(MAKE) clean
 	$(MAKE) build BUILD_DIR=$(DIST_DIR)
 	scripts/update_package.bash $(DIST_DIR) package.json $(PYROBUSTA_VERSION)

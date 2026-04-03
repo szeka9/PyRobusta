@@ -1,5 +1,5 @@
 {
-  "version": "v0.3.0",
+  "version": "v0.4.0",
   "urls": [
     [
       "pyrobusta/transport/socket.mpy",
@@ -8,6 +8,14 @@
     [
       "pyrobusta/transport/__init__.py",
       "github:szeka9/PyRobusta/dist/pyrobusta/transport/__init__.py"
+    ],
+    [
+      "pyrobusta/assets/www/index.html",
+      "github:szeka9/PyRobusta/dist/pyrobusta/assets/www/index.html"
+    ],
+    [
+      "pyrobusta/assets/www/examples.html",
+      "github:szeka9/PyRobusta/dist/pyrobusta/assets/www/examples.html"
     ],
     [
       "pyrobusta/utils/helpers.mpy",
@@ -26,6 +34,10 @@
       "github:szeka9/PyRobusta/dist/pyrobusta/utils/logging.mpy"
     ],
     [
+      "pyrobusta/utils/assets.mpy",
+      "github:szeka9/PyRobusta/dist/pyrobusta/utils/assets.mpy"
+    ],
+    [
       "pyrobusta/protocol/http_multipart.mpy",
       "github:szeka9/PyRobusta/dist/pyrobusta/protocol/http_multipart.mpy"
     ],
@@ -36,6 +48,10 @@
     [
       "pyrobusta/protocol/__init__.py",
       "github:szeka9/PyRobusta/dist/pyrobusta/protocol/__init__.py"
+    ],
+    [
+      "pyrobusta/protocol/http_file_server.mpy",
+      "github:szeka9/PyRobusta/dist/pyrobusta/protocol/http_file_server.mpy"
     ],
     [
       "pyrobusta/stream/__init__.py",
