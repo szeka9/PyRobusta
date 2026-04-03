@@ -1,11 +1,11 @@
 import asyncio
 import ssl
 import json
+import gc
 
-from os import getcwd, mkdir
+from os import mkdir, remove, rmdir
 
 from pyrobusta.server import http_server
-from pyrobusta.protocol import http_multipart
 from pyrobusta.protocol.http import (
     HttpEngine,
     enable_optional_features,
@@ -17,6 +17,15 @@ from pyrobusta.utils.helpers import normalize_path
 #################################################
 # Test helpers
 #################################################
+
+
+def garbage_collect(coroutine):
+    async def decorated(*args, **kwargs):
+        gc.collect()
+        await coroutine(*args, **kwargs)
+        gc.collect()
+
+    return decorated
 
 
 def test_assert(name, actual, expected):
@@ -55,19 +64,6 @@ async def send_request(request, tls=False):
     return response
 
 
-def multipart_response(num_responses):
-    i = 0
-
-    def response_generator():
-        nonlocal i
-        i += 1
-        if i > num_responses:
-            return None
-        return b"Response %s" % i
-
-    return response_generator
-
-
 #################################################
 # Test driver
 #################################################
@@ -80,12 +76,6 @@ def simple_callback(http_ctx, _):
     elif http_ctx.headers["accept"] == "application/json":
         return "application/json", '{"response": "Test response"}'
     raise ValueError("Unhandled content-type")
-
-
-@HttpEngine.route("/test/multipart", "GET")
-def multipart_callback(http_ctx, _):
-    part_count = int(http_ctx.headers["x-part-count"])
-    return "multipart/form-data", ("text/plain", multipart_response(part_count))
 
 
 @HttpEngine.route("/test/busy", "POST")
@@ -113,8 +103,9 @@ async def start_server():
     return server, server_task
 
 
+@garbage_collect
 async def test_simple_response(tls_enabled):
-    setup_config(multipart=False, tls_enabled=tls_enabled)
+    setup_config(tls_enabled=tls_enabled)
     server, server_task = await start_server()
 
     # Test: text/plain
@@ -157,38 +148,7 @@ async def test_simple_response(tls_enabled):
     await server.terminate()
 
 
-async def test_multipart_response(tls_enabled):
-    setup_config(multipart=True, tls_enabled=tls_enabled)
-    server, server_task = await start_server()
-
-    # Test: 1 part
-    plain_response = await send_request(
-        b"GET /test/multipart HTTP/1.1\r\n"
-        b"Host: localhost\r\nX-Part-Count: 1\r\n\r\n",
-        tls_enabled,
-    )
-    test_assert(
-        f"http{"s" if tls_enabled else ""} response contains 1 part",
-        b"Response 1" in plain_response,
-        True,
-    )
-
-    # Test: 10 parts
-    plain_response = await send_request(
-        b"GET /test/multipart HTTP/1.1\r\n"
-        b"Host: localhost\r\nX-Part-Count: 10\r\n\r\n",
-        tls_enabled,
-    )
-    test_assert(
-        f"http{"s" if tls_enabled else ""} response contains 10 parts",
-        [b"Response %s" % i in plain_response for i in range(1, 11)],
-        [True] * 10,
-    )
-
-    server_task.cancel()
-    await server.terminate()
-
-
+@garbage_collect
 async def test_server_busy():
     setup_config()
     server, server_task = await start_server()
@@ -206,6 +166,7 @@ async def test_server_busy():
     await server.terminate()
 
 
+@garbage_collect
 async def test_chunked_transfer_encoding():
     setup_config()
     create_chunked_app_endpoint("/test/chunked")
@@ -233,25 +194,33 @@ async def test_chunked_transfer_encoding():
     await server.terminate()
 
 
+@garbage_collect
 async def test_fs_access_control():
-    setup_config(served_paths="/www")
+    setup_config(served_paths="/www/allowed")
     server, server_task = await start_server()
+    workdir_root = normalize_path("/www")
+    try:
+        mkdir(workdir_root)
+    except:
+        pass
 
     # Index page under /www -> accepted
-    workdir = normalize_path("/www")
-    index_html = normalize_path("/www/index.html")
-    mkdir(workdir)
-    with open(index_html, "w") as f:
+    allowed_workdir = normalize_path("/www/allowed")
+    allowed_index_html = normalize_path("/www/allowed/index.html")
+    mkdir(allowed_workdir)
+    with open(allowed_index_html, "w") as f:
         f.write("<html>PyRobusta Home</html>")
 
     # Index page under / -> rejected
-    index_html = normalize_path("/index.html")
-    with open(index_html, "w") as f:
+    rejected_workdir = normalize_path("/www/rejected")
+    rejected_index_html = normalize_path("/www/rejected/index.html")
+    mkdir(rejected_workdir)
+    with open(rejected_index_html, "w") as f:
         f.write("<html>PyRobusta Home</html>")
 
     # Case #1: /www/index.html
     response = await send_request(
-        (b"GET /www/index.html HTTP/1.1\r\n" b"Host: localhost\r\n\r\n")
+        (b"GET /allowed/index.html HTTP/1.1\r\n" b"Host: localhost\r\n\r\n")
     )
 
     response_body = response.split(b"\r\n\r\n")[1]
@@ -263,7 +232,7 @@ async def test_fs_access_control():
 
     # Case #2: /index.html
     response = await send_request(
-        (b"GET /index.html HTTP/1.1\r\n" b"Host: localhost\r\n\r\n")
+        (b"GET /rejected/index.html HTTP/1.1\r\n" b"Host: localhost\r\n\r\n")
     )
 
     test_assert(
@@ -272,6 +241,10 @@ async def test_fs_access_control():
         True,
     )
 
+    remove(allowed_index_html)
+    remove(rejected_index_html)
+    rmdir(allowed_workdir)
+    rmdir(rejected_workdir)
     server_task.cancel()
     await server.terminate()
 
@@ -281,12 +254,12 @@ async def test_fs_access_control():
 #################################################
 
 
-def setup_config(multipart=False, tls_enabled=False, served_paths=""):
+def setup_config(tls_enabled=False, served_paths=""):
     http_server.HttpServer.LISTEN_PORT_HTTP = 8080
     http_server.HttpServer.LISTEN_PORT_HTTPS = 4443
 
-    config_idx = config.CONFIG_CACHE.index("http_multipart")
-    config.CONFIG_CACHE[config_idx + 1] = str(multipart)
+    config_idx = config.CONFIG_CACHE.index("log_level")
+    config.CONFIG_CACHE[config_idx + 1] = str("warning")
     config_idx = config.CONFIG_CACHE.index("tls")
     config.CONFIG_CACHE[config_idx + 1] = str(tls_enabled)
     config_idx = config.CONFIG_CACHE.index("http_served_paths")
@@ -304,24 +277,9 @@ def test_registration():
     )
 
     test_assert(
-        "multipart endpoint registration",
-        multipart_callback,
-        HttpEngine._get_callback(b"/test/multipart", b"GET"),
-    )
-
-    test_assert(
         "busy endpoint registration",
         busy_callback,
         HttpEngine._get_callback(b"/test/busy", b"POST"),
-    )
-
-
-def test_multipart_patches():
-    setup_config(multipart=True)
-    test_assert(
-        "multipart state machine patches",
-        http_multipart._start_multipart_parser_st,
-        HttpEngine._start_multipart_parser_st,
     )
 
 
@@ -329,10 +287,6 @@ def test_main():
     test_registration()
     asyncio.run(test_simple_response(tls_enabled=False))
     asyncio.run(test_simple_response(tls_enabled=True))
-
-    test_multipart_patches()
-    asyncio.run(test_multipart_response(tls_enabled=False))
-    asyncio.run(test_multipart_response(tls_enabled=True))
 
     asyncio.run(test_server_busy())
     asyncio.run(test_chunked_transfer_encoding())

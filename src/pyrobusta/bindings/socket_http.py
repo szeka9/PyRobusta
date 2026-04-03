@@ -97,7 +97,7 @@ class SocketHttp(SocketBase):
             await self._flush_response()
             return
         except ServerBusyError:
-            self._engine.on_busy(self._send_buf)
+            self._engine.on_unavailable(self._send_buf)
             await self._flush_response()
             return
         except HeaderParsingError:

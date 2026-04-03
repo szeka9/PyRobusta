@@ -30,9 +30,7 @@ class TestWebStateMachineBase(unittest.TestCase):
             },
         )
         self.patcher.start()
-
-        for key, value in self.config.items():
-            self.set_mock_config(key, value)
+        self.set_mock_config()
 
         # Load your web and buffer modules
         self.helpers_module = load_module("pyrobusta/utils/helpers.py")
@@ -47,11 +45,11 @@ class TestWebStateMachineBase(unittest.TestCase):
     def tearDown(self):
         self.patcher.stop()
 
-    def set_mock_config(self, key, value):
+    def set_mock_config(self):
         def side_effect(input_arg, *_, **__):
-            if input_arg == key:
-                return value
-            raise ValueError(f"Unexpected argument: {input_arg}")
+            if input_arg in self.config:
+                return self.config[input_arg]
+            raise ValueError(f"Unexpected config key: {input_arg}")
 
         self.mock_utils_config.get_config.side_effect = side_effect
 
@@ -63,7 +61,7 @@ class TestWebStateMachine(TestWebStateMachineBase):
 
     @classmethod
     def setUpClass(cls):
-        cls.config = {}
+        cls.config = {"http_multipart": "False", "http_serve_files": "False"}
 
     def test_status_parsing_valid(self):
         request = b"GET /index.html HTTP/1.1\r\nContent-Length:10"
@@ -415,7 +413,7 @@ class TestWebStateMachine(TestWebStateMachineBase):
         self.assertEqual(self.engine.state, self.engine._recv_chunk_st)
 
     def test_path_serving_list(self):
-        self.set_mock_config("http_served_paths", "/path/to/dir1 /path/to/dir2")
+        self.config["http_served_paths"] = "/path/to/dir1 /path/to/dir2"
         self.assertEqual(self.engine.is_norm_path_served(""), False)
         self.assertEqual(self.engine.is_norm_path_served("/"), False)
         self.assertEqual(self.engine.is_norm_path_served("/path/to/dir1"), True)
@@ -427,13 +425,13 @@ class TestWebStateMachine(TestWebStateMachineBase):
         self.assertEqual(self.engine.is_norm_path_served("/path/to"), False)
 
     def test_path_serving_root(self):
-        self.set_mock_config("http_served_paths", "/")
+        self.config["http_served_paths"] = "/"
         self.assertEqual(self.engine.is_norm_path_served(""), True)
         self.assertEqual(self.engine.is_norm_path_served("/"), True)
         self.assertEqual(self.engine.is_norm_path_served("/path/to/served"), True)
 
     def test_path_serving_none(self):
-        self.set_mock_config("http_served_paths", "")
+        self.config["http_served_paths"] = ""
         self.assertEqual(self.engine.is_norm_path_served(""), False)
         self.assertEqual(self.engine.is_norm_path_served("/"), False)
         self.assertEqual(self.engine.is_norm_path_served("/path/to/served"), False)
@@ -446,7 +444,7 @@ class TestMultipartStateMachine(TestWebStateMachineBase):
 
     @classmethod
     def setUpClass(cls):
-        cls.config = {"http_multipart": "True"}
+        cls.config = {"http_multipart": "True", "http_serve_files": "True"}
 
     def test_multipart_parser(self):
         for case in [

@@ -9,7 +9,8 @@ to upload it to the root directory of the target device.
 | wifi_password     | Password of the Wi-Fi network. When empty, Wi-Fi is not initalized by the built-in wifi.py module.    | None                          |
 | http_multipart    | Enable multipart HTTP requests/responses.                                                             | "False"                       |
 | http_mem_cap      | Max memory cap (% × 0.01) of usable heap for HTTP request/response stream buffers.                    | 0.1                           |
-| http_served_paths | Space delimited list of filesystem paths allowed to be served through HTTP.                           | "/lib/pyrobusta"              |
+| http_served_paths | Space delimited list of filesystem paths allowed to be served through HTTP.                           | "/www /lib/pyrobusta"         |
+| http_serve_files  | Enable/disable file serving.                                                                          | "True"                        |
 | socket_max_con    | Max number of socket connections of any enabled application server.                                   | 2                             |
 | tls               | Enable/disable TLS. When turned on, cert.der/key.der must be installed at the root.                   | "False"                       |
 | log_level         | Can be one of: warning, info, debug.                                                                  | "warning"                     |

@@ -5,10 +5,8 @@ with partial guarantees on RFC compliance.
 
 from json import dumps
 from io import BytesIO
-from os import stat
 
 from ..utils.config import get_config
-from ..utils.helpers import normalize_path
 
 
 class HeaderParsingError(ValueError):
@@ -449,7 +447,7 @@ class HttpEngine:
         self._write_response_head(tx, len(info))
         tx.write(info)
 
-    def on_busy(self, tx):
+    def on_unavailable(self, tx):
         """Terminate state machine and write 503 response"""
         self.terminate(503)
         self._write_response_head(tx)
@@ -563,8 +561,7 @@ class HttpEngine:
             self.on_method_not_allowed(tx)
             return
         if self.method in (self.GET, self.HEAD):
-            resource = b"index.html" if not self.url else self.url
-            self.state = lambda _rx, _tx: self._send_file_st(_rx, _tx, resource)
+            self.state = lambda _rx, _tx: self._send_file_st(_rx, _tx, self.url)
             return
         self.on_missing_resource(tx)
 
@@ -619,61 +616,28 @@ class HttpEngine:
             dtype = dtype.encode(self.ASCII)
         self._set_response_header(b"content-type", dtype)
 
-        if dtype in (b"multipart/x-mixed-replace", b"multipart/form-data"):
-            part_content_type = data[0]
-            callback = data[1]
-            if type(callback).__name__ not in ("function", "closure"):
-                self.on_failure(tx, b"Invalid response handler")
-                return
-            self.terminate(200, dtype)
-            boundary = self.MULTIPART_BOUNDARY
-            self._set_response_header(
-                b"content-type", dtype + b"; boundary=" + boundary
+        if dtype.startswith(b"multipart/"):
+            self.state = lambda _rx, _tx: self._generate_multipart_response(
+                _rx, _tx, data, dtype
             )
-            self._write_response_head(tx, None)
-            if self.method != self.HEAD:
-                return self._multipart_wrapper_factory(
-                    callback, part_content_type.encode(self.ASCII), boundary
-                )
             return
+
         self.terminate(200, dtype)
         return self._generate_response(tx, data)
 
-    def _send_file_st(self, _, tx, web_resource: bytes):
-        """State for returning a static resource"""
-        extension = web_resource.rsplit(b".", 1)[-1]
-        norm_path = normalize_path(web_resource.decode(self.ASCII))
-        is_path_served = self.is_norm_path_served(norm_path)
-        if not is_path_served:
-            try:
-                stat(norm_path)
-                self.on_forbidden(tx)
-                return
-            except OSError:
-                self.on_missing_resource(tx)
-                return
-        try:
-            content_type = self._lookup(self.CONTENT_TYPES, extension)
-        except ValueError:
-            content_type = self._lookup(self.CONTENT_TYPES, b"raw")
-        try:
-            self._set_response_header(
-                b"content-length", str(stat(norm_path)[6]).encode(HttpEngine.ASCII)
-            )
-            self.terminate(200, content_type)
-            self._write_response_head(tx, None)
-            if self.method != self.HEAD:
-                return open(norm_path, "rb")
-            return
-        except OSError:
-            self.on_missing_resource(tx)
+    def _send_file_st(self, _, tx, web_resource: bytes):  # pylint: disable=W0613
+        """State for returning a static resource - disabled"""
+        self.on_unavailable(tx)
 
     def _start_multipart_parser_st(self, rx, tx):  # pylint: disable=W0613
-        self.on_failure(tx, b"Multipart handling is disabled")
+        """Initial state for processing multipart requests"""
+        self.on_unavailable(tx)
 
-    @staticmethod
-    def _multipart_wrapper_factory(callback, content_type: bytes, boundary: bytes):
-        pass
+    def _generate_multipart_response(
+        self, rx, tx, callback, dtype
+    ):  # pylint: disable=W0613
+        """Generate multipart response depening on the exact content type"""
+        self.on_unavailable(tx)
 
 
 def enable_optional_features():
@@ -684,3 +648,8 @@ def enable_optional_features():
         from pyrobusta.protocol import http_multipart
 
         http_multipart.apply_patches()
+
+    if get_config("http_serve_files").lower() == "true":
+        from pyrobusta.protocol import http_file_server
+
+        http_file_server.apply_patches()

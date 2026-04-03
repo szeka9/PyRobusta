@@ -10,6 +10,7 @@ from ..protocol import http
 from ..bindings.socket_http import SocketHttp
 from ..stream.buffer import MemoryPool, SlidingBuffer
 from ..utils.config import get_config
+from ..utils.helpers import normalize_path
 from ..utils import logging
 
 
@@ -151,7 +152,7 @@ class HttpServer:
 
         return recv_buf, send_buf
 
-    async def _accept_socket_http(self, reader, writer):
+    async def _accept_socket(self, reader, writer):
         """
         Handle incoming socket connection for HTTP.
         - creates SocketHttp object
@@ -185,7 +186,9 @@ class HttpServer:
         try:
             collect()
             http.enable_optional_features()
-            logging.debug(f"Registered endpoints: {http.HttpEngine.ENDPOINTS}")
+            logging.debug(
+                __name__ + f"registered endpoints: {http.HttpEngine.ENDPOINTS}"
+            )
             self._max_clients = int(get_config("socket_max_con"))
             self._init_pools(self._max_clients)
             ssl_ctx = None
@@ -194,10 +197,13 @@ class HttpServer:
                 import ssl
 
                 ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-                ssl_ctx.load_cert_chain(self.TLS_CERT_PATH, self.TLS_KEY_PATH)
+                ssl_ctx.load_cert_chain(
+                    normalize_path(self.TLS_CERT_PATH),
+                    normalize_path(self.TLS_KEY_PATH),
+                )
 
             self._server = await start_server(
-                self._accept_socket_http,
+                self._accept_socket,
                 self._host,
                 self._port,
                 backlog=max(1, self._max_clients),

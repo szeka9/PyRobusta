@@ -22,7 +22,7 @@ def append_package_files(dir, package_files, host_name, protocol):
         package_files["urls"].append(
             [
                 target_path,
-                f"{protocol}://{host_name}/{current_path}",
+                f"{protocol}://{host_name}/files/{current_path}",
             ]
         )
 

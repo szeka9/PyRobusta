@@ -25,3 +25,18 @@ def normalize_path(path: str):
             return cwd + normalized
         return cwd + "/" + normalized
     return cwd
+
+
+def add_method(cls, func, method_type="instance"):
+    """
+    Helper to patch/extend classes with
+    additional methods and states.
+    """
+    if method_type == "instance":
+        setattr(cls, func.__name__, func)
+    elif method_type == "static":
+        setattr(cls, func.__name__, staticmethod(func))
+    elif method_type == "class":
+        setattr(cls, func.__name__, classmethod(func))
+    else:
+        raise ValueError("Invalid type")
