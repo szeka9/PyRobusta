@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PyRobusta Home</title>
+    <style>
+        body {
+            font-family: serif;
+            margin: 40px;
+            background: white;
+            color: black;
+        }
+        h1 {
+            border-bottom: 1px solid #999;
+            padding-bottom: 10px;
+        }
+        hr {
+            margin: 20px 0;
+        }
+        a {
+            color: blue;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+        textarea {
+            resize: none;
+            background-color: rgb(37, 37, 37);
+            color: white;
+            box-sizing: border-box;
+            width: 100%;
+            padding-left: 10px;
+        }
+        .footer {
+            font-size: 0.9em;
+            color: #555;
+            margin-top: 30px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Getting Started</h1>
+
+    <a href="index.html">← Back</a>
+
+    <p>This page presents useful examples to configure your server.</p>
+
+    <hr>
+
+    <h2>Server configuration</h2>
+    <textarea readonly="true" rows="8">
+# /pyrobusta.env
+
+socket_max_con=2                        # max number of socket connections, reduce it to lower memory usage
+http_multipart="false"                  # turn on/off multipart parser, increases memory usage when turned on
+http_mem_cap="0.05"                     # memory cap (% × 0.01) of usable heap for stream buffers
+http_served_paths="/www /lib/pyrobusta" # space delimited list of filesystem paths allowed to be served
+tls="false"                             # key.der and cert.der needs to be installed at / when set to true
+    </textarea>
+    <p></p>
+
+    <hr>
+
+    <h2>Simple Server Application</h2>
+    <p>The below example demonstrates how to set up a simple application, exposed at /app.</p>
+    <textarea readonly="true" rows="37">
+# /app.py
+
+import asyncio
+from gc import mem_free, mem_alloc
+
+from pyrobusta.server import http_server
+from pyrobusta.protocol.http import HttpEngine
+from pyrobusta.utils import logging
+
+
+@HttpEngine.route("/app", "GET")
+def app(http_ctx, payload):
+    free = mem_free()
+    value_format = "bytes"
+
+    if http_ctx.query:
+        value_format = http_ctx.get_url_encoded_query_param(
+            http_ctx.query, "format", default="bytes"
+        )
+        if value_format not in ("%", "bytes"):
+            raise ValueError("invalid format")
+
+        if value_format == "%":
+            free = round(100 * free / (free + mem_alloc()), 2)
+
+    return "text/plain", (f"Free memory [{value_format}]: {free}\n")
+
+
+def main():
+    http_server.main()
+    try:
+        asyncio.get_event_loop().run_forever()
+    except Exception as e:
+        logging.warning(f"loop stopped: {e}")
+        asyncio.get_event_loop().close()
+    </textarea>
+    <textarea readonly="true" rows="13">
+# This file is executed on every boot (including wake-boot from deepsleep)
+import machine
+from os import listdir
+
+from pyrobusta.con import wifi
+
+connected = wifi.initialize()
+if connected and not machine.reset_cause() == machine.SOFT_RESET:
+    if "app.py" in listdir():
+        import app
+
+        app.main()
+    </textarea>
+
+    <p>Soft reset the device and upload app.py and boot.py with mpremote.</p>
+    <textarea readonly="true" rows="4">
+$ mpremote a0 soft-reset
+$ mpremote a0 cp app.py :/app.py
+$ mpremote a0 cp boot.py :/boot.py
+    </textarea>
+
+    <p>Hard reset the device to start the application and connect over REPL.</p>
+    <textarea readonly="true" rows="12">
+$ mpremote a0 reset repl
+Connected to MicroPython at /dev/ttyACM0
+...
+[INFO] pyrobusta.con.wifi: network b'Home-Wi-Fi' found!
+[INFO] pyrobusta.con.wifi: connected, available at 192.168.1.101
+[WARN] pyrobusta.server.http_server.init_pools: low-memory mode with reduced buffer size
+[INFO] pyrobusta.server.http_server.init_pools: 2 connection(s) allowed
+[INFO] pyrobusta.server.http_server: started
+
+# You can now reach the device at 192.168.1.101:8080 (replace with your IP)
+# Press Ctrl-x to exit
+    </textarea>
+
+    <p>Use curl to test your application.</p>
+    <textarea readonly="true" rows="6">
+$ curl "http://192.168.1.101:8080/app"
+Free memory [bytes]: 115456
+
+$ curl "http://192.168.1.101:8080/app?format=%"
+Free memory [%]: 71.76
+    </textarea>
+
+    <div class="footer">
+        <hr>
+        <address>PyRobusta v0.3.0 Web Server</address>
+    </div>
+</body>
+</html>

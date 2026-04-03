@@ -49,6 +49,11 @@ toolchain:
 # -----------------------------
 .PHONY: build
 build: $(MPY_TARGETS) $(INIT_TARGETS)
+	@mkdir -p $(BUILD_DIR)
+	@if [ -d assets ]; then \
+		echo "Copying assets/ -> $(BUILD_DIR)"; \
+		cp -r assets $(BUILD_DIR)/${PKG}/; \
+	fi
 
 # Compile .py -> .mpy
 $(BUILD_DIR)/%.mpy: $(SRC_DIR)/%.py
@@ -92,6 +97,18 @@ deploy-config:
 	@echo "Uploading pyrobusta.env"
 	@mpremote $(DEVICE) soft-reset
 	@if [ -f pyrobusta.env ]; then mpremote $(DEVICE) cp pyrobusta.env :pyrobusta.env; fi
+	@mpremote $(DEVICE) reset
+
+
+# -----------------------------
+# Deploy index page # TODO use install_www from assets module
+# -----------------------------
+.PHONY: deploy-www
+deploy-www:
+	@echo "Deploying /www"
+	@mpremote $(DEVICE) soft-reset
+	@mpremote $(DEVICE) run scripts/install_www.py
+	@mpremote $(DEVICE) reset
 
 # -----------------------------
 # Full redeploy
@@ -112,6 +129,9 @@ publish:
 	@sed -E -i.bak 's/(PYROBUSTA_VERSION[[:space:]]*=[[:space:]]*)"[^"]*"/\1"$(PYROBUSTA_VERSION)"/' \
 		$(SRC_DIR)/pyrobusta/utils/config.py \
 		&& rm -f $(SRC_DIR)/pyrobusta/utils/config.py.bak
+	@sed -E -i.bak 's/(PyRobusta[[:space:]]).+([[:space:]]Web Server)/\1$(PYROBUSTA_VERSION)\2/' \
+		$(ASSETS_DIR)/www/*.html \
+		&& rm -f $(SRC_DIR)/www/*.bak
 	$(MAKE) clean
 	$(MAKE) build BUILD_DIR=$(DIST_DIR)
 	scripts/update_package.bash $(DIST_DIR) package.json $(PYROBUSTA_VERSION)
