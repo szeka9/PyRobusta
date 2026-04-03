@@ -66,6 +66,7 @@ $(BUILD_DIR)/%.py: $(SRC_DIR)/%.py
 .PHONY: deploy
 deploy:
 	@echo "Uploading build/$(PKG) to device $(DEVICE)"
+	@mpremote $(DEVICE) soft-reset
 	@mpremote $(DEVICE) mkdir :/lib  || true
 	@find $(BUILD_DIR)/$(PKG) | while read source; do \
 		rel=$${source#$(BUILD_DIR)/}; \
@@ -79,6 +80,7 @@ deploy:
 		fi; \
 		sleep 1; \
 	done
+	@mpremote $(DEVICE) reset
 
 # -----------------------------
 # Deploy custom configuration
@@ -86,6 +88,7 @@ deploy:
 .PHONY: deploy-config
 deploy-config:
 	@echo "Uploading pyrobusta.env"
+	@mpremote $(DEVICE) soft-reset
 	@if [ -f pyrobusta.env ]; then mpremote $(DEVICE) cp pyrobusta.env :pyrobusta.env; fi
 
 # -----------------------------
@@ -152,16 +155,20 @@ run-unix: stage-example
 .PHONY: deploy-example
 deploy-example:
 	@echo "Uploading boot.py"
+	@mpremote $(DEVICE) soft-reset
 	mpremote $(DEVICE) cp $(EXAMPLE_DIR)/boot.py :boot.py
+	mpremote $(DEVICE) cp $(EXAMPLE_DIR)/app.py :app.py
 
 	@echo "Uploading pyrobusta.env"
 	@if [ -f pyrobusta.env ]; then mpremote $(DEVICE) cp pyrobusta.env :pyrobusta.env; fi
+	@mpremote $(DEVICE) reset
 
 # -----------------------------
 # Run example directly
 # -----------------------------
 .PHONY: run-device
 run-device:
+	@mpremote $(DEVICE) soft-reset
 	mpremote $(DEVICE) run $(EXAMPLE_DIR)/app.py
 
 
@@ -234,12 +241,14 @@ test-unix: stage-test tls-cert
 # Run functional tests on device
 # -----------------------------
 .PHONY: test-device
-test-device: #clean-device upload
+test-device: stage-test #clean-device upload
+	@mpremote $(DEVICE) soft-reset
 	@cd $(TEST_RUNTIME); \
 	for test in test_*.py; do \
 		echo "Running $$test"; \
 		mpremote $(DEVICE) run $$(basename $$test) || exit 1; \
 	done
+	@mpremote $(DEVICE) reset
 
 # ================================================
 # Utilities for TLS
@@ -272,8 +281,10 @@ tls-cert:
 # -----------------------------
 .PHONY: deploy-cert
 deploy-cert:
+	@mpremote $(DEVICE) soft-reset
 	@mpremote $(DEVICE) cp $(TLS_DIR)/key.der :key.der
 	@mpremote $(DEVICE) cp $(TLS_DIR)/cert.der :cert.der
+	@mpremote $(DEVICE) reset
 
 # ================================================
 # Cleanup
@@ -305,4 +316,6 @@ clean: clean-build clean-runtime
 # -----------------------------
 .PHONY: clean-device
 clean-device:
+	@mpremote $(DEVICE) soft-reset
 	mpremote $(DEVICE) run scripts/clean_device.py
+	@mpremote $(DEVICE) reset
