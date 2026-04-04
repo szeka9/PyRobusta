@@ -8,7 +8,12 @@ from pyrobusta.protocol.http import (
     HttpEngine,
     enable_optional_features,
 )
-from pyrobusta.utils import config
+from pyrobusta.utils.config import (
+    CONF_TLS,
+    CONF_LOG_LEVEL,
+    CONF_HTTP_MULTIPART,
+    _CONFIG_CACHE,
+)
 
 #################################################
 # Test helpers
@@ -136,12 +141,9 @@ def setup_config(tls_enabled=False):
     http_server.HttpServer.LISTEN_PORT_HTTP = 8080
     http_server.HttpServer.LISTEN_PORT_HTTPS = 4443
 
-    config_idx = config.CONFIG_CACHE.index("log_level")
-    config.CONFIG_CACHE[config_idx + 1] = str("warning")
-    config_idx = config.CONFIG_CACHE.index("http_multipart")
-    config.CONFIG_CACHE[config_idx + 1] = "True"
-    config_idx = config.CONFIG_CACHE.index("tls")
-    config.CONFIG_CACHE[config_idx + 1] = str(tls_enabled)
+    _CONFIG_CACHE[2 * CONF_LOG_LEVEL + 1] = "warning"
+    _CONFIG_CACHE[2 * CONF_TLS + 1] = tls_enabled
+    _CONFIG_CACHE[2 * CONF_HTTP_MULTIPART + 1] = True
     enable_optional_features()
 
 

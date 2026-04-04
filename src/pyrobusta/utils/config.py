@@ -4,39 +4,82 @@ configuration is read from /pyrobusta.env.
 Values can be encapsulated by single or double quotes.
 """
 
+try:
+    from micropython import const
+except ImportError:
+
+    def const(n):  # pylint: disable=C0116
+        return n
+
+
 from .helpers import normalize_path
 
 PYROBUSTA_VERSION = "v0.4.0"
-CONFIG_LOADED = False
 CONFIG_LOCATION = "pyrobusta.env"
-CONFIG_CACHE = [
-    "wifi_ssid",
+
+# -------------------------------------------
+# Global runtime configuration keys.
+# Provide these keys when using get_config().
+# -------------------------------------------
+CONF_WIFI_SSID = const(0)
+CONF_WIFI_PASSWORD = const(1)
+CONF_HTTP_PORT = const(2)
+CONF_HTTPS_PORT = const(3)
+CONF_HTTP_MULTIPART = const(4)
+CONF_HTTP_MEM_CAP = const(5)
+CONF_HTTP_SERVED_PATHS = const(6)
+CONF_HTTP_SERVE_FILES = const(7)
+CONF_SOCKET_MAX_CON = const(8)
+CONF_TLS = const(9)
+CONF_LOG_LEVEL = const(10)
+
+# -------------------
+# Configuration state
+# -------------------
+_CONFIG_LOADED = False
+_CONFIG_CACHE = [
+    CONF_WIFI_SSID,
     None,
-    "wifi_password",
+    CONF_WIFI_PASSWORD,
     None,
-    "http_multipart",
-    "False",
-    "http_mem_cap",
+    CONF_HTTP_PORT,
+    80,
+    CONF_HTTPS_PORT,
+    443,
+    CONF_HTTP_MULTIPART,
+    False,
+    CONF_HTTP_MEM_CAP,
     0.1,
-    "http_served_paths",
-    "/www /lib/pyrobusta",
-    "http_serve_files",
-    "True",
-    "socket_max_con",
+    CONF_HTTP_SERVED_PATHS,
+    ["/www", "/lib/pyrobusta"],
+    CONF_HTTP_SERVE_FILES,
+    True,
+    CONF_SOCKET_MAX_CON,
     2,
-    "tls",
-    "False",
-    "log_level",
+    CONF_TLS,
+    False,
+    CONF_LOG_LEVEL,
     "info",
 ]
 
 
-def normalize(key, value):
+# --------------
+# Public helpers
+# --------------
+def parse_config(key, value):
     """
     Normalize a configuration value depending on the key.
     """
-    if key == "http_served_paths":
-        return " ".join([normalize_path(p) for p in value.split()])
+    if key in (CONF_HTTP_MULTIPART, CONF_HTTP_SERVE_FILES, CONF_TLS):
+        return value.lower() == "true"
+    if key in (CONF_HTTP_PORT, CONF_HTTPS_PORT, CONF_SOCKET_MAX_CON):
+        return int(value)
+    if key == CONF_HTTP_MEM_CAP:
+        return float(value)
+    if key == CONF_HTTP_SERVED_PATHS:
+        return [normalize_path(p) for p in value.split()]
+    if key not in (CONF_WIFI_SSID, CONF_WIFI_PASSWORD):
+        return value.lower()
     return value
 
 
@@ -52,18 +95,22 @@ def read_config(config=CONFIG_LOCATION):
                 if not line.strip():
                     continue
                 parts = line.split("=")
-                key = parts[0].strip()
+                key_name = "CONF_" + parts[0].strip().upper()
+                if key_name in globals():
+                    key = globals()[key_name]
+                else:
+                    key = len(_CONFIG_CACHE) // 2 + 1
+                    globals()[key_name] = key
                 value = parts[1].strip().strip("'").strip('"')
-                if key and value:
-                    value = normalize(key, value)
-                    if (
-                        key in CONFIG_CACHE
-                        and (conf_idx := CONFIG_CACHE.index(key)) % 2 == 0
-                    ):
-                        CONFIG_CACHE[conf_idx + 1] = value
-                    else:
-                        CONFIG_CACHE.append(key)
-                        CONFIG_CACHE.append(value)
+                value = parse_config(key, value)
+                if (
+                    key in _CONFIG_CACHE
+                    and (conf_idx := _CONFIG_CACHE.index(key)) % 2 == 0
+                ):
+                    _CONFIG_CACHE[conf_idx + 1] = value
+                else:
+                    _CONFIG_CACHE.append(key)
+                    _CONFIG_CACHE.append(value)
     except OSError:
         pass
 
@@ -74,15 +121,8 @@ def get_config(key):
     The cache is reloaded if the key is missing
     or the value is set to None.
     """
-    global CONFIG_LOADED  # pylint: disable=W0603
-    if key not in CONFIG_CACHE or not CONFIG_LOADED:
+    global _CONFIG_LOADED  # pylint: disable=W0603
+    if _CONFIG_CACHE[2 * key + 1] is None or not _CONFIG_LOADED:
         read_config()
-        CONFIG_LOADED = True
-    try:
-        conf_idx = CONFIG_CACHE.index(key)
-    except IndexError:
-        return None
-    if CONFIG_CACHE[conf_idx + 1] is None:
-        read_config()
-        conf_idx = CONFIG_CACHE.index(key)
-    return CONFIG_CACHE[conf_idx + 1]
+        _CONFIG_LOADED = True
+    return _CONFIG_CACHE[2 * key + 1]

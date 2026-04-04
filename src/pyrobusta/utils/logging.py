@@ -2,7 +2,7 @@
 Config-based logging module for different log levels
 """
 
-from .config import get_config
+from .config import get_config, CONF_LOG_LEVEL
 
 _LOG_LEVEL_WARNING = 0
 _LOG_LEVEL_INFO = 1
@@ -13,7 +13,7 @@ def current_log_level():
     """
     Determine current log level from the config
     """
-    current = get_config("log_level").lower()
+    current = get_config(CONF_LOG_LEVEL)
     if current == "debug":
         return _LOG_LEVEL_DEBUG
     if current == "info":

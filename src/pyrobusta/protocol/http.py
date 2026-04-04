@@ -6,7 +6,12 @@ with partial guarantees on RFC compliance.
 from json import dumps
 from io import BytesIO
 
-from ..utils.config import get_config
+from ..utils.config import (
+    get_config,
+    CONF_HTTP_SERVED_PATHS,
+    CONF_HTTP_MULTIPART,
+    CONF_HTTP_SERVE_FILES,
+)
 
 
 class HeaderParsingError(ValueError):
@@ -217,7 +222,7 @@ class HttpEngine:
         """
         Returns true if a normalized path is configured to be served
         """
-        served_paths = set(get_config("http_served_paths").split())
+        served_paths = get_config(CONF_HTTP_SERVED_PATHS)
         parts = path.split("/")
         for i, _ in enumerate(parts):
             current_path = "/".join(parts[: i + 1])
@@ -644,12 +649,12 @@ def enable_optional_features():
     """
     Enable related optional features, set in the config.
     """
-    if get_config("http_multipart").lower() == "true":
+    if get_config(CONF_HTTP_MULTIPART):
         from pyrobusta.protocol import http_multipart
 
         http_multipart.apply_patches()
 
-    if get_config("http_serve_files").lower() == "true":
+    if get_config(CONF_HTTP_SERVE_FILES):
         from pyrobusta.protocol import http_file_server
 
         http_file_server.apply_patches()

@@ -1,8 +1,9 @@
+import os
 import sys
 import unittest
 
 from unittest import mock
-from unittest.mock import MagicMock, patch, mock_open
+from unittest.mock import patch, mock_open
 
 from .utils import load_module, fake_stat
 
@@ -14,45 +15,57 @@ class TestWebStateMachineBase(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.config = {}
+        cls.base_config = {}
+        cls.cwd = os.getcwd()
 
     def setUp(self):
-        # Create mock modules
-        self.mock_utils = MagicMock()
-        self.mock_utils_config = MagicMock()
-        self.mock_utils_config.get_config = MagicMock()
-        self.mock_utils.config = self.mock_utils_config
-
-        self.patcher = patch.dict(
-            sys.modules,
-            {
-                "pyrobusta.utils": self.mock_utils,
-                "pyrobusta.utils.config": self.mock_utils_config,
-            },
-        )
-        self.patcher.start()
-        self.set_mock_config()
-
-        # Load your web and buffer modules
+        # -------------------------------
+        # Patch current working directory
+        # -------------------------------
         self.helpers_module = load_module("pyrobusta/utils/helpers.py")
-        buffer_module = load_module("pyrobusta/stream/buffer.py")
-        self.web_module = load_module("pyrobusta/protocol/http.py")
-        self.web_module.enable_optional_features()
+        self.cwd_patcher = patch.object(
+            self.helpers_module, "getcwd", return_value=self.cwd
+        )
+        self.cwd_patcher.start()
+        self.addCleanup(self.cwd_patcher.stop)
 
-        self.engine = self.web_module.HttpEngine()
+        # -------------------
+        # Patch config module
+        # -------------------
+        self.config = dict(self.base_config)
+        self.config_module = load_module("pyrobusta/utils/config.py")
+        self.module_patcher = patch.dict(
+            sys.modules,
+            {"pyrobusta.utils.config": self.config_module},
+        )
+        self.module_patcher.start()
+        self.addCleanup(self.module_patcher.stop)
+
+        def open_side_effect(*args, **kwargs):
+            data = "\n".join(f"{k}={v}" for k, v in self.config.items())
+            return mock_open(read_data=data)(*args, **kwargs)
+
+        self.open_patcher = patch.object(
+            self.config_module,
+            "open",
+            side_effect=open_side_effect,
+        )
+        self.open_patcher.start()
+        self.addCleanup(self.open_patcher.stop)
+
+        # ------------------------------------------------
+        # Load remaining modules, enable optional features
+        # ------------------------------------------------
+        self.http_module = load_module("pyrobusta/protocol/http.py")
+        self.http_module.enable_optional_features()
+        self.engine = self.http_module.HttpEngine()
+
+        # --------------------
+        # HTTP engine, buffers
+        # --------------------
+        buffer_module = load_module("pyrobusta/stream/buffer.py")
         self.rx = buffer_module.SlidingBuffer(bytearray(1024))
         self.tx = buffer_module.SlidingBuffer(bytearray(1024))
-
-    def tearDown(self):
-        self.patcher.stop()
-
-    def set_mock_config(self):
-        def side_effect(input_arg, *_, **__):
-            if input_arg in self.config:
-                return self.config[input_arg]
-            raise ValueError(f"Unexpected config key: {input_arg}")
-
-        self.mock_utils_config.get_config.side_effect = side_effect
 
 
 class TestWebStateMachine(TestWebStateMachineBase):
@@ -62,7 +75,8 @@ class TestWebStateMachine(TestWebStateMachineBase):
 
     @classmethod
     def setUpClass(cls):
-        cls.config = {"http_multipart": "False", "http_serve_files": "False"}
+        cls.base_config = {"http_multipart": "False", "http_serve_files": "False"}
+        cls.cwd = os.getcwd()
 
     def test_status_parsing_valid(self):
         request = b"GET /index.html HTTP/1.1\r\nContent-Length:10"
@@ -157,7 +171,7 @@ class TestWebStateMachine(TestWebStateMachineBase):
             b"space in header name: value",
             b"new-line-in-header:\nvalue",
         ):
-            with self.assertRaises(self.web_module.HeaderParsingError):
+            with self.assertRaises(self.http_module.HeaderParsingError):
                 self.engine._parse_headers(case)
 
     def test_routing_unsupported_method(self):
@@ -413,8 +427,23 @@ class TestWebStateMachine(TestWebStateMachineBase):
         self.assertEqual(self.engine.status_code, None)
         self.assertEqual(self.engine.state, self.engine._recv_chunk_st)
 
+
+class TestWebHelpers(TestWebStateMachineBase):
+    """
+    Tests for helper functions.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.base_config = {"http_multipart": "False", "http_serve_files": "False"}
+        # Simplify file-open assertions by treating resources
+        # as if they are installed at the root (/) rather than
+        # relative to the current working directory.
+        cls.cwd = "/"
+
     def test_path_serving_list(self):
         self.config["http_served_paths"] = "/path/to/dir1 /path/to/dir2"
+        self.config_module.read_config()
         self.assertEqual(self.engine.is_norm_path_served(""), False)
         self.assertEqual(self.engine.is_norm_path_served("/"), False)
         self.assertEqual(self.engine.is_norm_path_served("/path/to/dir1"), True)
@@ -427,12 +456,14 @@ class TestWebStateMachine(TestWebStateMachineBase):
 
     def test_path_serving_root(self):
         self.config["http_served_paths"] = "/"
+        self.config_module.read_config()
         self.assertEqual(self.engine.is_norm_path_served(""), True)
         self.assertEqual(self.engine.is_norm_path_served("/"), True)
         self.assertEqual(self.engine.is_norm_path_served("/path/to/served"), True)
 
     def test_path_serving_none(self):
         self.config["http_served_paths"] = ""
+        self.config_module.read_config()
         self.assertEqual(self.engine.is_norm_path_served(""), False)
         self.assertEqual(self.engine.is_norm_path_served("/"), False)
         self.assertEqual(self.engine.is_norm_path_served("/path/to/served"), False)
@@ -445,7 +476,8 @@ class TestMultipartStateMachine(TestWebStateMachineBase):
 
     @classmethod
     def setUpClass(cls):
-        cls.config = {"http_multipart": "True", "http_serve_files": "True"}
+        cls.base_config = {"http_multipart": "True", "http_serve_files": "False"}
+        cls.cwd = os.getcwd()
 
     def test_multipart_parser(self):
         for case in [
@@ -478,7 +510,7 @@ class TestMultipartStateMachine(TestWebStateMachineBase):
             {"content-type": 'multipart/form-data;boundary=missing-quote"'},
         ]:
             with self.subTest(headers=case):
-                with self.assertRaises(self.web_module.HeaderParsingError):
+                with self.assertRaises(self.http_module.HeaderParsingError):
                     self.engine._get_mp_boundary(case)
 
     def test_multipart_receiver_valid(self):
@@ -609,21 +641,25 @@ class TestFileServerStateMachine(TestWebStateMachineBase):
 
     @classmethod
     def setUpClass(cls):
-        cls.config = {
+        cls.base_config = {
             "http_multipart": "False",
             "http_serve_files": "True",
             "http_served_paths": "/www",
         }
+        # Simplify file-open assertions by treating resources
+        # as if they are installed at the root (/) rather than
+        # relative to the current working directory.
+        cls.cwd = "/"
 
     @staticmethod
     def patch_all(f):
-        @patch("pyrobusta.utils.helpers.getcwd", return_value="/")
         @patch("pyrobusta.protocol.http_file_server.stat", fake_stat)
         def decorated(*args, **kwargs):
             return f(*args, **kwargs)
 
         return decorated
 
+    @patch_all
     def test_file_serving_missing_file(self, *_):
         self.engine.url = b"/files/www/nonexistent.js"
         self.engine.method = b"GET"
