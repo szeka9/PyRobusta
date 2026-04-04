@@ -152,6 +152,7 @@ stage-example:
 
 	@echo "Copying built package"
 	@cp -r build/pyrobusta $(RUNTIME_DIR)/lib
+	@cp -r build/pyrobusta/assets/www $(RUNTIME_DIR)/
 
 	@echo "Copying example app"
 	@cp $(EXAMPLE_DIR)/app.py $(RUNTIME_DIR)/
@@ -162,6 +163,8 @@ stage-example:
 	@cp $(TLS_DIR)/key.der $(RUNTIME_DIR)/
 
 	@if [ -f pyrobusta.env ]; then cp pyrobusta.env $(RUNTIME_DIR)/; fi
+	@echo "http_port=8080" >> $(RUNTIME_DIR)/pyrobusta.env
+	@echo "https_port=4443" >> $(RUNTIME_DIR)/pyrobusta.env
 
 # -----------------------------
 # Run example locally with unix micropython

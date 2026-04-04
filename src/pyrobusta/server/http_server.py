@@ -9,7 +9,14 @@ from time import ticks_ms, ticks_diff
 from ..protocol import http
 from ..bindings.socket_http import SocketHttp
 from ..stream.buffer import MemoryPool, SlidingBuffer
-from ..utils.config import get_config
+from ..utils.config import (
+    get_config,
+    CONF_HTTP_PORT,
+    CONF_HTTPS_PORT,
+    CONF_HTTP_MEM_CAP,
+    CONF_TLS,
+    CONF_SOCKET_MAX_CON,
+)
 from ..utils.helpers import normalize_path
 from ..utils import logging
 
@@ -31,8 +38,8 @@ class HttpServer:
     CON_ACCEPT_SLEEP_MS = (
         100  # Duration of sleep between attempts to accept new connection
     )
-    LISTEN_PORT_HTTP = 80
-    LISTEN_PORT_HTTPS = 443
+    LISTEN_PORT_HTTP = get_config(CONF_HTTP_PORT)
+    LISTEN_PORT_HTTPS = get_config(CONF_HTTPS_PORT)
     TLS_CERT_PATH = "/cert.der"
     TLS_KEY_PATH = "/key.der"
     CON_TIMEOUT_S = 30
@@ -41,7 +48,7 @@ class HttpServer:
     # Constants for controlled memory footprint
     # -----------------------------------------
 
-    MEM_CAP = float(get_config("http_mem_cap"))  # Default memory cap (percentage / 100)
+    MEM_CAP = get_config(CONF_HTTP_MEM_CAP)  # Default memory cap (percentage / 100)
     SEND_BUF_MIN_BYTES = 512  # Minimum buffer size for responses
     SEND_BUF_MAX_BYTES = 4096  # Max buffer size for responses
     RECV_BUF_MIN_BYTES = 512  # Minimum buffer size for requests
@@ -105,7 +112,7 @@ class HttpServer:
         self._host = "0.0.0.0"
         self._port = (
             HttpServer.LISTEN_PORT_HTTPS
-            if get_config("tls").lower() == "true"
+            if get_config(CONF_TLS)
             else HttpServer.LISTEN_PORT_HTTP
         )
         self._server = None
@@ -190,11 +197,11 @@ class HttpServer:
             logging.debug(
                 __name__ + f"registered endpoints: {http.HttpEngine.ENDPOINTS}"
             )
-            self._max_clients = int(get_config("socket_max_con"))
+            self._max_clients = get_config(CONF_SOCKET_MAX_CON)
             self._init_pools(self._max_clients)
             ssl_ctx = None
 
-            if get_config("tls").lower() == "true":
+            if get_config(CONF_TLS):
                 import ssl
 
                 ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)

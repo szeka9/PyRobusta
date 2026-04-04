@@ -4,6 +4,8 @@ Utility scripts used by unit tests.
 
 import sys
 import importlib.util
+import time
+import os
 from pathlib import Path
 
 
@@ -25,3 +27,20 @@ def load_module(relative_path):
     sys.modules[module_name] = mod
     spec.loader.exec_module(mod)
     return mod
+
+
+def fake_stat(size=1024):
+    return os.stat_result(
+        (
+            0o100644,  # st_mode (regular file, 644 perms)
+            12345678,  # st_ino
+            2049,  # st_dev
+            1,  # st_nlink
+            1000,  # st_uid
+            1000,  # st_gid
+            size,  # st_size
+            int(time.time()),  # st_atime
+            int(time.time()),  # st_mtime
+            int(time.time()),  # st_ctime
+        )
+    )

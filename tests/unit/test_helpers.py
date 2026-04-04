@@ -7,7 +7,7 @@ from .utils import load_module
 
 class TestHelpers(unittest.TestCase):
     """
-    Base class for stat machine tests.
+    Base class for helper functions.
     """
 
     @classmethod

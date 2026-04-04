@@ -11,7 +11,13 @@ from pyrobusta.protocol.http import (
     enable_optional_features,
     ServerBusyError,
 )
-from pyrobusta.utils import config
+from pyrobusta.utils.config import (
+    CONF_HTTP_SERVED_PATHS,
+    CONF_TLS,
+    CONF_LOG_LEVEL,
+    _CONFIG_CACHE,
+    parse_config,
+)
 from pyrobusta.utils.helpers import normalize_path
 
 #################################################
@@ -258,13 +264,10 @@ def setup_config(tls_enabled=False, served_paths=""):
     http_server.HttpServer.LISTEN_PORT_HTTP = 8080
     http_server.HttpServer.LISTEN_PORT_HTTPS = 4443
 
-    config_idx = config.CONFIG_CACHE.index("log_level")
-    config.CONFIG_CACHE[config_idx + 1] = str("warning")
-    config_idx = config.CONFIG_CACHE.index("tls")
-    config.CONFIG_CACHE[config_idx + 1] = str(tls_enabled)
-    config_idx = config.CONFIG_CACHE.index("http_served_paths")
-    config.CONFIG_CACHE[config_idx + 1] = config.normalize(
-        "http_served_paths", served_paths
+    _CONFIG_CACHE[2 * CONF_LOG_LEVEL + 1] = "warning"
+    _CONFIG_CACHE[2 * CONF_TLS + 1] = tls_enabled
+    _CONFIG_CACHE[2 * CONF_HTTP_SERVED_PATHS + 1] = parse_config(
+        CONF_HTTP_SERVED_PATHS, served_paths
     )
     enable_optional_features()
 

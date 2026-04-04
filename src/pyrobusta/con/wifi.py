@@ -6,7 +6,7 @@ from time import sleep
 
 from network import WLAN, STA_IF
 
-from ..utils.config import get_config
+from ..utils.config import get_config, CONF_WIFI_SSID, CONF_WIFI_PASSWORD
 from ..utils import logging
 
 
@@ -14,8 +14,8 @@ def initialize():
     """
     Initialize WLAN interface in station mode
     """
-    ssid = get_config("wifi_ssid")
-    password = get_config("wifi_password")
+    ssid = get_config(CONF_WIFI_SSID)
+    password = get_config(CONF_WIFI_PASSWORD)
 
     if not ssid or not password:
         logging.warning(__name__ + ": missing SSID/password")

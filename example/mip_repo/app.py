@@ -3,26 +3,20 @@ import os
 
 import pyrobusta.server.http_server as http_server
 from pyrobusta.protocol.http import HttpEngine
-from pyrobusta.utils import logging, config
+from pyrobusta.utils import logging, config, assets, helpers
 
 
 def append_package_files(dir, package_files, host_name, protocol):
     """
     Construct package file list recursively.
     """
-    for name in os.listdir(dir):
-        current_path = f"{dir}/{name}"
-        st = os.stat(current_path)
-        mode = st[0]
-        if mode & 0x4000:  # directory bit set
-            append_package_files(current_path, package_files, host_name, protocol)
-            continue
+    dir = helpers.normalize_path(dir)
 
-        target_path = current_path[4:] if current_path.startswith("lib/") else current_path
+    for asset in assets.iterate_fs(dir):
         package_files["urls"].append(
             [
-                target_path,
-                f"{protocol}://{host_name}/files/{current_path}",
+                asset,
+                f"{protocol}://{host_name}/files" + asset,
             ]
         )
 
@@ -30,7 +24,7 @@ def append_package_files(dir, package_files, host_name, protocol):
 @HttpEngine.route("/pyrobusta/package.json", "GET")
 def self_serve_mip_package(http_ctx, _):
     package_files = {"version": config.PYROBUSTA_VERSION, "deps": [], "urls": []}
-    tls_enabled = config.get_config("tls").lower() == "true"
+    tls_enabled = config.get_config(config.CONF_TLS)
     server_addr = http_ctx.headers["host"]
     if ":" not in server_addr:
         port = (
@@ -44,8 +38,7 @@ def self_serve_mip_package(http_ctx, _):
     protocol = "https" if tls_enabled else "http"
 
     logging.debug(f"[mip_repo] server_addr: {server_addr}")
-    root = "pyrobusta" if "pyrobusta" in os.listdir() else "lib/pyrobusta"
-    append_package_files(root, package_files, server_addr, protocol)
+    append_package_files("/lib/pyrobusta", package_files, server_addr, protocol)
     return "application/json", package_files
 
 
