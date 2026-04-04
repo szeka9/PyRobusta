@@ -1,14 +1,15 @@
 import sys
 import unittest
-from unittest import mock
-from unittest.mock import MagicMock, patch
 
-from .utils import load_module
+from unittest import mock
+from unittest.mock import MagicMock, patch, mock_open
+
+from .utils import load_module, fake_stat
 
 
 class TestWebStateMachineBase(unittest.TestCase):
     """
-    Base class for stat machine tests.
+    Base class for state machine tests.
     """
 
     @classmethod
@@ -439,7 +440,7 @@ class TestWebStateMachine(TestWebStateMachineBase):
 
 class TestMultipartStateMachine(TestWebStateMachineBase):
     """
-    Tests for multipart handling
+    Tests for multipart handling.
     """
 
     @classmethod
@@ -599,6 +600,128 @@ class TestMultipartStateMachine(TestWebStateMachineBase):
         )
         self.assertEqual(self.engine.mp_is_first, True)
         self.assertEqual(self.engine.mp_is_last, True)
+
+
+class TestFileServerStateMachine(TestWebStateMachineBase):
+    """
+    Tests for file serving.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.config = {
+            "http_multipart": "False",
+            "http_serve_files": "True",
+            "http_served_paths": "/www",
+        }
+
+    @staticmethod
+    def patch_all(f):
+        @patch("pyrobusta.utils.helpers.getcwd", return_value="/")
+        @patch("pyrobusta.protocol.http_file_server.stat", fake_stat)
+        def decorated(*args, **kwargs):
+            return f(*args, **kwargs)
+
+        return decorated
+
+    def test_file_serving_missing_file(self, *_):
+        self.engine.url = b"/files/www/nonexistent.js"
+        self.engine.method = b"GET"
+        self.engine.version = b"HTTP/1.1"
+        self.engine.state = self.engine._send_file_st
+
+        self.engine.state(self.rx, self.tx, self.engine.url)
+
+        self.assertEqual(self.engine.status_code, 404)
+        self.assertEqual(self.engine.state, None)
+
+    @patch_all
+    def test_file_serving_root(self, *_):
+        self.engine.url = b"/"
+        self.engine.method = b"GET"
+        self.engine.version = b"HTTP/1.1"
+        self.engine.state = self.engine._send_file_st
+        file_content = "index content"
+
+        with patch("builtins.open", mock_open(read_data=file_content)) as m:
+            response_generator = self.engine.state(self.rx, self.tx, self.engine.url)
+            m.assert_called_once_with("/www/index.html", "rb")
+
+        self.assertEqual(response_generator.read(), file_content)
+        self.assertEqual(self.engine.status_code, 200)
+        self.assertEqual(self.engine.state, None)
+
+    @patch_all
+    def test_file_serving_files_endpoint(self, *_):
+        self.engine.url = b"/files/www/scripts.js"
+        self.engine.method = b"GET"
+        self.engine.version = b"HTTP/1.1"
+        self.engine.state = self.engine._send_file_st
+        file_content = "data"
+
+        with patch("builtins.open", mock_open(read_data=file_content)) as m:
+            response_generator = self.engine.state(self.rx, self.tx, self.engine.url)
+            m.assert_called_once_with("/www/scripts.js", "rb")
+
+        self.assertEqual(response_generator.read(), file_content)
+        self.assertEqual(self.engine.status_code, 200)
+        self.assertEqual(self.engine.state, None)
+
+    @patch_all
+    def test_file_serving_known_content_type(self, *_):
+        self.engine.url = b"/scripts.js"
+        self.engine.method = b"GET"
+        self.engine.version = b"HTTP/1.1"
+        self.engine.state = self.engine._send_file_st
+        file_content = "data"
+
+        with patch("builtins.open", mock_open(read_data=file_content)) as m:
+            response_generator = self.engine.state(self.rx, self.tx, self.engine.url)
+            m.assert_called_once_with("/www/scripts.js", "rb")
+
+        self.assertEqual(response_generator.read(), file_content)
+        self.assertEqual(
+            self.engine._lookup(self.engine.resp_headers, b"content-type"),
+            b"application/javascript",
+        )
+        self.assertEqual(self.engine.status_code, 200)
+        self.assertEqual(self.engine.state, None)
+
+    @patch_all
+    def test_file_serving_fallback_content_type(self, *_):
+        self.engine.url = b"/scripts.unknown"
+        self.engine.method = b"GET"
+        self.engine.version = b"HTTP/1.1"
+        self.engine.state = self.engine._send_file_st
+        file_content = "data"
+
+        with patch("builtins.open", mock_open(read_data=file_content)) as m:
+            response_generator = self.engine.state(self.rx, self.tx, self.engine.url)
+            m.assert_called_once_with("/www/scripts.unknown", "rb")
+
+        self.assertEqual(response_generator.read(), file_content)
+        self.assertEqual(
+            self.engine._lookup(self.engine.resp_headers, b"content-type"),
+            b"application/octet-stream",
+        )
+        self.assertEqual(self.engine.status_code, 200)
+        self.assertEqual(self.engine.state, None)
+
+    @patch_all
+    def test_file_serving_unserved_content_rejected(self, *_):
+        self.engine.url = b"/files/unserved/script.js"
+        self.engine.method = b"GET"
+        self.engine.version = b"HTTP/1.1"
+        self.engine.state = self.engine._send_file_st
+        file_content = "data"
+
+        with patch("builtins.open", mock_open(read_data=file_content)) as m:
+            response_generator = self.engine.state(self.rx, self.tx, self.engine.url)
+            m.assert_not_called()
+
+        self.assertEqual(response_generator, None)
+        self.assertEqual(self.engine.status_code, 403)
+        self.assertEqual(self.engine.state, None)
 
 
 if __name__ == "__main__":
