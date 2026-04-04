@@ -104,6 +104,8 @@ def main():
         asyncio.get_event_loop().close()
     </textarea>
     <textarea readonly="true" rows="13">
+# /boot.py
+
 # This file is executed on every boot (including wake-boot from deepsleep)
 import machine
 from os import listdir
@@ -136,16 +138,16 @@ Connected to MicroPython at /dev/ttyACM0
 [INFO] pyrobusta.server.http_server.init_pools: 2 connection(s) allowed
 [INFO] pyrobusta.server.http_server: started
 
-# You can now reach the device at 192.168.1.101:8080 (replace with your IP)
+# You can now reach the device at 192.168.1.101 (replace with your IP)
 # Press Ctrl-x to exit
     </textarea>
 
     <p>Use curl to test your application.</p>
     <textarea readonly="true" rows="6">
-$ curl "http://192.168.1.101:8080/app"
+$ curl "http://192.168.1.101/app"
 Free memory [bytes]: 115456
 
-$ curl "http://192.168.1.101:8080/app?format=%"
+$ curl "http://192.168.1.101/app?format=%"
 Free memory [%]: 71.76
     </textarea>
 
