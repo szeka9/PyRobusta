@@ -16,7 +16,6 @@ class BaseConnection:
 
     __slots__ = ("id", "connected", "last_event", "_reader", "_writer")
 
-
     def __init__(self, reader, writer):
         """
         Base class for connection handling.
@@ -31,17 +30,20 @@ class BaseConnection:
         self._writer = writer
 
     async def __aenter__(self):
-       return self
+        return self
 
     async def __aexit__(self, exc_type, exc_value, traceback):
-       await self.close()
+        await self.close()
 
-    async def read(self, read_bytes, decoding="utf8", timeout_seconds=0):
+    async def read(
+        self, read_bytes: int, decoding: str = "utf8", timeout_seconds: int = 0
+    ):
         """
-        [Base] Implements client read function
-        :return tuple: read_error, data
-        - read_error is set to true upon timeout or other exception
-        - data holds bytes or decoded string read from the socket
+        Read data with StreamReader object, wraps the read() method of StreamReader.
+        :param read_bytes: number of bytes to read
+        :param decoding: decoding to use (optional), bytes are returned by default
+        :param timeout_seconds: an exception is raised if exceeded, 0 means waiting indefinitely
+        :return data: holds bytes or decoded string read from the socket
         """
         if not self.connected:
             raise OSError(f"{self.id} already closed")
@@ -58,7 +60,11 @@ class BaseConnection:
             request = request.decode(decoding)
         return request
 
-    async def write(self, data):
+    async def write(self, data: bytes | bytearray | memoryview):
+        """
+        Write data with StreamWriter object, wraps the write() method of StreamWriter.
+        :param data: data to writes
+        """
         if not self.connected:
             raise OSError(f"{self.id} already closed")
 
@@ -69,7 +75,7 @@ class BaseConnection:
 
     async def close(self):
         """
-        Async socket close method
+        Close the connection, update the internal state accordingly.
         """
         if not self.connected:
             return OSError(f"{self.id} already closed")

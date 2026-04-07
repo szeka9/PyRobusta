@@ -4,7 +4,6 @@ HTTP application-layer interface for socket connections.
 
 import asyncio
 from asyncio import sleep_ms  # pylint: disable=E1101
-from gc import collect
 
 from ..stream.buffer import BufferFullError
 from ..transport.connection import BaseConnection
@@ -78,7 +77,9 @@ class HttpConnection(BaseConnection):
             num_read = await self._read_to_buf()
             if not num_read:
                 # Reject incomplete request
-                self._engine.on_client_error(self._send_buf, self._engine.BAD_REQUEST_ERROR)
+                self._engine.on_client_error(
+                    self._send_buf, self._engine.BAD_REQUEST_ERROR
+                )
                 await self._flush_response()
                 return
         try:
