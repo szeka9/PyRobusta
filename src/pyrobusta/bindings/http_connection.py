@@ -77,6 +77,9 @@ class HttpConnection(BaseConnection):
         if self._prev_state == self._engine.state or self._prev_state is None:
             num_read = await self._read_to_buf()
             if not num_read:
+                # Reject incomplete request
+                self._engine.on_client_error(self._send_buf, self._engine.BAD_REQUEST_ERROR)
+                await self._flush_response()
                 return
         try:
             resp_handler = None
@@ -96,7 +99,7 @@ class HttpConnection(BaseConnection):
             await self._flush_response()
             return
         except HeaderParsingError:
-            self._engine.on_client_error(self._send_buf, b"Invalid headers")
+            self._engine.on_client_error(self._send_buf, self._engine.HEADER_ERROR)
             await self._flush_response()
             return
         except Exception as e:  # pylint: disable=W0718
