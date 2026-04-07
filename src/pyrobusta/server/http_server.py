@@ -101,8 +101,6 @@ class HttpServer:
         logging.debug(__name__ + f": {client.id} dropped")
         await client.close()
         cls.ACTIVE_CLIENTS.remove(client)
-        del client
-        collect()
 
     # ----------------
     # Instance methods
@@ -124,7 +122,6 @@ class HttpServer:
         Evict closed/inactive sockets if needed.
         :return is_acceptable: true/false
         """
-        collect()
         con_timestamp = ticks_ms()
         while ticks_diff(ticks_ms(), con_timestamp) < self.CON_ACCEPT_TIMEOUT_MS:
             if len(self.ACTIVE_CLIENTS) < self._max_clients:
@@ -170,15 +167,19 @@ class HttpServer:
             await writer.wait_closed()
             return
 
+        client = None
         try:
             recv_buf, send_buf = await self._reserve_buffers()
-            new_client = HttpConnection(reader, writer, recv_buf, send_buf)
-            logging.debug(__name__ + f": accept {new_client.id}")
-            self.ACTIVE_CLIENTS.append(new_client)
-            await new_client.run()
+            client = HttpConnection(reader, writer, recv_buf, send_buf)
+            logging.debug(__name__ + f": accept {client.id}")
+            self.ACTIVE_CLIENTS.append(client)
+            async with client:
+                await client.run()
         except Exception as e:  # pylint: disable=W0718
             logging.warning(__name__ + f": error in run(): {e}")
         finally:
+            if client:
+                self.ACTIVE_CLIENTS.remove(client)
             if send_buf:
                 send_buf.consume()
                 self.SEND_POOL.release(send_buf)

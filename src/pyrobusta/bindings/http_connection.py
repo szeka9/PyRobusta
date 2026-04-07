@@ -32,25 +32,20 @@ class HttpConnection(BaseConnection):
         self._recv_buf = recv_buf
         self._send_buf = send_buf
 
-    async def _flush_response(self):
-        data = self._send_buf.peek()
-        for i in range(0, len(data), self.MTU_SIZE):
-            self.writer.write(data[i : i + self.MTU_SIZE])
-            await self.writer.drain()
-        self._send_buf.consume()
-
     async def run(self):
         """
         Handle socket connection with HTTP state machine parser.
         """
         self._prev_state = None
-        try:
-            while self._engine.state is not None:
-                await self._run_state_machine()
-                await sleep_ms(self.STATE_MACHINE_SLEEP_MS)
-        finally:
-            await self.close()
-            collect()
+        while self._engine.state is not None:
+            await self._run_state_machine()
+            await sleep_ms(self.STATE_MACHINE_SLEEP_MS)
+
+    async def _flush_response(self):
+        data = self._send_buf.peek()
+        for i in range(0, len(data), self.MTU_SIZE):
+            await self.write(data[i : i + self.MTU_SIZE])
+        self._send_buf.consume()
 
     async def _read_to_buf(self):
         buf_free = self._recv_buf.capacity - self._recv_buf.size()
