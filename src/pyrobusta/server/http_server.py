@@ -3,7 +3,7 @@ Socket server application
 """
 
 from gc import collect, mem_free
-from asyncio import sleep_ms, start_server, run  # pylint: disable=E1101
+from asyncio import sleep_ms, start_server  # pylint: disable=E1101
 from time import ticks_ms, ticks_diff
 
 from ..protocol import http
@@ -234,10 +234,3 @@ class HttpServer:
             await self._server.wait_closed()
             self._server = None
         collect()
-
-
-def main():
-    """
-    Start HTTP server async task.
-    """
-    run(HttpServer().start_socket_server())

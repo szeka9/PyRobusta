@@ -25,7 +25,7 @@ MPY_TARGETS = $(patsubst $(SRC_DIR)/%.py,$(BUILD_DIR)/%.mpy,$(NON_INIT_PY))
 INIT_TARGETS = $(patsubst $(SRC_DIR)/%.py,$(BUILD_DIR)/%.py,$(filter %__init__.py,$(PY_FILES)))
 
 .PHONY: all
-all: clean toolchain static-checkers unit-test build test-unix deploy publish
+all: clean toolchain static-checkers unit-test build test-unix deploy deploy-config tls-cert deploy-cert deploy-example
 
 # ================================================
 # Build
@@ -179,7 +179,7 @@ run-unix: stage-example
 # -----------------------------
 .PHONY: deploy-example
 deploy-example:
-	@echo "Uploading boot.py"
+	@echo "Uploading boot.py, app.py"
 	@mpremote $(DEVICE) soft-reset
 	mpremote $(DEVICE) cp $(EXAMPLE_DIR)/boot.py :boot.py
 	mpremote $(DEVICE) cp $(EXAMPLE_DIR)/app.py :app.py
@@ -187,14 +187,15 @@ deploy-example:
 	@echo "Uploading pyrobusta.env"
 	@if [ -f pyrobusta.env ]; then mpremote $(DEVICE) cp pyrobusta.env :pyrobusta.env; fi
 	@mpremote $(DEVICE) reset
+	@echo "\e[32m$(EXAMPLE_DIR) example is successfully deployed, \n"\
+	"run 'make DEVICE=$(DEVICE) run-device' to restart the device and check the output.\e[0m"
 
 # -----------------------------
-# Run example directly
+# Connect to device through REPL
 # -----------------------------
 .PHONY: run-device
 run-device:
-	@mpremote $(DEVICE) soft-reset
-	mpremote $(DEVICE) run $(EXAMPLE_DIR)/app.py
+	@mpremote $(DEVICE) reset repl
 
 
 # ================================================

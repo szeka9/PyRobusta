@@ -1,4 +1,5 @@
 # This file is executed on every boot (including wake-boot from deepsleep)
+import asyncio
 import machine
 from os import listdir
 
@@ -9,4 +10,4 @@ if connected and not machine.reset_cause() == machine.SOFT_RESET:
     if "app.py" in listdir():
         import app
 
-        app.main()
+        asyncio.run(app.main())
