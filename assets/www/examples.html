@@ -103,14 +103,14 @@ def main():
         logging.warning(f"loop stopped: {e}")
         asyncio.get_event_loop().close()
     </textarea>
-    <textarea readonly="true" rows="13">
+    <textarea readonly="true" rows="15">
 # /boot.py
 
 # This file is executed on every boot (including wake-boot from deepsleep)
 import machine
 from os import listdir
 
-from pyrobusta.con import wifi
+from pyrobusta.connectivity import wifi
 
 connected = wifi.initialize()
 if connected and not machine.reset_cause() == machine.SOFT_RESET:

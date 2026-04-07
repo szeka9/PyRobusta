@@ -7,7 +7,7 @@ from asyncio import sleep_ms, start_server, run  # pylint: disable=E1101
 from time import ticks_ms, ticks_diff
 
 from ..protocol import http
-from ..bindings.socket_http import SocketHttp
+from ..bindings.http_connection import HttpConnection
 from ..stream.buffer import MemoryPool, SlidingBuffer
 from ..utils.config import (
     get_config,
@@ -162,7 +162,7 @@ class HttpServer:
     async def _accept_socket(self, reader, writer):
         """
         Handle incoming socket connection for HTTP.
-        - creates SocketHttp object
+        - creates HttpConnection object
         """
         if not await self.can_handle_new_client():
             logging.debug(__name__ + ": cannot accept new client")
@@ -172,7 +172,7 @@ class HttpServer:
 
         try:
             recv_buf, send_buf = await self._reserve_buffers()
-            new_client = SocketHttp(reader, writer, recv_buf, send_buf)
+            new_client = HttpConnection(reader, writer, recv_buf, send_buf)
             logging.debug(__name__ + f": accept {new_client.id}")
             self.ACTIVE_CLIENTS.append(new_client)
             await new_client.run()

@@ -2,7 +2,7 @@
 import machine
 from os import listdir
 
-from pyrobusta.con import wifi
+from pyrobusta.connectivity import wifi
 
 connected = wifi.initialize()
 if connected and not machine.reset_cause() == machine.SOFT_RESET:
