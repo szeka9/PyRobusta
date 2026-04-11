@@ -2,7 +2,7 @@
 Socket server application
 """
 
-from gc import collect, mem_free
+from gc import collect, mem_free, mem_alloc
 from asyncio import sleep_ms, start_server  # pylint: disable=E1101
 from time import ticks_ms, ticks_diff
 
@@ -67,7 +67,7 @@ class HttpServer:
         """
         Initialize pool of buffers for sending/receiving based on different profiles
         """
-        mem_available = mem_free()
+        mem_available = mem_free() + mem_alloc()
         con_limit = max_clients
         usable = int(cls.MEM_CAP * mem_available)
         is_low_memory = (usable / con_limit) < (
