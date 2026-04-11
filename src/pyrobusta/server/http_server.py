@@ -2,12 +2,12 @@
 Socket server application
 """
 
-from gc import collect, mem_free
-from asyncio import sleep_ms, start_server, run  # pylint: disable=E1101
+from gc import collect, mem_free, mem_alloc
+from asyncio import sleep_ms, start_server  # pylint: disable=E1101
 from time import ticks_ms, ticks_diff
 
 from ..protocol import http
-from ..bindings.socket_http import SocketHttp
+from ..bindings.http_connection import HttpConnection
 from ..stream.buffer import MemoryPool, SlidingBuffer
 from ..utils.config import (
     get_config,
@@ -67,7 +67,7 @@ class HttpServer:
         """
         Initialize pool of buffers for sending/receiving based on different profiles
         """
-        mem_available = mem_free()
+        mem_available = mem_free() + mem_alloc()
         con_limit = max_clients
         usable = int(cls.MEM_CAP * mem_available)
         is_low_memory = (usable / con_limit) < (
@@ -101,8 +101,6 @@ class HttpServer:
         logging.debug(__name__ + f": {client.id} dropped")
         await client.close()
         cls.ACTIVE_CLIENTS.remove(client)
-        del client
-        collect()
 
     # ----------------
     # Instance methods
@@ -124,7 +122,6 @@ class HttpServer:
         Evict closed/inactive sockets if needed.
         :return is_acceptable: true/false
         """
-        collect()
         con_timestamp = ticks_ms()
         while ticks_diff(ticks_ms(), con_timestamp) < self.CON_ACCEPT_TIMEOUT_MS:
             if len(self.ACTIVE_CLIENTS) < self._max_clients:
@@ -162,7 +159,7 @@ class HttpServer:
     async def _accept_socket(self, reader, writer):
         """
         Handle incoming socket connection for HTTP.
-        - creates SocketHttp object
+        - creates HttpConnection object
         """
         if not await self.can_handle_new_client():
             logging.debug(__name__ + ": cannot accept new client")
@@ -170,15 +167,19 @@ class HttpServer:
             await writer.wait_closed()
             return
 
+        client = None
         try:
             recv_buf, send_buf = await self._reserve_buffers()
-            new_client = SocketHttp(reader, writer, recv_buf, send_buf)
-            logging.debug(__name__ + f": accept {new_client.id}")
-            self.ACTIVE_CLIENTS.append(new_client)
-            await new_client.run()
+            client = HttpConnection(reader, writer, recv_buf, send_buf)
+            logging.debug(__name__ + f": accept {client.id}")
+            self.ACTIVE_CLIENTS.append(client)
+            async with client:
+                await client.run()
         except Exception as e:  # pylint: disable=W0718
             logging.warning(__name__ + f": error in run(): {e}")
         finally:
+            if client:
+                self.ACTIVE_CLIENTS.remove(client)
             if send_buf:
                 send_buf.consume()
                 self.SEND_POOL.release(send_buf)
@@ -233,10 +234,3 @@ class HttpServer:
             await self._server.wait_closed()
             self._server = None
         collect()
-
-
-def main():
-    """
-    Start HTTP server async task.
-    """
-    run(HttpServer().start_socket_server())

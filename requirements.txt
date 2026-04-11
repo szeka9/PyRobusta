@@ -1,3 +1,5 @@
 mpremote==1.27.0
 pylint
 black
+requests
+matplotlib

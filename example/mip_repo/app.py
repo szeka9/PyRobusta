@@ -1,5 +1,4 @@
 import asyncio
-import os
 
 import pyrobusta.server.http_server as http_server
 from pyrobusta.protocol.http import HttpEngine
@@ -42,10 +41,8 @@ def self_serve_mip_package(http_ctx, _):
     return "application/json", package_files
 
 
-http_server.main()
-
-try:
-    asyncio.get_event_loop().run_forever()
-except Exception as e:
-    logging.warning(f"[asyncio] loop stopped: {e}")
-    asyncio.get_event_loop().close()
+async def main():
+    server = http_server.HttpServer()
+    asyncio.create_task(server.start_socket_server())
+    while True:
+        await asyncio.sleep(1)

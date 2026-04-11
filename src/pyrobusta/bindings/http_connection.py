@@ -4,15 +4,14 @@ HTTP application-layer interface for socket connections.
 
 import asyncio
 from asyncio import sleep_ms  # pylint: disable=E1101
-from gc import collect
 
 from ..stream.buffer import BufferFullError
-from ..transport.socket import SocketBase
+from ..transport.connection import BaseConnection
 from ..protocol.http import HttpEngine, ServerBusyError, HeaderParsingError
 from ..utils import logging
 
 
-class SocketHttp(SocketBase):
+class HttpConnection(BaseConnection):
     """
     HTTP wrapper class for representing HTTP socket connections, with
     buffer management and state machine parser.
@@ -32,25 +31,20 @@ class SocketHttp(SocketBase):
         self._recv_buf = recv_buf
         self._send_buf = send_buf
 
-    async def _flush_response(self):
-        data = self._send_buf.peek()
-        for i in range(0, len(data), SocketHttp.MTU_SIZE):
-            self.writer.write(data[i : i + SocketHttp.MTU_SIZE])
-            await self.writer.drain()
-        self._send_buf.consume()
-
     async def run(self):
         """
         Handle socket connection with HTTP state machine parser.
         """
         self._prev_state = None
-        try:
-            while self._engine.state is not None:
-                await self._run_state_machine()
-                await sleep_ms(SocketHttp.STATE_MACHINE_SLEEP_MS)
-        finally:
-            await self.close()
-            collect()
+        while self._engine.state is not None:
+            await self._run_state_machine()
+            await sleep_ms(self.STATE_MACHINE_SLEEP_MS)
+
+    async def _flush_response(self):
+        data = self._send_buf.peek()
+        for i in range(0, len(data), self.MTU_SIZE):
+            await self.write(data[i : i + self.MTU_SIZE])
+        self._send_buf.consume()
 
     async def _read_to_buf(self):
         buf_free = self._recv_buf.capacity - self._recv_buf.size()
@@ -62,7 +56,7 @@ class SocketHttp(SocketBase):
             request = await self.read(
                 read_bytes=buf_free,
                 decoding=None,
-                timeout_seconds=SocketHttp.RECV_TIMEOUT_SECONDS,
+                timeout_seconds=self.RECV_TIMEOUT_SECONDS,
             )
         except asyncio.TimeoutError:
             self._engine.on_timeout(self._send_buf)
@@ -82,6 +76,11 @@ class SocketHttp(SocketBase):
         if self._prev_state == self._engine.state or self._prev_state is None:
             num_read = await self._read_to_buf()
             if not num_read:
+                # Reject incomplete request
+                self._engine.on_client_error(
+                    self._send_buf, self._engine.BAD_REQUEST_ERROR
+                )
+                await self._flush_response()
                 return
         try:
             resp_handler = None
@@ -91,7 +90,7 @@ class SocketHttp(SocketBase):
                 if not self._send_buf.size():
                     break
                 await self._flush_response()
-                await sleep_ms(SocketHttp.STATE_MACHINE_SLEEP_MS)
+                await sleep_ms(self.STATE_MACHINE_SLEEP_MS)
         except BufferFullError:
             self._engine.on_failure(self._send_buf, b"Buffer full")
             await self._flush_response()
@@ -101,7 +100,7 @@ class SocketHttp(SocketBase):
             await self._flush_response()
             return
         except HeaderParsingError:
-            self._engine.on_client_error(self._send_buf, b"Invalid headers")
+            self._engine.on_client_error(self._send_buf, self._engine.HEADER_ERROR)
             await self._flush_response()
             return
         except Exception as e:  # pylint: disable=W0718
@@ -118,7 +117,7 @@ class SocketHttp(SocketBase):
                 await self._flush_response()
                 if is_finished:
                     break
-                await sleep_ms(SocketHttp.RESP_HANDLER_SLEEP_MS)
+                await sleep_ms(self.RESP_HANDLER_SLEEP_MS)
         elif type(resp_handler).__name__ in ("FileIO", "BytesIO"):
             with resp_handler as rh:
                 while True:
@@ -128,7 +127,7 @@ class SocketHttp(SocketBase):
                         break
                     self._send_buf.commit(num_read)
                     await self._flush_response()
-                    await sleep_ms(SocketHttp.RESP_HANDLER_SLEEP_MS)
+                    await sleep_ms(self.RESP_HANDLER_SLEEP_MS)
         else:
             self._engine.on_failure(
                 self._send_buf,

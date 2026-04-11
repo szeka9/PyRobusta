@@ -3,7 +3,6 @@ from gc import mem_free, mem_alloc
 
 from pyrobusta.server import http_server
 from pyrobusta.protocol.http import HttpEngine
-from pyrobusta.utils import logging
 
 
 @HttpEngine.route("/app", "GET")
@@ -24,10 +23,8 @@ def app(http_ctx, payload):
     return "text/plain", (f"Free memory [{value_format}]: {free}\n")
 
 
-def main():
-    http_server.main()
-    try:
-        asyncio.get_event_loop().run_forever()
-    except Exception as e:
-        logging.warning(f"loop stopped: {e}")
-        asyncio.get_event_loop().close()
+async def main():
+    server = http_server.HttpServer()
+    asyncio.create_task(server.start_socket_server())
+    while True:
+        await asyncio.sleep(1)

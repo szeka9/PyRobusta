@@ -60,8 +60,8 @@ make build              # Cross-compile, create build artifacts
 make deploy             # Upload build artifacts to device using mpremote
 make tls-cert           # Optional: generate self-signed certificate for the device
 make deploy-cert        # Optional: upload generated certificate to the device
-make deploy-example     # Upload example application using mpremote
-make run-device         # Run application on the device using mpremote run
+make deploy-example     # Deploy the selected example app using mpremote
+make run-device         # Optional: Reset the device and connect through REPL
 ```
 ```deploy-example``` and ```run-device``` uses the DEVICE argument
 set to ```u0``` (/dev/ttyUSB0) by default, passed to mpremote.
