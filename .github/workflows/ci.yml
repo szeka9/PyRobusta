@@ -1,23 +1,16 @@
 name: Build
 
 on:
-  push:
-    branches: [ main ]
-    paths:
-      - "**.py"
-      - "requirements.txt"
-      - ".github/workflows/ci.yml"
-      - "Makefile"
-      - "external/**"
-
   pull_request:
     branches: [ main ]
     paths:
-      - "**.py"
+      - "src/**"
+      - "tests/**"
+      - "external/**"
       - "requirements.txt"
       - ".github/workflows/ci.yml"
       - "Makefile"
-      - "external/**"
+      - ".pylintrc"
 
 jobs:
   test:
