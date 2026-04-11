@@ -1,0 +1,74 @@
+
+# Prerequisites
+
+## Setup virtual environment
+```bash
+python3 -m venv venv
+source venv/bin/activate
+python3 -m pip install -r requirements.txt
+```
+
+## Create pyrobusta.env in the project root (optional)
+
+```bash
+# pyrobusta.env
+wifi_ssid="<your-wifi-ssid>"
+wifi_password="<your-wifi-password>"
+tls="true"
+socket_max_con=2
+http_mem_cap=0.05
+...
+```
+pyrobusta.env contains runtime configuration, deployed to the device. This allows the user to override default behavior and configure optional settings.
+
+- rules such as ```make run-unix``` or ```make run-device``` also rely on pyrobusta.env, allowing the user to experiment with different settings
+- pyrobusta.env is ignored when running functional tests (```make test-unix```, ```make test-device```)
+
+Check [configuration.md](./configuration.md) for all configuration options.
+
+
+# Build and run example application
+
+## Run on unix port
+
+```bash
+make toolchain          # Setup mpy-cross and micropython
+make build              # Cross-compile, create build artifacts
+make stage-example      # Create runtime directory for unix port
+make run-unix           # Run example application on the unix port of micropython
+```
+
+## Deploy to a device
+
+```bash
+make toolchain          # Setup mpy-cross and micropython
+make build              # Cross-compile, create build artifacts
+make deploy             # Upload build artifacts to device using mpremote
+make tls-cert           # Optional: generate self-signed certificate for the device
+make deploy-cert        # Optional: upload generated certificate to the device
+make deploy-example     # Deploy the selected example app using mpremote
+make run-device         # Optional: Reset the device and connect through REPL
+```
+```deploy-example``` and ```run-device``` uses the DEVICE argument
+set to ```u0``` (/dev/ttyUSB0) by default, passed to mpremote.
+
+Override the DEVICE argument to select a different device, e.g.
+```make DEVICE=a0 run-device``` for /dev/ttyACM0. Check mpremote --help
+for additional shortcuts.
+
+## Redeploy
+
+When changing the source code, run the below rule for redeploying to the device.
+
+```bash
+make redeploy           # Will run the following rules: clean build clean-device deploy
+```
+
+## Unit tests, pylint, functional tests
+
+```bash
+make static-checkers    # Run static checkers (Pylint, black formatter)
+make unit-test          # Run unit tests
+make test-unix          # Run functional tests on the unix port
+make test-device        # Run functional tests on a device
+```

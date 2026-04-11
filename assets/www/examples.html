@@ -55,10 +55,10 @@
 # /pyrobusta.env
 
 socket_max_con=2                        # max number of socket connections, reduce it to lower memory usage
-http_multipart="false"                  # turn on/off multipart parser, increases memory usage when turned on
-http_mem_cap="0.05"                     # memory cap (% × 0.01) of usable heap for stream buffers
+http_multipart=False                    # turn on/off multipart parser, increases memory usage when turned on
+http_mem_cap=0.05                       # memory cap (% × 0.01) of usable heap for stream buffers
 http_served_paths="/www /lib/pyrobusta" # space delimited list of filesystem paths allowed to be served
-tls="false"                             # key.der and cert.der needs to be installed at / when set to true
+tls=False                               # key.der and cert.der needs to be installed at / when set to true
     </textarea>
     <p></p>
 
@@ -72,7 +72,7 @@ tls="false"                             # key.der and cert.der needs to be insta
 import asyncio
 from gc import mem_free, mem_alloc
 
-from pyrobusta.server import http_server
+from pyrobusta.server.http_server import HttpServer
 from pyrobusta.protocol.http import HttpEngine
 from pyrobusta.utils import logging
 
@@ -94,14 +94,14 @@ def app(http_ctx, payload):
 
     return "text/plain", (f"Free memory [{value_format}]: {free}\n")
 
+async def run_server():
+    server = HttpServer()
+    asyncio.create_task(server.start_socket_server())
+    while True:
+        await asyncio.sleep(1)
 
 def main():
-    http_server.main()
-    try:
-        asyncio.get_event_loop().run_forever()
-    except Exception as e:
-        logging.warning(f"loop stopped: {e}")
-        asyncio.get_event_loop().close()
+    asyncio.run(run_server())
     </textarea>
     <textarea readonly="true" rows="15">
 # /boot.py
@@ -153,7 +153,7 @@ Free memory [%]: 71.76
 
     <div class="footer">
         <hr>
-        <address>PyRobusta v0.4.0 Web Server</address>
+        <address>PyRobusta v0.5.0 Web Server</address>
     </div>
 </body>
 </html>

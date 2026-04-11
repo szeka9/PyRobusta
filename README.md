@@ -13,76 +13,73 @@ A lightweight HTTP server library for MicroPython designed for constrained embed
 - Query parameter parsing with percent encoding support
 - TLS support
 
-# Prerequisites
+# Installation
 
-## Setup virtual environment
-```bash
-python3 -m venv venv
-source venv/bin/activate
-python3 -m pip install -r requirements.txt
+Use the mip package manager to install PyRobusta on your MicroPython-installed device.\
+The bare minimum requirement is 40KB of free heap, however, it is recommended to select\
+boards with more SRAM for usability and stability. The ESP32-C3 is a recommended entry-level\
+board leaving a user-friendly amount of memory after installing PyRobusta.
+
+If required, use the below script to connect to a Wi-Fi station in advance.
+```python
+from network import WLAN, STA_IF
+from time import sleep
+
+ssid = "<your-wifi-name>"
+password = "<your-password>"
+
+sta_if = WLAN(STA_IF)
+sta_if.active(True)
+sta_if.connect(ssid, password)
+
+timeout = 30
+while timeout > 0:
+    if sta_if.isconnected():
+        ip = sta_if.ifconfig()[0]
+        print(f"connected, IP={ip}")
+		break
+    sleep(1)
+    timeout -= 1
+
+if sta_if.isconnected():
+    print(sta_if.ifconfig()[0])
+else:
+    print("connection failed")
 ```
 
-## Create pyrobusta.env in the project root (optional)
+Install and start PyRobusta by following the below steps. For more advanced usage,\
+check the included documentation reachable from the home page served by your device.
 
-```bash
-# pyrobusta.env
-wifi_ssid="<your-wifi-ssid>"
-wifi_password="<your-wifi-password>"
-tls="true"
-socket_max_con=2
-http_mem_cap=0.05
-...
+```python
+# Download latest version of PyRobusta
+import mip
+mip.install("github:szeka9/PyRobusta")
+
+# Install assets
+from pyrobusta.utils.assets import install_www
+install_www()
+
+# Start the server
+import asyncio
+from pyrobusta.server.http_server import HttpServer
+
+async def main():
+    server = HttpServer()
+    asyncio.create_task(server.start_socket_server())
+    while True:
+        await asyncio.sleep(1)
+
+asyncio.run(main())
 ```
-pyrobusta.env contains runtime configuration, deployed to the device. This allows the user to override default behavior and configure optional settings.
+Open a browser and type your device's IP in the address bar. You should be greeted\
+by the default home page.
 
-- rules such as ```make run-unix``` or ```make run-device``` also rely on pyrobusta.env, allowing the user to experiment with different settings
-- pyrobusta.env is ignored when running functional tests (```make test-unix```, ```make test-device```)
+![image info](./docs/img/home_page.png)
 
-Check [configuration.md](https://github.com/szeka9/PyRobusta/blob/main/docs/configuration.md) for all configuration options.
+For fine-tuning heap usage, check the [dimensioning guide](./docs/dimensioning/http_dimensioning.md)\
+and [configuration settings](./docs/configuration.md).
 
+# Development
 
-# Build and run example application
-
-## Run on unix port
-
-```bash
-make toolchain          # Setup mpy-cross and micropython
-make build              # Cross-compile, create build artifacts
-make stage-example      # Create runtime directory for unix port
-make run-unix           # Run example application on the unix port of micropython
-```
-
-## Deploy to a device
-
-```bash
-make toolchain          # Setup mpy-cross and micropython
-make build              # Cross-compile, create build artifacts
-make deploy             # Upload build artifacts to device using mpremote
-make tls-cert           # Optional: generate self-signed certificate for the device
-make deploy-cert        # Optional: upload generated certificate to the device
-make deploy-example     # Deploy the selected example app using mpremote
-make run-device         # Optional: Reset the device and connect through REPL
-```
-```deploy-example``` and ```run-device``` uses the DEVICE argument
-set to ```u0``` (/dev/ttyUSB0) by default, passed to mpremote.
-
-Override the DEVICE argument to select a different device, e.g.
-```make DEVICE=a0 run-device``` for /dev/ttyACM0. Check mpremote --help
-for additional shortcuts.
-
-## Redeploy
-
-When changing the source code, run the below rule for redeploying to the device.
-
-```bash
-make redeploy           # Will run the following rules: clean build clean-device deploy
-```
-
-## Unit tests, pylint, functional tests
-
-```bash
-make static-checkers    # Run static checkers (Pylint, black formatter)
-make unit-test          # Run unit tests
-make test-unix          # Run functional tests on the unix port
-make test-device        # Run functional tests on a device
-```
+Check the provided development guide to create and deploy custom builds\
+to your device: [development guide](./docs/development.md)
