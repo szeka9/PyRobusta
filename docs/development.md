@@ -8,7 +8,7 @@ source venv/bin/activate
 python3 -m pip install -r requirements.txt
 ```
 
-## Create pyrobusta.env in the project root (optional)
+## Create pyrobusta.env in the project root
 
 ```bash
 # pyrobusta.env
@@ -19,7 +19,9 @@ socket_max_con=2
 http_mem_cap=0.05
 ...
 ```
-pyrobusta.env contains runtime configuration, deployed to the device. This allows the user to override default behavior and configure optional settings.
+pyrobusta.env contains runtime configuration, deployed to the device. This allows the user to override the\
+default behavior and configure optional settings. Configuration settings are optional, however, you need to define\
+ ̇```wifi_ssid``` and ̇```wifi_password``` if your application does not already handle network connectivity.
 
 - rules such as ```make run-unix``` or ```make run-device``` also rely on pyrobusta.env, allowing the user to experiment with different settings
 - pyrobusta.env is ignored when running functional tests (```make test-unix```, ```make test-device```)
