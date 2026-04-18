@@ -171,9 +171,7 @@ class HttpEngine:
     # =========================================
 
     @classmethod
-    def register(
-        cls, endpoint: str, callback: callable, method: str = "GET"
-    ) -> None:
+    def register(cls, endpoint: str, callback: callable, method: str = "GET") -> None:
         """
         Register an endpoint with a callback function or file.
         :param endpoint: URL path to be routed e.g. "/app/resource"
