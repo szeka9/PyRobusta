@@ -83,7 +83,7 @@ class TestWebStateMachine(TestWebStateMachineBase):
 
         for i in range(len(request)):
             self.rx.write(request[i : i + 1])
-            self.engine.state(self.rx, self.tx)
+            self.engine.state(self.rx)
 
         self.assertEqual(self.engine.method, b"GET")
         self.assertEqual(self.engine.url, b"/index.html")
@@ -96,7 +96,7 @@ class TestWebStateMachine(TestWebStateMachineBase):
 
         for i in range(len(request)):
             self.rx.write(request[i : i + 1])
-            self.engine.state(self.rx, self.tx)
+            self.engine.state(self.rx)
             if self.engine.state is None:
                 break
 
@@ -110,7 +110,7 @@ class TestWebStateMachine(TestWebStateMachineBase):
 
         for i in range(len(request)):
             self.rx.write(request[i : i + 1])
-            self.engine.state(self.rx, self.tx)
+            self.engine.state(self.rx)
             if self.engine.state is None:
                 break
 
@@ -125,7 +125,7 @@ class TestWebStateMachine(TestWebStateMachineBase):
 
         for i in range(len(request)):
             self.rx.write(request[i : i + 1])
-            self.engine.state(self.rx, self.tx)
+            self.engine.state(self.rx)
             if self.engine.state is None:
                 break
 
@@ -141,7 +141,7 @@ class TestWebStateMachine(TestWebStateMachineBase):
 
         for i in range(len(request)):
             self.rx.write(request[i : i + 1])
-            self.engine.state(self.rx, self.tx)
+            self.engine.state(self.rx)
 
         self.assertDictEqual(
             {"content-length": 10, "content-type": "application/json"},
@@ -153,14 +153,10 @@ class TestWebStateMachine(TestWebStateMachineBase):
     def test_header_parsing_incomplete_header(self):
         request = b"GET /index.html HTTP/1.1\r\nContent-Type\r\n\r\n"
 
-        for i in range(len(request)):
-            self.rx.write(request[i : i + 1])
-            self.engine.state(self.rx, self.tx)
-            if self.engine.state is None:
-                break
-
-        self.assertEqual(self.engine.status_code, 400)
-        self.assertEqual(self.engine.state, None)
+        with self.assertRaises(self.http_module.InvalidHeaders):
+            for i in range(len(request)):
+                self.rx.write(request[i : i + 1])
+                self.engine.state(self.rx)
 
     def test_header_parsing_error(self):
         for case in (
@@ -171,7 +167,7 @@ class TestWebStateMachine(TestWebStateMachineBase):
             b"space in header name: value",
             b"new-line-in-header:\nvalue",
         ):
-            with self.assertRaises(self.http_module.HeaderParsingError):
+            with self.assertRaises(self.http_module.InvalidHeaders):
                 self.engine._parse_headers(case)
 
     def test_routing_unsupported_method(self):
@@ -183,7 +179,7 @@ class TestWebStateMachine(TestWebStateMachineBase):
         test_callback = mock.Mock()
         self.engine.register("/api/test", test_callback, "POST")
 
-        self.engine.state(self.rx, self.tx)
+        self.engine.state(self.rx)
 
         self.assertEqual(self.engine.status_code, 405)
         self.assertEqual(self.engine.state, None)
@@ -201,7 +197,7 @@ class TestWebStateMachine(TestWebStateMachineBase):
         self.engine.register("/api/test", test_callback, "POST")
         self.engine.register("/api/test", test_callback, "PUT")
 
-        self.engine.state(self.rx, self.tx)
+        self.engine.state(self.rx)
 
         self.assertEqual(self.engine.status_code, 204)
         self.assertEqual(self.engine.state, None)
@@ -220,15 +216,15 @@ class TestWebStateMachine(TestWebStateMachineBase):
         self.engine.register("/api/test", test_callback, "GET")
 
         while self.engine.state is not None:
-            self.engine.state(self.rx, self.tx)
+            self.engine.state(self.rx)
 
         self.assertEqual(self.engine.status_code, 200)
         self.assertEqual(self.engine.state, None)
-        self.assertNotEqual(
-            self.tx.find(b"content-length: " + str(len(test_response)).encode("ascii")),
-            -1,
+        self.assertEqual(
+            int(self.engine._lookup(self.engine.resp_headers, b"content-length")),
+            len(test_response),
         )
-        self.assertNotEqual(self.tx.find(test_response), -1)
+        self.assertEqual(self.engine.resp_handler.read(), test_response)
 
     def test_routing_head_method(self):
         self.engine.state = self.engine._route_request_st
@@ -242,22 +238,22 @@ class TestWebStateMachine(TestWebStateMachineBase):
         self.engine.register("/api/test", test_callback, "GET")
 
         while self.engine.state is not None:
-            self.engine.state(self.rx, self.tx)
+            self.engine.state(self.rx)
 
         self.assertEqual(self.engine.status_code, 200)
         self.assertEqual(self.engine.state, None)
-        self.assertNotEqual(
-            self.tx.find(b"content-length: " + str(len(test_response)).encode("ascii")),
-            -1,
+        self.assertEqual(
+            int(self.engine._lookup(self.engine.resp_headers, b"content-length")),
+            len(test_response),
         )
-        self.assertEqual(self.tx.find(test_response), -1)
+        self.assertEqual(self.engine.resp_handler, None)
 
     def test_simple_query_parameter(self):
         request = b"GET /api/test?param HTTP/1.1\r\n"
 
         for i in range(len(request)):
             self.rx.write(request[i : i + 1])
-            self.engine.state(self.rx, self.tx)
+            self.engine.state(self.rx)
 
         self.assertEqual(self.engine.query, "param")
 
@@ -275,7 +271,7 @@ class TestWebStateMachine(TestWebStateMachineBase):
 
         for i in range(len(request)):
             self.rx.write(request[i : i + 1])
-            self.engine.state(self.rx, self.tx)
+            self.engine.state(self.rx)
 
         self.assertEqual(self.engine.query, f"safe_chars.{unsafe_chars}")
 
@@ -284,7 +280,7 @@ class TestWebStateMachine(TestWebStateMachineBase):
 
         for i in range(len(request)):
             self.rx.write(request[i : i + 1])
-            self.engine.state(self.rx, self.tx)
+            self.engine.state(self.rx)
 
         self.assertEqual(
             self.engine.get_url_encoded_query_param(self.engine.query, "param"), "value"
@@ -297,7 +293,7 @@ class TestWebStateMachine(TestWebStateMachineBase):
 
         for i in range(len(request)):
             self.rx.write(request[i : i + 1])
-            self.engine.state(self.rx, self.tx)
+            self.engine.state(self.rx)
 
         self.assertEqual(
             self.engine.get_url_encoded_query_param(self.engine.query, "param1"),
@@ -317,7 +313,7 @@ class TestWebStateMachine(TestWebStateMachineBase):
 
         for i in range(len(request)):
             self.rx.write(request[i : i + 1])
-            self.engine.state(self.rx, self.tx)
+            self.engine.state(self.rx)
 
         self.assertEqual(
             self.engine.get_url_encoded_query_param(self.engine.query, "param1"),
@@ -342,7 +338,7 @@ class TestWebStateMachine(TestWebStateMachineBase):
 
         for i in range(len(request)):
             self.rx.write(request[i : i + 1])
-            self.engine.state(self.rx, self.tx)
+            self.engine.state(self.rx)
 
         self.assertEqual(
             self.engine.get_url_encoded_query_param(self.engine.query, "data"),
@@ -375,10 +371,10 @@ class TestWebStateMachine(TestWebStateMachineBase):
         ):
             for i in range(len(chunk)):
                 self.rx.write(chunk[i : i + 1])
-                self.engine.state(self.rx, self.tx)
+                self.engine.state(self.rx)
 
             self.assertEqual(self.engine.state, self.engine._app_endpoint_st)
-            self.engine.state(self.rx, self.tx)
+            self.engine.state(self.rx)
             size_delimiter = chunk.find(b"\r\n")
             test_callback.assert_called_with(
                 self.engine, chunk[size_delimiter + 2 : -2]
@@ -397,15 +393,11 @@ class TestWebStateMachine(TestWebStateMachineBase):
         test_callback = mock.Mock(return_value=("text/plain", "OK"))
         self.engine.register("/api/test", test_callback, "GET")
 
-        chunk = b"2\r\nchunking\r\n"
-        for i in range(len(chunk)):
-            self.rx.write(chunk[i : i + 1])
-            self.engine.state(self.rx, self.tx)
-            if self.engine.state is None:
-                break
-
-        self.assertEqual(self.engine.status_code, 400)
-        self.assertEqual(self.engine.state, None)
+        with self.assertRaises(self.http_module.InvalidContentLength):
+            chunk = b"2\r\nchunking\r\n"
+            for i in range(len(chunk)):
+                self.rx.write(chunk[i : i + 1])
+                self.engine.state(self.rx)
 
     def test_chunked_transfer_encoding_chunk_incomplete(self):
         self.engine.url = b"/api/test"
@@ -420,7 +412,7 @@ class TestWebStateMachine(TestWebStateMachineBase):
         chunk = b"FF\r\nchunking\r\n"
         for i in range(len(chunk)):
             self.rx.write(chunk[i : i + 1])
-            self.engine.state(self.rx, self.tx)
+            self.engine.state(self.rx)
             if self.engine.state is None:
                 break
 
@@ -510,7 +502,7 @@ class TestMultipartStateMachine(TestWebStateMachineBase):
             {"content-type": 'multipart/form-data;boundary=missing-quote"'},
         ]:
             with self.subTest(headers=case):
-                with self.assertRaises(self.http_module.HeaderParsingError):
+                with self.assertRaises(self.http_module.InvalidHeaders):
                     self.engine._get_mp_boundary(case)
 
     def test_multipart_receiver_valid(self):
@@ -521,7 +513,7 @@ class TestMultipartStateMachine(TestWebStateMachineBase):
 
         for i in range(len(body_part)):
             self.rx.write(body_part[i : i + 1])
-            self.engine.state(self.rx, self.tx)
+            self.engine.state(self.rx)
 
         self.assertEqual(self.engine.state, self.engine._parse_boundary_st)
         self.assertEqual(self.rx.peek(), b"Content-Type:text/plain")
@@ -533,15 +525,10 @@ class TestMultipartStateMachine(TestWebStateMachineBase):
         self.engine.mp_boundary = b"test-boundary"
         body_part = b"--test-boundary-delimiter\r\nContent-Type:text/plain"
 
-        for i in range(len(body_part)):
-            self.rx.write(body_part[i : i + 1])
-            self.engine.state(self.rx, self.tx)
-            if self.engine.state is None:
-                break
-
-        self.assertEqual(self.engine.state, None)
-        self.assertEqual(self.engine.status_code, 400)
-        self.assertEqual(self.rx.peek(), b"--test-boundary-delimiter\r\n")
+        with self.assertRaises(self.http_module.MalformedRequest):
+            for i in range(len(body_part)):
+                self.rx.write(body_part[i : i + 1])
+                self.engine.state(self.rx)
 
     def test_multipart_receiver_complete_part(self):
         self.engine.state = self.engine._parse_boundary_st
@@ -566,13 +553,13 @@ class TestMultipartStateMachine(TestWebStateMachineBase):
         for i in range(len(body_part)):
             self.assertEqual(self.engine.state, self.engine._parse_boundary_st)
             self.rx.write(body_part[i : i + 1])
-            self.engine.state(self.rx, self.tx)
+            self.engine.state(self.rx)
 
         self.assertEqual(self.engine.state, self.engine._parse_complete_part_st)
         self.assertEqual(self.rx.peek(), body_part)
         self.assertEqual(self.engine.mp_is_first, True)
 
-        self.engine.state(self.rx, self.tx)
+        self.engine.state(self.rx)
 
         self.assertEqual(self.engine.state, self.engine._parse_boundary_st)
         test_callback.assert_called_once_with(
@@ -611,12 +598,12 @@ class TestMultipartStateMachine(TestWebStateMachineBase):
         for i in range(len(body_part)):
             self.assertEqual(self.engine.state, self.engine._parse_boundary_st)
             self.rx.write(body_part[i : i + 1])
-            self.engine.state(self.rx, self.tx)
+            self.engine.state(self.rx)
 
         self.assertEqual(self.engine.state, self.engine._parse_complete_part_st)
         self.assertEqual(self.rx.peek(), body_part)
 
-        self.engine.state(self.rx, self.tx)
+        self.engine.state(self.rx)
 
         self.assertEqual(self.engine.state, None)
         self.assertEqual(self.engine.status_code, 200)
@@ -666,7 +653,7 @@ class TestFileServerStateMachine(TestWebStateMachineBase):
         self.engine.version = b"HTTP/1.1"
         self.engine.state = self.engine._send_file_st
 
-        self.engine.state(self.rx, self.tx, self.engine.url)
+        self.engine.state(self.rx, self.engine.url)
 
         self.assertEqual(self.engine.status_code, 404)
         self.assertEqual(self.engine.state, None)
@@ -680,10 +667,10 @@ class TestFileServerStateMachine(TestWebStateMachineBase):
         file_content = "index content"
 
         with patch("builtins.open", mock_open(read_data=file_content)) as m:
-            response_generator = self.engine.state(self.rx, self.tx, self.engine.url)
+            self.engine.state(self.rx, self.engine.url)
             m.assert_called_once_with("/www/index.html", "rb")
 
-        self.assertEqual(response_generator.read(), file_content)
+        self.assertEqual(self.engine.resp_handler.read(), file_content)
         self.assertEqual(self.engine.status_code, 200)
         self.assertEqual(self.engine.state, None)
 
@@ -696,10 +683,10 @@ class TestFileServerStateMachine(TestWebStateMachineBase):
         file_content = "data"
 
         with patch("builtins.open", mock_open(read_data=file_content)) as m:
-            response_generator = self.engine.state(self.rx, self.tx, self.engine.url)
+            self.engine.state(self.rx, self.engine.url)
             m.assert_called_once_with("/www/scripts.js", "rb")
 
-        self.assertEqual(response_generator.read(), file_content)
+        self.assertEqual(self.engine.resp_handler.read(), file_content)
         self.assertEqual(self.engine.status_code, 200)
         self.assertEqual(self.engine.state, None)
 
@@ -712,10 +699,10 @@ class TestFileServerStateMachine(TestWebStateMachineBase):
         file_content = "data"
 
         with patch("builtins.open", mock_open(read_data=file_content)) as m:
-            response_generator = self.engine.state(self.rx, self.tx, self.engine.url)
+            self.engine.state(self.rx, self.engine.url)
             m.assert_called_once_with("/www/scripts.js", "rb")
 
-        self.assertEqual(response_generator.read(), file_content)
+        self.assertEqual(self.engine.resp_handler.read(), file_content)
         self.assertEqual(
             self.engine._lookup(self.engine.resp_headers, b"content-type"),
             b"application/javascript",
@@ -732,10 +719,10 @@ class TestFileServerStateMachine(TestWebStateMachineBase):
         file_content = "data"
 
         with patch("builtins.open", mock_open(read_data=file_content)) as m:
-            response_generator = self.engine.state(self.rx, self.tx, self.engine.url)
+            self.engine.state(self.rx, self.engine.url)
             m.assert_called_once_with("/www/scripts.unknown", "rb")
 
-        self.assertEqual(response_generator.read(), file_content)
+        self.assertEqual(self.engine.resp_handler.read(), file_content)
         self.assertEqual(
             self.engine._lookup(self.engine.resp_headers, b"content-type"),
             b"application/octet-stream",
@@ -752,10 +739,10 @@ class TestFileServerStateMachine(TestWebStateMachineBase):
         file_content = "data"
 
         with patch("builtins.open", mock_open(read_data=file_content)) as m:
-            response_generator = self.engine.state(self.rx, self.tx, self.engine.url)
+            self.engine.state(self.rx, self.engine.url)
             m.assert_not_called()
 
-        self.assertEqual(response_generator, None)
+        self.assertEqual(self.engine.resp_handler, None)
         self.assertEqual(self.engine.status_code, 403)
         self.assertEqual(self.engine.state, None)
 
