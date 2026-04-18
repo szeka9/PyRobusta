@@ -8,8 +8,13 @@ from pyrobusta.protocol import http
 from pyrobusta.utils.helpers import add_method
 
 
-def _generate_multipart_response(self, _, callback, dtype):
-    """Generate multipart response depening on the exact content type"""
+def _generate_multipart_response(self, _, callback: callable, dtype: bytes):
+    """
+    Generate multipart response depening on the exact content type.
+    The callback function is called without arguments, and it must return bytes-like objects.
+    :param callback: function for part generation, each call generates a separate part
+    :param dtype: exact multipart content-type (multipart/*)
+    """
     if type(callback).__name__ not in ("function", "closure"):
         raise ValueError("Invalid response handler")
     self.terminate(200, True)
@@ -19,11 +24,11 @@ def _generate_multipart_response(self, _, callback, dtype):
         self.resp_handler = self._multipart_wrapper_factory(callback, boundary)
 
 
-def _multipart_wrapper_factory(callback, boundary: bytes):
+def _multipart_wrapper_factory(callback: callable, boundary: bytes):
     """
-    Factory method for creating closures that write multipart responses
-    :param callback: function without arguments, must return bytes-like objects
-    :param content_type: content type of body parts
+    Factory method for creating closures that write multipart responses.
+    The callback function is called without arguments, and it must return bytes-like objects.
+    :param callback: function for part generation, each call generates a separate part
     :param boundary: boundary value
     :return closure: closure to invoke for response generation
     """
@@ -31,7 +36,7 @@ def _multipart_wrapper_factory(callback, boundary: bytes):
 
     def _multipart_wrapper(tx):
         """
-        Write multipart data generated from a callback's return value
+        Write multipart data generated from a callback's return value.
         - if insufficient buffer space is available, the generator yields control so
         the caller can flush or drain the buffer
         :return bool: true if the stream is completed
@@ -61,7 +66,9 @@ def _multipart_wrapper_factory(callback, boundary: bytes):
 
 
 def _start_multipart_parser_st(self, rx):
-    """Initial state for processing multipart requests"""
+    """
+    Initial state for processing multipart requests.
+    """
     if not "content-length" in self.headers:
         raise http.InvalidContentLength()
     if (start_delimiter := rx.find(b"\r\n")) == -1:
@@ -76,7 +83,9 @@ def _start_multipart_parser_st(self, rx):
 
 
 def _parse_boundary_st(self, rx):
-    """State for parsing multipart boundary delimiter"""
+    """
+    State for parsing multipart boundary delimiter.
+    """
     if (
         rx.find(b"\r\n" + self.mp_delimiter) == -1
         and rx.find(b"\r\n" + self.mp_last_delimiter) == -1
@@ -87,7 +96,7 @@ def _parse_boundary_st(self, rx):
 
 def _parse_complete_part_st(self, rx):
     """
-    State for processing complete parts in a multipart request
+    State for processing complete parts in a multipart request.
     - registered callback is required to process parts
     """
     next_delimiter = rx.find(b"\r\n--" + self.mp_boundary)
@@ -121,8 +130,7 @@ def _parse_complete_part_st(self, rx):
     self.content_len_cnt += len(self.mp_last_delimiter)
     if (
         self.headers["content-length"] != self.content_len_cnt
-        and self.content_len_cnt + rx.size()
-        < self.headers["content-length"]
+        and self.content_len_cnt + rx.size() < self.headers["content-length"]
     ):
         raise http.InvalidContentLength()
     self.mp_is_last = True

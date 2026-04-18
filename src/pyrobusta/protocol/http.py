@@ -1,5 +1,5 @@
 """
-Module is responsible for webserver state machine,
+This module is responsible HTTP protocol parsing
 with partial guarantees on RFC compliance.
 """
 
@@ -17,29 +17,36 @@ from ..stream.buffer import BufferFullError
 
 
 class InvalidHeaders(ValueError):
-    """Exception for errors occurring while parsing HTTP/MIME headers"""
+    """Exception for errors occurring while parsing HTTP/MIME headers."""
 
     pass
 
 
 class InvalidContentLength(ValueError):
-    """Exception for content-length related erros"""
+    """Exception for content-length related erros."""
 
     pass
 
 
 class MalformedRequest(ValueError):
-    """Exception for malformed requests"""
+    """Exception for malformed requests."""
 
     pass
 
 
 class HttpEngine:
     """
-    HTTP protocol parser state machine
-    - provides an adapter/routing layer
-    - supports multipart request and response handling
-    - resolves static resources by returning a stream objects (FileIO)
+    HTTP protocol parser state machine and middleware.
+    - each instance represents a connection, allowing a request to be parsed
+      through a state machine
+    - provides an adapter/routing layer for applications
+      through registered endpoints (see also: register(), route())
+    - supports percent encoded URLs and query parameters (x-www-form-urlencoded)
+    - allows applications to set response attributes (headers, status code)
+
+    Feature flags (configured in pyrobusta.env)
+    - http_serve_files: serve files stored on the device
+    - http_multipart: support for multipart requests/responses
     """
 
     __slots__ = (
@@ -142,6 +149,9 @@ class HttpEngine:
         self.mp_boundary = None
 
     def reset(self):
+        """
+        Reset internal state to reuse a state machine object.
+        """
         self.state = self._start_parser
         self.status_code = None
         self.resp_headers.clear()
@@ -162,12 +172,12 @@ class HttpEngine:
 
     @classmethod
     def register(
-        cls, endpoint: str, callback: object | str, method: str = "GET"
+        cls, endpoint: str, callback: callable, method: str = "GET"
     ) -> None:
         """
-        Register an endpoint with a callback function
-        :param endpoint: name of the endpoint
-        :param callback: callback function
+        Register an endpoint with a callback function or file.
+        :param endpoint: URL path to be routed e.g. "/app/resource"
+        :param callback: callback function or file path
         :param method: HTTP method name
         """
         endpoint = endpoint.encode("ascii")
@@ -184,6 +194,8 @@ class HttpEngine:
     def route(endpoint: str, method: str):
         """
         Decorator for registering endpoint callback functions.
+        :param endpoint: URL path to be routed e.g. "/app/resource"
+        :param method: HTTP method name
         """
 
         def decorator(func):
@@ -198,7 +210,9 @@ class HttpEngine:
 
     @staticmethod
     def percent_decode(s: str):
-        """Decode percent-encoded input"""
+        """
+        Decode percent-encoded input.
+        """
         out = []
         i = 0
         while i < len(s):
@@ -213,8 +227,8 @@ class HttpEngine:
     @staticmethod
     def get_url_encoded_query_param(query: str, key: str, default: str = None):
         """
-        Parse query and return the value belonging to a key
-        according to x-www-form-urlencoded
+        Parse a query and return the value belonging to a key
+        according to the x-www-form-urlencoded format.
         :param query: query part
         :param key: key to parse from the query
         :param default: default value to return when key is not present
@@ -237,7 +251,7 @@ class HttpEngine:
     @classmethod
     def is_norm_path_served(cls, path: str):
         """
-        Returns true if a normalized path is configured to be served
+        Returns true if a normalized path is configured to be served.
         """
         served_paths = get_config(CONF_HTTP_SERVED_PATHS)
         parts = path.split("/")
@@ -255,20 +269,20 @@ class HttpEngine:
         return tuple_[idx + 1]
 
     @classmethod
-    def _get_callback(cls, endpoint, method):
+    def _get_callback(cls, endpoint, method: bytes):
         for e in cls.ENDPOINTS:
             if endpoint == e[0] and method == e[2]:
                 return e[1]
 
     @classmethod
-    def _has_endpoint(cls, endpoint):
+    def _has_endpoint(cls, endpoint: bytes):
         for e in cls.ENDPOINTS:
             if endpoint == e[0]:
                 return True
         return False
 
     @classmethod
-    def _supported_methods(cls, endpoint):
+    def _supported_methods(cls, endpoint: bytes):
         supported_methods = []
         for method in cls.METHODS:
             if cls._get_callback(endpoint, method) is not None:
@@ -278,8 +292,7 @@ class HttpEngine:
     @classmethod
     def _parse_headers(cls, raw_headers: memoryview) -> dict[str, str | int]:
         """
-        Basic parser to extract HTTP/MIME headers
-        :param raw_headers: headers
+        Basic parser to extract HTTP/MIME headers.
         """
         header_lines = bytes(raw_headers).split(b"\r\n")
         headers = {}
@@ -313,7 +326,10 @@ class HttpEngine:
 
     @staticmethod
     def _get_mp_boundary(headers: dict) -> str:
-        """Determine from the headers if a request is multipart, and return the boundary value"""
+        """
+        Determine from the headers if a request is multipart,
+        and return the boundary value.
+        """
         content_type = headers.get("content-type")
         if not content_type or not content_type.lower().startswith(
             "multipart/form-data"
@@ -344,7 +360,9 @@ class HttpEngine:
 
     @classmethod
     def _parse_body_part(cls, part: memoryview) -> tuple[dict, bytes]:
-        """Parse part headers and body and return them as a tuple"""
+        """
+        Parse part headers and body and return them as a tuple.
+        """
         blank_idx = -1
         for i in range(len(part) - 3):
             if part[i : i + 4] == b"\r\n\r\n":
@@ -360,9 +378,11 @@ class HttpEngine:
     # Helpers for state machine termination
     # =========================================
 
-    def set_response_header(self, key, value):
+    def set_response_header(self, key: bytes, value: bytes):
         """
         Set a response header by key and value.
+        :param key: HTTP header key
+        :param value: HTTP header value
         """
         if (
             key in self.resp_headers
@@ -376,9 +396,9 @@ class HttpEngine:
     def write_response_head(self, tx):
         """
         Write response status and header to an output buffer.
+        :param tx: response buffer
         """
-        # Discard already accumulated content (e.g. 500 response on unexpected errors)
-        tx.consume()
+        tx.consume()  # Discard already accumulated content, required on abrupt errors
         tx.write(self.version)
         tx.write(b" ")
         tx.write(self._lookup(self.RESP_HEADERS, self.status_code))
@@ -397,9 +417,13 @@ class HttpEngine:
         content_type: bytes = b"text/plain",
     ):
         """
-        Write the complete response to the output, including status
-        and headers. Return a BytesIO object to delegate the writing
-        of the response body to the transport layer.
+        Serialize and wrap the response body with a BytesIO
+        object, stored by the resp_handler member. resp_handler
+        can be used for writing the body by the transport layer.
+        This method also updates the content-type and content-length
+        headers.
+        :param body: body to be sent in the response
+        :param content_type: content-type of the body
         """
         if body is None:
             return
@@ -421,7 +445,7 @@ class HttpEngine:
     def do_keep_alive(self):
         """
         Determine if the connection should be kept alive
-        depending on the HTTP version and headers sent in a request.
+        depending on the HTTP version and headers sent in the request.
         """
         if self.aborted:
             return False
@@ -438,7 +462,7 @@ class HttpEngine:
         """
         Regular state machine termination with a specific status code.
         :param status_code: HTTP status code
-        :param request_complete: the complete request is processed
+        :param request_complete: true if the complete request is processed
         """
         self.state = None
         self.status_code = status_code
@@ -469,7 +493,7 @@ class HttpEngine:
         """
         Returns true if the state machine has received any input.
         """
-        return self.state != self._start_parser
+        return self.state != self._start_parser  # pylint: disable=W0143
 
     def is_terminated(self):
         """
@@ -507,6 +531,24 @@ class HttpEngine:
             self.abort(500)
             self.set_response_body(str(e).encode("ascii"))
 
+    # ========================================
+    # Helpers for routing, state machine logic
+    # ========================================
+
+    def is_chunked(self):
+        """
+        Determines if the request has a payload with chunked transfer-encoding.
+        """
+        return self.headers.get("transfer-encoding") == "chunked"
+
+    def has_payload(self):
+        """
+        Determines if the request has a body.
+        """
+        return (
+            "content-length" in self.headers and self.headers["content-length"] > 0
+        ) or self.is_chunked()
+
     # ================================================================================
     # Parser states
     # - all states must handle rx buffer argument for reading request data
@@ -514,13 +556,17 @@ class HttpEngine:
     # - reference implementation: SlidingBuffer (pyrobusta.stream.buffer)
     # ================================================================================
 
-    def _start_parser(self,rx):
-        """Initial state."""
+    def _start_parser(self, rx):
+        """
+        Initial state.
+        """
         if rx.size():
             self.state = self._parse_request_line_st
 
     def _parse_request_line_st(self, rx):
-        """State for parsing the request line."""
+        """
+        Parse the request line.
+        """
         status_line_sep = rx.find(b"\r\n")
         if status_line_sep == -1:
             return
@@ -546,7 +592,9 @@ class HttpEngine:
         self.state = self._parse_headers_st
 
     def _parse_headers_st(self, rx):
-        """State for parsing headers."""
+        """
+        Parse HTTP headers.
+        """
         if (blank_idx := rx.find(b"\r\n\r\n")) == -1:
             return
         self.headers = self._parse_headers(rx.peek(blank_idx))
@@ -555,19 +603,10 @@ class HttpEngine:
         rx.consume(blank_idx + 4)
         self.state = self._route_request_st
 
-    def _is_chunked(self):
-        return self.headers.get("transfer-encoding") == "chunked"
-
-    def _has_payload(self):
-        return (
-            "content-length" in self.headers
-            and self.headers["content-length"] > 0
-        ) or self._is_chunked()
-
     def _route_request_st(self, _):
         """
-        State for routing requests.
-        - supported ways: static resources, endpoint callback functions
+        Route requests based on registered endpoints.
+        If no endpoint is registered, fall back to file serving.
         """
         if self._has_endpoint(self.url) and (
             self._get_callback(self.url, self.method) is not None
@@ -582,25 +621,25 @@ class HttpEngine:
                 self.set_response_header(b"allow", b", ".join(supported_methods))
                 self.terminate(204, True)
                 return
-            if self._has_payload():
+            if self.has_payload():
                 if self.method == self.HEAD:
                     raise MalformedRequest()
                 if mp_boundary := self._get_mp_boundary(self.headers):
                     # Request body is multipart
                     self.mp_boundary = mp_boundary.encode("ascii")
                     self.state = self._start_multipart_parser_st
-                elif self._is_chunked():
+                elif self.is_chunked():
                     # Request body is chunked
                     if "content-length" in self.headers:
                         raise MalformedRequest()
-                    self.state = self._recv_chunked_size_st
+                    self.state = self._recv_chunk_size_st
                 else:
                     self.state = self._recv_payload_st
             else:
                 self.state = self._app_endpoint_st
             return
 
-        # Request cannot be routed
+        # Request does not have a registered endpoint
         if (
             self._has_endpoint(self.url)
             and self._get_callback(self.method, self.url) is None
@@ -609,12 +648,16 @@ class HttpEngine:
             self.set_response_header(b"allow", b", ".join(supported_methods))
             self.terminate(405)
             return
+        # Fallback: serve file
         if self.method in (self.GET, self.HEAD):
             self.state = lambda _rx: self._send_file_st(_rx, self.url)
             return
         self.terminate(404)
 
-    def _recv_chunked_size_st(self, rx):
+    def _recv_chunk_size_st(self, rx):
+        """
+        State for determining the chunk size (transfer-encoding: chunked).
+        """
         if (blank_idx := rx.find(b"\r\n")) == -1:
             return
         self.recv_chunk_size = int(bytes(rx.peek(blank_idx)), 16)
@@ -624,6 +667,9 @@ class HttpEngine:
         self.state = self._recv_chunk_st
 
     def _recv_chunk_st(self, rx):
+        """
+        State for receiving a complete chunk (transfer-encoding: chunked).
+        """
         if self.recv_chunk_size + 2 > rx.size():
             return
         if self.recv_chunk_size + 2 <= rx.size():
@@ -632,20 +678,25 @@ class HttpEngine:
             self.state = self._app_endpoint_st
 
     def _recv_payload_st(self, rx):
+        """
+        State for receiving the request body.
+        """
         if self.headers["content-length"] > rx.size():
             return
         self.state = self._app_endpoint_st
 
     def _app_endpoint_st(self, rx):
-        """Process a request by registered callback functions"""
+        """
+        Process a request by registered callback functions.
+        """
         method = self.GET if self.method == self.HEAD else self.method
         callback = self._get_callback(self.url, method)
-        if self._has_payload():
-            if self._is_chunked():
+        if self.has_payload():
+            if self.is_chunked():
                 if self.recv_chunk_size:
                     callback(self, bytes(rx.peek(self.recv_chunk_size)))
                     rx.consume(self.recv_chunk_size + 2)
-                    self.state = self._recv_chunked_size_st
+                    self.state = self._recv_chunk_size_st
                     return
                 dtype, data = callback(self, bytes(rx.peek(self.recv_chunk_size)))
                 rx.consume(self.recv_chunk_size + 2)
@@ -656,7 +707,7 @@ class HttpEngine:
             dtype = dtype.encode("ascii")
         else:
             if not callable(callback):
-                # Handle as a static resource
+                # Handle as a file path
                 self.state = lambda _rx: self._send_file_st(
                     _rx, callback.encode("ascii")
                 )
@@ -673,18 +724,25 @@ class HttpEngine:
             self.terminate(200, True)
         self.set_response_body(data, content_type=dtype)
 
-    def _send_file_st(self, _, web_resource: bytes):  # pylint: disable=W0613
-        """State for returning a static resource - disabled"""
+    def _send_file_st(self, _, path: bytes):  # pylint: disable=W0613
+        """
+        State for returning including a file in the response body (disabled).
+        :param path: path to the resource
+        """
         self.terminate(503, True)
 
     def _start_multipart_parser_st(self, rx):  # pylint: disable=W0613
-        """Initial state for processing multipart requests"""
+        """
+        Initial state for processing multipart requests (disabled).
+        """
         self.terminate(503)
 
     def _generate_multipart_response(
         self, rx, callback, dtype
     ):  # pylint: disable=W0613
-        """Generate multipart response depening on the exact content type"""
+        """
+        Generate multipart response depening on the exact content type (disabled).
+        """
         self.terminate(503, True)
 
 

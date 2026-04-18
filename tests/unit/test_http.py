@@ -358,7 +358,7 @@ class TestWebStateMachine(TestWebStateMachineBase):
         self.engine.method = b"GET"
         self.engine.version = b"HTTP/1.1"
         self.engine.headers["transfer-encoding"] = "chunked"
-        self.engine.state = self.engine._recv_chunked_size_st
+        self.engine.state = self.engine._recv_chunk_size_st
 
         test_callback = mock.Mock(return_value=("text/plain", "OK"))
         self.engine.register("/api/test", test_callback, "GET")
@@ -388,7 +388,7 @@ class TestWebStateMachine(TestWebStateMachineBase):
         self.engine.method = b"GET"
         self.engine.version = b"HTTP/1.1"
         self.engine.headers["transfer-encoding"] = "chunked"
-        self.engine.state = self.engine._recv_chunked_size_st
+        self.engine.state = self.engine._recv_chunk_size_st
 
         test_callback = mock.Mock(return_value=("text/plain", "OK"))
         self.engine.register("/api/test", test_callback, "GET")
@@ -404,7 +404,7 @@ class TestWebStateMachine(TestWebStateMachineBase):
         self.engine.method = b"GET"
         self.engine.version = b"HTTP/1.1"
         self.engine.headers["transfer-encoding"] = "chunked"
-        self.engine.state = self.engine._recv_chunked_size_st
+        self.engine.state = self.engine._recv_chunk_size_st
 
         test_callback = mock.Mock(return_value=("text/plain", "OK"))
         self.engine.register("/api/test", test_callback, "GET")

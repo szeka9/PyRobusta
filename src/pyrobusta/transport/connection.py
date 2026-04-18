@@ -19,8 +19,8 @@ class BaseConnection:
     def __init__(self, reader, writer):
         """
         Base class for connection handling.
-        :param reader: async reader stream object
-        :param writer: async writer stream object
+        :param reader: asyncio StreamReader
+        :param writer: asyncio StreamWriter
         """
         client_info = writer.get_extra_info("peername")
         self.id = str(client_info[0]) + ":" + str(client_info[1])
@@ -43,7 +43,7 @@ class BaseConnection:
         :param read_bytes: number of bytes to read
         :param decoding: decoding to use (optional), bytes are returned by default
         :param timeout_seconds: an exception is raised if exceeded, 0 means waiting indefinitely
-        :return data: holds bytes or decoded string read from the socket
+        :return data: holds bytes or decoded string read by the stream reader
         """
         if not self.connected:
             raise OSError(f"{self.id} already closed")

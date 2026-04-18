@@ -91,7 +91,7 @@ def multipart_callback(http_ctx, _):
 
 async def start_server():
     """
-    Start an HTTP server as a background task
+    Start an HTTP server as a background task.
     """
     server = http_server.HttpServer()
     server_task = asyncio.create_task(server.start_socket_server())

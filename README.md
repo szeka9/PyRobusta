@@ -11,6 +11,7 @@ A lightweight HTTP server library for MicroPython designed for constrained embed
 - Finite-state-machine parser with linear sliding buffer
 - Robust byte-stream handling
 - Query parameter parsing with percent encoding support
+- Persistent connections (set by **connection: keep-alive**)
 - TLS support
 
 # Installation
