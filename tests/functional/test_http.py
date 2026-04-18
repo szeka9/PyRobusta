@@ -261,6 +261,90 @@ async def test_fs_access_control():
     await server.terminate()
 
 
+@garbage_collect
+async def test_keepalive():
+    setup_config()
+    server, server_task = await start_server()
+
+    # ----------------------------------
+    # Case 1: all requests are processed
+    # ----------------------------------
+    plain_responses = await send_request(
+        b"GET /test/simple HTTP/1.1\r\n"
+        b"Host: localhost\r\n"
+        b"Accept:text/plain\r\n"
+        b"\r\n"
+        b"GET /test/simple HTTP/1.1\r\n"
+        b"Host: localhost\r\n"
+        b"Accept:text/plain\r\n"
+        b"\r\n"
+        b"GET /test/simple HTTP/1.1\r\n"
+        b"Host: localhost\r\n"
+        b"Connection: close\r\n"
+        b"Accept:text/plain\r\n"
+        b"\r\n"
+    )
+
+    test_assert(
+        f"contains all responses (connection: keep-alive)",
+        plain_responses.count(b"HTTP/1.1 200 OK"),
+        3,
+    )
+
+    # -------------------------------------------------------------------
+    # Case 2: close connection after the second request (invalid framing)
+    # -------------------------------------------------------------------
+    plain_responses = await send_request(
+        b"GET /test/simple HTTP/1.1\r\n"
+        b"Host: localhost\r\n"
+        b"Accept:text/plain\r\n"
+        b"\r\n"
+        b"GET /test/simple HTTP/1.1\r\n"
+        b"Host: localhost\r\n"
+        b"<INVALID HEADER>"
+        b"Accept:text/plain\r\n"
+        b"\r\n"
+        b"GET /test/simple HTTP/1.1\r\n"
+        b"Host: localhost\r\n"
+        b"Accept:text/plain\r\n"
+        b"\r\n"
+    )
+
+    test_assert(
+        f"contains two responses (connection: keep-alive, invalid framing)",
+        plain_responses.count(b"HTTP/1.1"),
+        2,
+    )
+
+    # ------------------------------------------------
+    # Case 3: close connection after the first request
+    # ------------------------------------------------
+    plain_response = await send_request(
+        b"GET /test/simple HTTP/1.1\r\n"
+        b"Host: localhost\r\n"
+        b"Connection: close\r\n"
+        b"Accept:text/plain\r\n"
+        b"\r\n"
+        b"GET /test/simple HTTP/1.1\r\n"
+        b"Host: localhost\r\n"
+        b"Accept:text/plain\r\n"
+        b"\r\n"
+        b"GET /test/simple HTTP/1.1\r\n"
+        b"Host: localhost\r\n"
+        b"Accept:text/plain\r\n"
+        b"\r\n"
+    )
+
+    test_assert(
+        f"contains single response (connection: close)",
+        plain_response.count(b"HTTP/1.1 200 OK"),
+        1,
+    )
+
+    server_task.cancel()
+    await server.terminate()
+
+
 #################################################
 # Test methods
 #################################################
@@ -300,6 +384,7 @@ def test_main():
     asyncio.run(test_server_busy())
     asyncio.run(test_chunked_transfer_encoding())
     asyncio.run(test_fs_access_control())
+    asyncio.run(test_keepalive())
 
 
 test_main()
