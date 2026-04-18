@@ -10,7 +10,7 @@ from pyrobusta.protocol import http
 from pyrobusta.utils.helpers import normalize_path, add_method
 
 
-def _send_file_st(self, _, tx, web_resource: bytes):
+def _send_file_st(self, _, web_resource: bytes):
     """State for returning a static resource"""
     if self.url == b"/files":
         web_resource = "/"
@@ -22,31 +22,31 @@ def _send_file_st(self, _, tx, web_resource: bytes):
         web_resource = b"/www" + web_resource
 
     extension = web_resource.rsplit(b".", 1)[-1]
-    norm_path = normalize_path(web_resource.decode(self.ASCII))
+    norm_path = normalize_path(web_resource.decode("ascii"))
     is_path_served = self.is_norm_path_served(norm_path)
     if not is_path_served:
         try:
             stat(norm_path)
-            self.on_forbidden(tx)
+            self.terminate(403, True)
             return
         except OSError:
-            self.on_missing_resource(tx)
+            self.terminate(404, True)
             return
     try:
         content_type = self._lookup(self.CONTENT_TYPES, extension)
     except ValueError:
         content_type = self._lookup(self.CONTENT_TYPES, b"raw")
     try:
-        self._set_response_header(
-            b"content-length", str(stat(norm_path)[6]).encode(http.HttpEngine.ASCII)
+        self.set_response_header(
+            b"content-length", str(stat(norm_path)[6]).encode("ascii")
         )
-        self.terminate(200, content_type)
-        self._write_response_head(tx, None)
+        self.set_response_header(b"content-type", content_type)
+        self.terminate(200, True)
         if self.method != self.HEAD:
-            return open(norm_path, "rb")
+            self.resp_handler = open(norm_path, "rb") # pylint: disable=R1732
         return
     except OSError:
-        self.on_missing_resource(tx)
+        self.terminate(404, True)
 
 
 def apply_patches():

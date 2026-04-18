@@ -8,17 +8,15 @@ from pyrobusta.protocol import http
 from pyrobusta.utils.helpers import add_method
 
 
-def _generate_multipart_response(self, _, tx, callback, dtype):
+def _generate_multipart_response(self, _, callback, dtype):
     """Generate multipart response depening on the exact content type"""
     if type(callback).__name__ not in ("function", "closure"):
-        self.on_failure(tx, b"Invalid response handler")
-        return
-    self.terminate(200, dtype)
+        raise ValueError("Invalid response handler")
+    self.terminate(200, True)
     boundary = self.MULTIPART_BOUNDARY
-    self._set_response_header(b"content-type", dtype + b"; boundary=" + boundary)
-    self._write_response_head(tx, None)
+    self.set_response_header(b"content-type", dtype + b"; boundary=" + boundary)
     if self.method != self.HEAD:
-        return self._multipart_wrapper_factory(callback, boundary)
+        self.resp_handler = self._multipart_wrapper_factory(callback, boundary)
 
 
 def _multipart_wrapper_factory(callback, boundary: bytes):
@@ -62,24 +60,22 @@ def _multipart_wrapper_factory(callback, boundary: bytes):
     return _multipart_wrapper
 
 
-def _start_multipart_parser_st(self, rx, tx):
+def _start_multipart_parser_st(self, rx):
     """Initial state for processing multipart requests"""
-    if not http.HttpEngine.CONTENT_LENGTH in self.headers:
-        self.on_client_error(tx, http.HttpEngine.CONTENT_LENGTH_ERROR)
-        return
+    if not "content-length" in self.headers:
+        raise http.InvalidContentLength()
     if (start_delimiter := rx.find(b"\r\n")) == -1:
         return
     self.mp_delimiter = b"--" + self.mp_boundary + b"\r\n"
     self.mp_last_delimiter = b"--" + self.mp_boundary + b"--"
     if rx.peek(start_delimiter + 2) != self.mp_delimiter:
-        self.on_client_error(tx, http.HttpEngine.MULTIPART_BOUNDARY_ERROR)
-        return
+        raise http.MalformedRequest()
     rx.consume(start_delimiter + 2)
     self.content_len_cnt += start_delimiter + 2
     self.state = self._parse_boundary_st
 
 
-def _parse_boundary_st(self, rx, _):
+def _parse_boundary_st(self, rx):
     """State for parsing multipart boundary delimiter"""
     if (
         rx.find(b"\r\n" + self.mp_delimiter) == -1
@@ -89,7 +85,7 @@ def _parse_boundary_st(self, rx, _):
     self.state = self._parse_complete_part_st
 
 
-def _parse_complete_part_st(self, rx, tx):
+def _parse_complete_part_st(self, rx):
     """
     State for processing complete parts in a multipart request
     - registered callback is required to process parts
@@ -98,42 +94,42 @@ def _parse_complete_part_st(self, rx, tx):
     part = rx.peek(next_delimiter)
     rx.consume(next_delimiter + 2)  # Consume leading CRLF
     self.content_len_cnt += next_delimiter + 2
-    is_final = rx.peek(len(self.mp_last_delimiter)) == self.mp_last_delimiter
+    is_final = (
+        rx.size() >= len(self.mp_last_delimiter)
+        and rx.peek(len(self.mp_last_delimiter)) == self.mp_last_delimiter
+    )
+
     # Validate part and content-length
-    if self.headers[http.HttpEngine.CONTENT_LENGTH] < self.content_len_cnt:
-        self.on_client_error(tx, http.HttpEngine.CONTENT_LENGTH_ERROR)
-        return
-    try:
-        part_headers, part_body = http.HttpEngine._parse_body_part(part)
-    except http.HeaderParsingError:
-        self.on_client_error(tx, http.HttpEngine.HEADER_ERROR)
-        return
+    if self.headers["content-length"] < self.content_len_cnt:
+        raise http.InvalidContentLength()
+    part_headers, part_body = http.HttpEngine._parse_body_part(part)
     callback = http.HttpEngine._get_callback(self.url, self.method)
+
     # Process complete part
     if not is_final:
         callback(self, (part_headers, part_body))
         if rx.peek(len(self.mp_delimiter)) != self.mp_delimiter:
-            self.on_client_error(tx, http.HttpEngine.MULTIPART_BOUNDARY_ERROR)
-            return
+            raise http.MalformedRequest()
         rx.consume(len(self.mp_delimiter))
         self.content_len_cnt += len(self.mp_delimiter)
         self.mp_is_first = False
         self.state = self._parse_boundary_st
         return
+
     # Process last part
     rx.consume(len(self.mp_last_delimiter))
     self.content_len_cnt += len(self.mp_last_delimiter)
     if (
-        self.headers[http.HttpEngine.CONTENT_LENGTH] != self.content_len_cnt
+        self.headers["content-length"] != self.content_len_cnt
         and self.content_len_cnt + rx.size()
-        != self.headers[http.HttpEngine.CONTENT_LENGTH]
+        < self.headers["content-length"]
     ):
-        self.on_client_error(tx, http.HttpEngine.CONTENT_LENGTH_ERROR)
-        return
+        raise http.InvalidContentLength()
     self.mp_is_last = True
     dtype, data = callback(self, (part_headers, part_body))
-    self.terminate(200, dtype.encode(http.HttpEngine.ASCII))
-    return self._generate_response(tx, data)
+    self.set_response_header(b"content-type", dtype.encode("ascii"))
+    self.terminate(200, True)
+    self.set_response_body(data)
 
 
 def apply_patches():
@@ -150,6 +146,7 @@ def apply_patches():
         self.mp_last_delimiter = None
 
     http.HttpEngine.__init__ = new_init
+    http.HttpEngine.MULTIPART_BOUNDARY = b"pyrobusta-boundary"
 
     add_method(http.HttpEngine, _generate_multipart_response)
     add_method(http.HttpEngine, _multipart_wrapper_factory, "static")
