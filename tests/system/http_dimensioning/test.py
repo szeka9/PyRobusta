@@ -189,7 +189,9 @@ def measure_footprint(config, device_ip):
     port = 4443 if config["tls"] == True else 8080
     try:
         usage = requests.get(
-            f"{proto}://{device_ip}:{port}/mem/current", verify=False
+            f"{proto}://{device_ip}:{port}/mem/current",
+            verify=False,
+            headers={"Connection": "close"},
         ).text
         print(f"Measured: {usage}")
     except:
@@ -225,6 +227,7 @@ def load_test(config, device_ip):
                     f"{base_url}/index.html",
                     verify=False,
                     timeout=5,
+                    headers={"Connection": "close"},
                 )
                 resp.raise_for_status()
 
@@ -254,6 +257,7 @@ def load_test(config, device_ip):
             f"{base_url}/mem/time-series",
             verify=False,
             timeout=5,
+            headers={"Connection": "close"},
         ).json()
 
         print(f"Measured: {usage}")

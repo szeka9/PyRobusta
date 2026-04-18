@@ -7,7 +7,7 @@ from asyncio import sleep_ms  # pylint: disable=E1101
 
 from ..stream.buffer import BufferFullError
 from ..transport.connection import BaseConnection
-from ..protocol.http import HttpEngine, ServerBusyError, HeaderParsingError
+from ..protocol.http import HttpEngine
 from ..utils import logging
 
 
@@ -19,7 +19,6 @@ class HttpConnection(BaseConnection):
 
     MTU_SIZE = 1460
     STATE_MACHINE_SLEEP_MS = 2
-    RESP_HANDLER_SLEEP_MS = 2
     RECV_TIMEOUT_SECONDS = 10
 
     __slots__ = ("_engine", "_prev_state", "_recv_buf", "_send_buf")
@@ -36,9 +35,12 @@ class HttpConnection(BaseConnection):
         Handle socket connection with HTTP state machine parser.
         """
         self._prev_state = None
-        while self._engine.state is not None:
+        while not self._engine.is_terminated():
             await self._run_state_machine()
             await sleep_ms(self.STATE_MACHINE_SLEEP_MS)
+            if self._engine.is_terminated() and self._engine.do_keep_alive():
+                self._engine.reset()
+                self._prev_state = None
 
     async def _flush_response(self):
         data = self._send_buf.peek()
@@ -49,67 +51,48 @@ class HttpConnection(BaseConnection):
     async def _read_to_buf(self):
         buf_free = self._recv_buf.capacity - self._recv_buf.size()
         if not buf_free:
-            self._engine.on_buffer_full(self._send_buf)
-            await self._flush_response()
-            return 0
-        try:
-            request = await self.read(
-                read_bytes=buf_free,
-                decoding=None,
-                timeout_seconds=self.RECV_TIMEOUT_SECONDS,
-            )
-        except asyncio.TimeoutError:
-            self._engine.on_timeout(self._send_buf)
-            await self._flush_response()
-            return 0
-        except Exception as e:  # pylint: disable=W0718
-            self._engine.on_failure(
-                self._send_buf, b"Read error: " + str(e).encode("ascii")
-            )
-            await self._flush_response()
-            return 0
+            raise BufferFullError()
+        request = await self.read(
+            read_bytes=buf_free,
+            decoding=None,
+            timeout_seconds=self.RECV_TIMEOUT_SECONDS,
+        )
         self._recv_buf.write(request)
         logging.debug(__name__ + f"._read_to_buf: [{request}]")
         return len(request)
 
     async def _run_state_machine(self):
-        if self._prev_state == self._engine.state or self._prev_state is None:
-            num_read = await self._read_to_buf()
-            if not num_read:
-                # Reject incomplete request
-                self._engine.on_client_error(
-                    self._send_buf, self._engine.BAD_REQUEST_ERROR
-                )
-                await self._flush_response()
-                return
-        try:
-            resp_handler = None
-            while self._engine.state is not None:
-                self._prev_state = self._engine.state
-                resp_handler = self._engine.state(self._recv_buf, self._send_buf)
-                if not self._send_buf.size():
-                    break
-                await self._flush_response()
-                await sleep_ms(self.STATE_MACHINE_SLEEP_MS)
-        except BufferFullError:
-            self._engine.on_failure(self._send_buf, b"Buffer full")
+        # [1] read request
+        if self._prev_state == self._engine.state or (
+            self._prev_state is None and not self._recv_buf.size()
+        ):
+            try:
+                num_read = await self._read_to_buf()
+                if not num_read:
+                    self._engine.abort(400)
+                    self._engine.set_response_body(b"Incomplete request")
+            except BufferFullError:
+                self._engine.abort(413)
+            except asyncio.TimeoutError:
+                self._engine.abort(408)
+            except Exception as e:  # pylint: disable=W0718
+                self._engine.abort(500)
+                self._engine.set_response_body(b"Read error: " + str(e).encode("ascii"))
+
+        # [2] process request by state machine
+        for _ in self._engine.run(self._recv_buf):
+            if self._prev_state == self._engine.state:
+                # No state transition occurred, read more data
+                break
+            self._prev_state = self._engine.state
+            await sleep_ms(self.STATE_MACHINE_SLEEP_MS)
+
+        # [3] write response
+        if self._engine.is_started() and self._engine.is_terminated():
+            self._engine.write_response_head(self._send_buf)
             await self._flush_response()
-            return
-        except ServerBusyError:
-            self._engine.on_unavailable(self._send_buf)
-            await self._flush_response()
-            return
-        except HeaderParsingError:
-            self._engine.on_client_error(self._send_buf, self._engine.HEADER_ERROR)
-            await self._flush_response()
-            return
-        except Exception as e:  # pylint: disable=W0718
-            logging.warning(__name__ + f"._run_state_machine: {e}")
-            self._engine.on_failure(self._send_buf, str(e).encode("ascii"))
-            await self._flush_response()
-            return
-        if self._engine.state is None and resp_handler is not None:
-            await self._response_handler(resp_handler)
+            if self._engine.resp_handler is not None:
+                await self._response_handler(self._engine.resp_handler)
 
     async def _response_handler(self, resp_handler):
         if "closure" == type(resp_handler).__name__:
@@ -117,22 +100,20 @@ class HttpConnection(BaseConnection):
                 await self._flush_response()
                 if is_finished:
                     break
-                await sleep_ms(self.RESP_HANDLER_SLEEP_MS)
+                await sleep_ms(self.STATE_MACHINE_SLEEP_MS)
         elif type(resp_handler).__name__ in ("FileIO", "BytesIO"):
-            with resp_handler as rh:
+            try:
                 while True:
                     view = self._send_buf.writable_view()
-                    num_read = rh.readinto(view)
+                    num_read = resp_handler.readinto(view)
                     if not num_read:
                         break
                     self._send_buf.commit(num_read)
                     await self._flush_response()
-                    await sleep_ms(self.RESP_HANDLER_SLEEP_MS)
+                    await sleep_ms(self.STATE_MACHINE_SLEEP_MS)
+            finally:
+                resp_handler.close()
         else:
-            self._engine.on_failure(
-                self._send_buf,
-                f"Invalid response handler {type(resp_handler).__name__}".encode(
-                    "ascii"
-                ),
+            raise RuntimeError(
+                f"Invalid response handler {type(resp_handler).__name__}"
             )
-            await self._flush_response()

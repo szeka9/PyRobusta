@@ -20,7 +20,7 @@ def app(http_ctx, payload):
         if value_format == "%":
             free = round(100 * free / (free + mem_alloc()), 2)
 
-    return "text/plain", (f"Free memory [{value_format}]: {free}\n")
+    return "text/plain", f"Free memory [{value_format}]: {free}\n"
 
 
 async def main():

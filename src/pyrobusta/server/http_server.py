@@ -65,7 +65,8 @@ class HttpServer:
     @classmethod
     def _init_pools(cls, max_clients):
         """
-        Initialize pool of buffers for sending/receiving based on different profiles
+        Initialize pool of buffers for sending/receiving based on different profiles.
+        :param max_clients: maximum number of HTTP clients
         """
         mem_available = mem_free() + mem_alloc()
         con_limit = max_clients
@@ -95,7 +96,9 @@ class HttpServer:
 
     @classmethod
     async def _drop_client(cls, client):
-        """Remove client from active list"""
+        """
+        Remove client from the list of active clients.
+        """
         if client not in cls.ACTIVE_CLIENTS:
             return
         logging.debug(__name__ + f": {client.id} dropped")
@@ -141,6 +144,9 @@ class HttpServer:
         return False
 
     async def _reserve_buffers(self):
+        """
+        Reserve and return request and response buffers.
+        """
         if self.SEND_POOL is None or self.RECV_POOL is None:
             raise RuntimeError("Pools are uninitialized")
 
@@ -160,6 +166,8 @@ class HttpServer:
         """
         Handle incoming socket connection for HTTP.
         - creates HttpConnection object
+        :param reader: asyncio StreamReader
+        :param reader: asyncio StreamWriter
         """
         if not await self.can_handle_new_client():
             logging.debug(__name__ + ": cannot accept new client")
@@ -224,7 +232,7 @@ class HttpServer:
 
     async def terminate(self):
         """
-        Terminate HTTP server and drop clients
+        Terminate HTTP server and drop clients.
         """
         logging.info(__name__ + ": terminated")
         while self.ACTIVE_CLIENTS:

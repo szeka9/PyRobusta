@@ -6,11 +6,7 @@ import gc
 from os import mkdir, remove, rmdir
 
 from pyrobusta.server import http_server
-from pyrobusta.protocol.http import (
-    HttpEngine,
-    enable_optional_features,
-    ServerBusyError,
-)
+from pyrobusta.protocol.http import HttpEngine, enable_optional_features
 from pyrobusta.utils.config import (
     CONF_HTTP_SERVED_PATHS,
     CONF_TLS,
@@ -85,8 +81,9 @@ def simple_callback(http_ctx, _):
 
 
 @HttpEngine.route("/test/busy", "POST")
-def busy_callback(*_):
-    raise ServerBusyError()
+def busy_callback(http_ctx, _):
+    http_ctx.terminate(503)
+    return "text/plain", "Unavailable"
 
 
 def create_chunked_app_endpoint(endpoint):
@@ -117,7 +114,9 @@ async def test_simple_response(tls_enabled):
     # Test: text/plain
     plain_response = await send_request(
         b"GET /test/simple HTTP/1.1\r\n"
-        b"Host: localhost\r\nAccept:text/plain\r\n"
+        b"Host: localhost\r\n"
+        b"Connection: close\r\n"
+        b"Accept:text/plain\r\n"
         b"\r\n",
         tls_enabled,
     )
@@ -135,7 +134,9 @@ async def test_simple_response(tls_enabled):
     # Test: application/json
     json_response = await send_request(
         b"GET /test/simple HTTP/1.1\r\n"
-        b"Host: localhost\r\nAccept:application/json\r\n"
+        b"Host: localhost\r\n"
+        b"Connection: close\r\n"
+        b"Accept: application/json\r\n"
         b"\r\n",
         tls_enabled,
     )
@@ -160,7 +161,9 @@ async def test_server_busy():
     server, server_task = await start_server()
 
     plain_response = await send_request(
-        b"POST /test/busy HTTP/1.1\r\n" b"Host: localhost\r\n\r\n"
+        b"POST /test/busy HTTP/1.1\r\n"
+        b"Connection:close\r\n"
+        b"Host: localhost\r\n\r\n"
     )
     test_assert(
         f"response is rejected by busy service with 503",
@@ -179,15 +182,14 @@ async def test_chunked_transfer_encoding():
     server, server_task = await start_server()
 
     json_response = await send_request(
-        (
-            b"POST /test/chunked HTTP/1.1\r\n"
-            b"Host: localhost\r\n"
-            b"Transfer-Encoding: chunked\r\n\r\n"
-            b"14\r\nchunking\r\ntest\r\ncase\r\n"
-            b"E\r\nchunking\r\ntest\r\n"
-            b"8\r\nchunking\r\n"
-            b"0\r\n\r\n"
-        )
+        b"POST /test/chunked HTTP/1.1\r\n"
+        b"Host: localhost\r\n"
+        b"Connection: close\r\n"
+        b"Transfer-Encoding: chunked\r\n\r\n"
+        b"14\r\nchunking\r\ntest\r\ncase\r\n"
+        b"E\r\nchunking\r\ntest\r\n"
+        b"8\r\nchunking\r\n"
+        b"0\r\n\r\n"
     )
     response_body = json.loads(json_response.split(b"\r\n\r\n")[1])
     test_assert(
@@ -226,7 +228,9 @@ async def test_fs_access_control():
 
     # Case #1: /www/index.html
     response = await send_request(
-        (b"GET /allowed/index.html HTTP/1.1\r\n" b"Host: localhost\r\n\r\n")
+        b"GET /allowed/index.html HTTP/1.1\r\n"
+        b"Connection: close\r\n"
+        b"Host: localhost\r\n\r\n"
     )
 
     response_body = response.split(b"\r\n\r\n")[1]
@@ -238,7 +242,9 @@ async def test_fs_access_control():
 
     # Case #2: /index.html
     response = await send_request(
-        (b"GET /rejected/index.html HTTP/1.1\r\n" b"Host: localhost\r\n\r\n")
+        b"GET /rejected/index.html HTTP/1.1\r\n"
+        b"Connection: close\r\n"
+        b"Host: localhost\r\n\r\n"
     )
 
     test_assert(
@@ -251,6 +257,90 @@ async def test_fs_access_control():
     remove(rejected_index_html)
     rmdir(allowed_workdir)
     rmdir(rejected_workdir)
+    server_task.cancel()
+    await server.terminate()
+
+
+@garbage_collect
+async def test_keepalive():
+    setup_config()
+    server, server_task = await start_server()
+
+    # ----------------------------------
+    # Case 1: all requests are processed
+    # ----------------------------------
+    plain_responses = await send_request(
+        b"GET /test/simple HTTP/1.1\r\n"
+        b"Host: localhost\r\n"
+        b"Accept:text/plain\r\n"
+        b"\r\n"
+        b"GET /test/simple HTTP/1.1\r\n"
+        b"Host: localhost\r\n"
+        b"Accept:text/plain\r\n"
+        b"\r\n"
+        b"GET /test/simple HTTP/1.1\r\n"
+        b"Host: localhost\r\n"
+        b"Connection: close\r\n"
+        b"Accept:text/plain\r\n"
+        b"\r\n"
+    )
+
+    test_assert(
+        f"contains all responses (connection: keep-alive)",
+        plain_responses.count(b"HTTP/1.1 200 OK"),
+        3,
+    )
+
+    # -------------------------------------------------------------------
+    # Case 2: close connection after the second request (invalid framing)
+    # -------------------------------------------------------------------
+    plain_responses = await send_request(
+        b"GET /test/simple HTTP/1.1\r\n"
+        b"Host: localhost\r\n"
+        b"Accept:text/plain\r\n"
+        b"\r\n"
+        b"GET /test/simple HTTP/1.1\r\n"
+        b"Host: localhost\r\n"
+        b"<INVALID HEADER>"
+        b"Accept:text/plain\r\n"
+        b"\r\n"
+        b"GET /test/simple HTTP/1.1\r\n"
+        b"Host: localhost\r\n"
+        b"Accept:text/plain\r\n"
+        b"\r\n"
+    )
+
+    test_assert(
+        f"contains two responses (connection: keep-alive, invalid framing)",
+        plain_responses.count(b"HTTP/1.1"),
+        2,
+    )
+
+    # ------------------------------------------------
+    # Case 3: close connection after the first request
+    # ------------------------------------------------
+    plain_response = await send_request(
+        b"GET /test/simple HTTP/1.1\r\n"
+        b"Host: localhost\r\n"
+        b"Connection: close\r\n"
+        b"Accept:text/plain\r\n"
+        b"\r\n"
+        b"GET /test/simple HTTP/1.1\r\n"
+        b"Host: localhost\r\n"
+        b"Accept:text/plain\r\n"
+        b"\r\n"
+        b"GET /test/simple HTTP/1.1\r\n"
+        b"Host: localhost\r\n"
+        b"Accept:text/plain\r\n"
+        b"\r\n"
+    )
+
+    test_assert(
+        f"contains single response (connection: close)",
+        plain_response.count(b"HTTP/1.1 200 OK"),
+        1,
+    )
+
     server_task.cancel()
     await server.terminate()
 
@@ -294,6 +384,7 @@ def test_main():
     asyncio.run(test_server_busy())
     asyncio.run(test_chunked_transfer_encoding())
     asyncio.run(test_fs_access_control())
+    asyncio.run(test_keepalive())
 
 
 test_main()

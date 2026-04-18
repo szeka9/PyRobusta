@@ -5,7 +5,7 @@ from .utils import load_module
 
 class BufferTestBase(unittest.TestCase):
     """
-    Tests for stream.buffer module
+    Tests for stream.buffer module.
     """
 
     buffer_type = bytearray

@@ -101,7 +101,7 @@ deploy-config:
 
 
 # -----------------------------
-# Deploy index page # TODO use install_www from assets module
+# Deploy index page
 # -----------------------------
 .PHONY: deploy-www
 deploy-www:

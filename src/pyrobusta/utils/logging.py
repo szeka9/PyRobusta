@@ -11,7 +11,7 @@ _LOG_LEVEL_DEBUG = 2
 
 def current_log_level():
     """
-    Determine current log level from the config
+    Determine current log level from the config.
     """
     current = get_config(CONF_LOG_LEVEL)
     if current == "debug":
@@ -25,7 +25,7 @@ def current_log_level():
 
 def warning(log):
     """
-    Print warning messages
+    Print warning messages.
     """
     if current_log_level() >= _LOG_LEVEL_WARNING:
         print(f"[WARN] {log}")
@@ -33,7 +33,7 @@ def warning(log):
 
 def info(log):
     """
-    Print info messages
+    Print info messages.
     """
     if current_log_level() >= _LOG_LEVEL_INFO:
         print(f"[INFO] {log}")
@@ -41,7 +41,7 @@ def info(log):
 
 def debug(log):
     """
-    Print debug messages
+    Print debug messages.
     """
     if current_log_level() >= _LOG_LEVEL_DEBUG:
         print(f"[DEBUG] {log}")

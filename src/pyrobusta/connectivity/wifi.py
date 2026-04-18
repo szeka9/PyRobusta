@@ -1,5 +1,5 @@
 """
-Helpers for setting up Wi-Fi in station mode
+Helpers for setting up Wi-Fi in station mode.
 """
 
 from time import sleep
@@ -12,7 +12,7 @@ from ..utils import logging
 
 def initialize():
     """
-    Initialize WLAN interface in station mode
+    Initialize WLAN station interface.
     """
     ssid = get_config(CONF_WIFI_SSID)
     password = get_config(CONF_WIFI_PASSWORD)
@@ -44,7 +44,7 @@ def initialize():
 
 def get_address():
     """
-    Get the address of the WLAN interface
+    Get the IP address of the WLAN station.
     """
     sta_if = WLAN(STA_IF)
     if sta_if.isconnected():

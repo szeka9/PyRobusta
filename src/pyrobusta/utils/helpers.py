@@ -6,7 +6,9 @@ from os import getcwd
 
 
 def normalize_path(path: str):
-    """Normalize a path string to resolve file and directory paths"""
+    """
+    Normalize a path string to resolve file and directory paths.
+    """
     if not path:
         return ""
     parts = []
@@ -27,10 +29,11 @@ def normalize_path(path: str):
     return cwd
 
 
-def add_method(cls, func, method_type="instance"):
+def add_method(cls, func: callable, method_type="instance"):
     """
-    Helper to patch/extend classes with
-    additional methods and states.
+    Helper to patch/extend classes with additional methods and states.
+    :param func: function to add
+    :param method_type: type of the method (instance, static, class)
     """
     if method_type == "instance":
         setattr(cls, func.__name__, func)

@@ -91,7 +91,7 @@ def multipart_callback(http_ctx, _):
 
 async def start_server():
     """
-    Start an HTTP server as a background task
+    Start an HTTP server as a background task.
     """
     server = http_server.HttpServer()
     server_task = asyncio.create_task(server.start_socket_server())
@@ -107,9 +107,12 @@ async def test_multipart_response(tls_enabled):
     # Test: 1 part
     plain_response = await send_request(
         b"GET /test/multipart HTTP/1.1\r\n"
-        b"Host: localhost\r\nX-Part-Count: 1\r\n\r\n",
+        b"Host: localhost\r\n"
+        b"Connection: close\r\n"
+        b"X-Part-Count: 1\r\n\r\n",
         tls_enabled,
     )
+
     test_assert(
         f"http{"s" if tls_enabled else ""} response contains 1 part",
         b"Response 1" in plain_response,
@@ -119,7 +122,9 @@ async def test_multipart_response(tls_enabled):
     # Test: 10 parts
     plain_response = await send_request(
         b"GET /test/multipart HTTP/1.1\r\n"
-        b"Host: localhost\r\nX-Part-Count: 10\r\n\r\n",
+        b"Host: localhost\r\n"
+        b"Connection: close\r\n"
+        b"X-Part-Count: 10\r\n\r\n",
         tls_enabled,
     )
     test_assert(

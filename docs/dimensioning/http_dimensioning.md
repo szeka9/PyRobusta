@@ -28,19 +28,19 @@ with no active network traffic.
 
 | id | http_mem_cap | http_multipart | socket_max_con | tls | footprint_bytes |
 | --- | --- | --- | --- | --- | --- |
-| base | 0.05 | False | 1 | False | 38448 |
-| low_mem_cap_001 | 0.0127 | False | 1 | False | 38448 |
-| low_mem_cap_002 | 0.0253 | False | 2 | False | 39664 |
-| low_mem_cap_003 | 0.0505 | False | 4 | False | 42096 |
-| high_mem_cap_001 | 0.0568 | False | 1 | False | 45616 |
-| high_mem_cap_002 | 0.114 | False | 2 | False | 54000 |
-| high_mem_cap_003 | 0.228 | False | 4 | False | 70768 |
-| multipart_001 | 0.0127 | True | 1 | False | 40704 |
-| multipart_002 | 0.0253 | True | 2 | False | 41920 |
-| multipart_003 | 0.0505 | True | 4 | False | 44352 |
-| tls_001 | 0.0127 | False | 1 | True | 41120 |
-| tls_002 | 0.0253 | False | 2 | True | 42336 |
-| tls_003 | 0.0505 | False | 4 | True | 44768 |
+| base | 0.05 | False | 1 | False | 38512 |
+| low_mem_cap_001 | 0.0127 | False | 1 | False | 38512 |
+| low_mem_cap_002 | 0.0253 | False | 2 | False | 39728 |
+| low_mem_cap_003 | 0.0505 | False | 4 | False | 42112 |
+| high_mem_cap_001 | 0.0568 | False | 1 | False | 45680 |
+| high_mem_cap_002 | 0.114 | False | 2 | False | 54064 |
+| high_mem_cap_003 | 0.228 | False | 4 | False | 70832 |
+| multipart_001 | 0.0127 | True | 1 | False | 40608 |
+| multipart_002 | 0.0253 | True | 2 | False | 41824 |
+| multipart_003 | 0.0505 | True | 4 | False | 44256 |
+| tls_001 | 0.0127 | False | 1 | True | 41184 |
+| tls_002 | 0.0253 | False | 2 | True | 42400 |
+| tls_003 | 0.0505 | False | 4 | True | 44832 |
 
 ## Heap usage under network traffic
 ![image info](./img/esp32_c3/base.png)
@@ -60,9 +60,9 @@ with no active network traffic.
 | high_mem_cap_001 | 0.00111 | False | 1 | False | 45520 |
 | high_mem_cap_002 | 0.00222 | False | 2 | False | 53904 |
 | high_mem_cap_003 | 0.00443 | False | 4 | False | 70672 |
-| multipart_001 | 0.000247 | True | 1 | False | 40656 |
-| multipart_002 | 0.000493 | True | 2 | False | 41872 |
-| multipart_003 | 0.000985 | True | 4 | False | 44304 |
+| multipart_001 | 0.000247 | True | 1 | False | 40528 |
+| multipart_002 | 0.000493 | True | 2 | False | 41744 |
+| multipart_003 | 0.000985 | True | 4 | False | 44176 |
 | tls_001 | 0.000247 | False | 1 | True | 40736 |
 | tls_002 | 0.000493 | False | 2 | True | 41952 |
 | tls_003 | 0.000985 | False | 4 | True | 44384 |

@@ -19,7 +19,7 @@ class MemoryPool:
 
     def __init__(self, block_size, block_count, wrapper=None):
         """
-        Initialize memory pool
+        Initialize memory pool.
         :param block_size: size of each memory block in bytes
         :param block_count: number of reservable memory blocks
         :param wrapper: wrapper class (abstraction layer) to access the memory, e.g. SlidingBuffer
@@ -66,7 +66,7 @@ class SlidingBuffer:
     - Incremental consumption by advancing 'start'
     - Incremental writes by advancing 'end'
     - Automatic in-place compaction when additional space is
-    required and unused bytes exist before 'start'
+      required and unused bytes exist before 'start'
     - Bounded memory usage; no dynamic reallocation
     """
 
@@ -80,25 +80,33 @@ class SlidingBuffer:
         self.capacity = len(buffer)
 
     def size(self) -> int:
-        """Determine the window size"""
+        """
+        Determine the window size.
+        """
         return self._end - self._start
 
     def writable(self) -> int:
-        """Determine the writeable size of the buffer"""
+        """
+        Determine the writeable size of the buffer.
+        """
         return self.capacity - self._end
 
     def readable_view(self) -> memoryview:
-        """Return a memoryview to the readable region of the buffer (window)"""
+        """
+        Return a memoryview to the readable region of the buffer (window).
+        """
         return self._mv[self._start : self._end]
 
     def writable_view(self) -> memoryview:
-        """Return a memoryview to the writeable region of the buffer"""
+        """
+        Return a memoryview to the writeable region of the buffer.
+        """
         return self._mv[self._end : self.capacity]
 
     def _compact(self):
         """
         Compact the buffer by shifting the active
-        window to the beginning of the bytearray
+        window to the beginning of the bytearray.
         """
         if self._start == 0:
             return
@@ -112,7 +120,7 @@ class SlidingBuffer:
     def peek(self, n=None) -> memoryview:
         """
         Return the first n bytes from the window,
-        return the entire window when n is undefined
+        return the entire window when n is undefined.
         """
         if n is None:
             n = self.size()
@@ -121,7 +129,9 @@ class SlidingBuffer:
         return self._mv[self._start : self._start + n]
 
     def write(self, data: bytes):
-        """Write new data into the writable region and advance the 'end' index"""
+        """
+        Write new data into the writable region and advance the 'end' index.
+        """
         if not isinstance(data, (bytes, bytearray, memoryview)):
             raise TypeError("write() expects bytes or bytearray")
         needed = len(data)
@@ -135,7 +145,9 @@ class SlidingBuffer:
         self._end += needed
 
     def consume(self, n: int = None):
-        """Discard the first n bytes of the window by advancing the 'start' index"""
+        """
+        Discard the first n bytes of the window by advancing the 'start' index.
+        """
         if n is None:
             n = self.size()
         if n > self.size():
@@ -148,7 +160,7 @@ class SlidingBuffer:
     def prepare(self, n: int):
         """
         Check if the writeable region is larger or equal to n,
-        otherwise attempt to compact the buffer
+        otherwise attempt to compact the buffer.
         """
         if n > self.capacity:
             raise ValueError("Capacity exceeded")
@@ -159,13 +171,17 @@ class SlidingBuffer:
                 raise ValueError("Capacity exceeded")
 
     def commit(self, n):
-        """Increase the window size by n bytes by incrementing the 'end' index"""
+        """
+        Increase the window size by n bytes by incrementing the 'end' index.
+        """
         if self._end + n > self.capacity:
             raise ValueError("Capacity exceeded")
         self._end += n
 
     def find(self, term: bytes) -> int:
-        """Find and return the index of a search term in the current window"""
+        """
+        Find and return the index of a search term in the current window.
+        """
         for i in range(self._start, self._end - len(term) + 1):
             if self._mv[i : i + len(term)] == term:
                 return i - self._start
