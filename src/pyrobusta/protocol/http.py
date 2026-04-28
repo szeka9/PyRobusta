@@ -319,7 +319,10 @@ class HttpEngine:
                 value = int(value.strip())
             else:
                 value = value.strip().decode("ascii")
-            headers[name] = value
+            if name not in headers and value:
+                headers[name] = value
+            elif value:
+                headers[name] += ", " + value # Combined field value
         return headers
 
     @staticmethod

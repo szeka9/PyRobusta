@@ -170,6 +170,19 @@ class TestWebStateMachine(TestWebStateMachineBase):
             with self.assertRaises(self.http_module.InvalidHeaders):
                 self.engine._parse_headers(case)
 
+    def test_header_parsing_combined(self):
+        for case in (
+            (
+                b"field-name: value1\r\nfield-name: value2",
+                {"field-name": "value1, value2"},
+            ),
+            (
+                b"field-name: \r\nfield-name: value1\r\nfield-name:\r\nfield-name: value2",
+                {"field-name": "value1, value2"},
+            ),
+        ):
+            self.assertEqual(self.engine._parse_headers(case[0]), case[1])
+
     def test_routing_unsupported_method(self):
         self.engine.state = self.engine._route_request_st
         self.engine.url = b"/api/test"
