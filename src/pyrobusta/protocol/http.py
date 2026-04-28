@@ -94,30 +94,6 @@ class HttpEngine:
         505,
         b"505 Version Not Supported",
     )
-    CONTENT_TYPES = (
-        b"raw",
-        b"application/octet-stream",
-        b"html",
-        b"text/html",
-        b"css",
-        b"text/css",
-        b"js",
-        b"application/javascript",
-        b"json",
-        b"application/json",
-        b"ico",
-        b"image/x-icon",
-        b"jpeg",
-        b"image/jpeg",
-        b"jpg",
-        b"image/jpeg",
-        b"png",
-        b"image/png",
-        b"txt",
-        b"text/plain",
-        b"gif",
-        b"image/gif",
-    )
 
     DELETE = b"DELETE"
     GET = b"GET"

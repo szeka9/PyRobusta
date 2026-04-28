@@ -9,6 +9,30 @@ from os import stat
 from pyrobusta.protocol import http
 from pyrobusta.utils.helpers import normalize_path, add_method
 
+CONTENT_TYPES = (
+    b"raw",
+    b"application/octet-stream",
+    b"html",
+    b"text/html",
+    b"css",
+    b"text/css",
+    b"js",
+    b"application/javascript",
+    b"json",
+    b"application/json",
+    b"ico",
+    b"image/x-icon",
+    b"jpeg",
+    b"image/jpeg",
+    b"jpg",
+    b"image/jpeg",
+    b"png",
+    b"image/png",
+    b"txt",
+    b"text/plain",
+    b"gif",
+    b"image/gif",
+)
 
 def _send_file_st(self, _, file_path: bytes):
     """
@@ -38,9 +62,9 @@ def _send_file_st(self, _, file_path: bytes):
             self.terminate(404, True)
             return
     try:
-        content_type = self._lookup(self.CONTENT_TYPES, extension)
+        content_type = self._lookup(CONTENT_TYPES, extension)
     except ValueError:
-        content_type = self._lookup(self.CONTENT_TYPES, b"raw")
+        content_type = self._lookup(CONTENT_TYPES, b"raw")
     try:
         self.set_response_header(
             b"content-length", str(stat(norm_path)[6]).encode("ascii")
