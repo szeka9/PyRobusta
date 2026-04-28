@@ -19,7 +19,9 @@ def _generate_multipart_response(self, _, callback: callable, dtype: str):
         raise ValueError("Invalid response handler")
     self.terminate(200, True)
     boundary = self.MULTIPART_BOUNDARY
-    self.set_response_header(b"content-type", dtype.encode("ascii") + b"; boundary=" + boundary)
+    self.set_response_header(
+        b"content-type", dtype.encode("ascii") + b"; boundary=" + boundary
+    )
     if self.method != self.HEAD:
         self.resp_handler = self._multipart_wrapper_factory(callback, boundary)
 

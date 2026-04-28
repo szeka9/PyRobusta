@@ -34,6 +34,7 @@ CONTENT_TYPES = (
     b"image/gif",
 )
 
+
 def _send_file_st(self, _, file_path: bytes):
     """
     State for returning a file. By default, /www is prepended to the path.

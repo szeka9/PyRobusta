@@ -298,7 +298,7 @@ class HttpEngine:
             if name not in headers and value:
                 headers[name] = value
             elif value:
-                headers[name] += ", " + value # Combined field value
+                headers[name] += ", " + value  # Combined field value
         return headers
 
     @staticmethod
