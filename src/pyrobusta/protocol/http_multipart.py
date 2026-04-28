@@ -8,7 +8,7 @@ from pyrobusta.protocol import http
 from pyrobusta.utils.helpers import add_method
 
 
-def _generate_multipart_response(self, _, callback: callable, dtype: bytes):
+def _generate_multipart_response(self, _, callback: callable, dtype: str):
     """
     Generate multipart response depening on the exact content type.
     The callback function is called without arguments, and it must return bytes-like objects.
@@ -19,7 +19,9 @@ def _generate_multipart_response(self, _, callback: callable, dtype: bytes):
         raise ValueError("Invalid response handler")
     self.terminate(200, True)
     boundary = self.MULTIPART_BOUNDARY
-    self.set_response_header(b"content-type", dtype + b"; boundary=" + boundary)
+    self.set_response_header(
+        b"content-type", dtype.encode("ascii") + b"; boundary=" + boundary
+    )
     if self.method != self.HEAD:
         self.resp_handler = self._multipart_wrapper_factory(callback, boundary)
 
@@ -135,9 +137,8 @@ def _parse_complete_part_st(self, rx):
         raise http.InvalidContentLength()
     self.mp_is_last = True
     dtype, data = callback(self, (part_headers, part_body))
-    self.set_response_header(b"content-type", dtype.encode("ascii"))
     self.terminate(200, True)
-    self.set_response_body(data)
+    self.set_response_body(data, dtype)
 
 
 def apply_patches():
