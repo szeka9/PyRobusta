@@ -412,7 +412,7 @@ class HttpEngine:
     def set_response_body(
         self,
         body: bytes | str | dict | tuple | list,
-        content_type: bytes = b"text/plain",
+        content_type: str = "text/plain",
     ):
         """
         Serialize and wrap the response body with a BytesIO
@@ -436,7 +436,7 @@ class HttpEngine:
         self.set_response_header(
             b"content-length", str(len(body_encoded)).encode("ascii")
         )
-        self.set_response_header(b"content-type", content_type)
+        self.set_response_header(b"content-type", content_type.encode("ascii"))
         if self.method != self.HEAD:
             self.resp_handler = BytesIO(body_encoded)
 
@@ -702,7 +702,6 @@ class HttpEngine:
                 dtype, data = callback(
                     self, bytes(rx.peek(self.headers["content-length"]))
                 )
-            dtype = dtype.encode("ascii")
         else:
             if not callable(callback):
                 # Handle as a file path
@@ -711,10 +710,8 @@ class HttpEngine:
                 )
                 return
             dtype, data = callback(self, b"")
-            dtype = dtype.encode("ascii")
-        self.set_response_header(b"content-type", dtype)
 
-        if dtype.startswith(b"multipart/"):
+        if dtype.startswith("multipart/"):
             self.state = lambda _rx: self._generate_multipart_response(_rx, data, dtype)
             return
 
