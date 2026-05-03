@@ -238,6 +238,39 @@ class HttpEngine:
         return False
 
     @staticmethod
+    def _is_matching_url_path(path: bytes, pattern: bytes) -> bool:
+        """
+        Match a URL path against a pattern that can contain wildcard segments
+        e.g. /path/{wildcard}/resource where {wildcard} matches any non-empty
+        string in that segment.
+        """
+        if path == pattern:
+            return True
+        i = j = 0
+        n, m = len(path), len(pattern)
+        while i < n and j < m:
+            # Find next segment boundaries
+            ni = path.find(b"/", i)
+            nj = pattern.find(b"/", j)
+            if ni == -1:
+                ni = n
+            if nj == -1:
+                nj = m
+            path_seg = path[i:ni]
+            pat_seg = pattern[j:nj]
+            if path_seg != pat_seg:
+                if not (
+                    len(pat_seg) >= 2
+                    and pat_seg[0] == 123  # {
+                    and pat_seg[-1] == 125  # }
+                    and len(path_seg) > 0
+                ):
+                    return False
+            i = ni + 1
+            j = nj + 1
+        return i >= n and j >= m
+
+    @staticmethod
     def _lookup(tuple_, key):
         idx = tuple_.index(key)
         return tuple_[idx + 1]
@@ -245,13 +278,13 @@ class HttpEngine:
     @classmethod
     def _get_callback(cls, endpoint, method: bytes):
         for e in cls.ENDPOINTS:
-            if endpoint == e[0] and method == e[2]:
+            if cls._is_matching_url_path(endpoint, e[0]) and method == e[2]:
                 return e[1]
 
     @classmethod
     def _has_endpoint(cls, endpoint: bytes):
         for e in cls.ENDPOINTS:
-            if endpoint == e[0]:
+            if cls._is_matching_url_path(endpoint, e[0]):
                 return True
         return False
 
