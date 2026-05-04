@@ -8,7 +8,6 @@ from io import BytesIO
 
 from ..utils.config import (
     get_config,
-    CONF_HTTP_SERVED_PATHS,
     CONF_HTTP_MULTIPART,
     CONF_HTTP_SERVE_FILES,
 )
@@ -224,21 +223,6 @@ class HttpEngine:
         if idx_end > -1:
             return query[idx_start + len(key) + 1 : idx_end]
         return query[idx_start + len(key) + 1 :]
-
-    @classmethod
-    def is_norm_path_served(cls, path: str):
-        """
-        Returns true if a normalized path is configured to be served.
-        """
-        served_paths = get_config(CONF_HTTP_SERVED_PATHS)
-        parts = path.split("/")
-        for i, _ in enumerate(parts):
-            current_path = "/".join(parts[: i + 1])
-            if not current_path:
-                current_path = "/"
-            if current_path in served_paths:
-                return True
-        return False
 
     @staticmethod
     def _is_matching_url_path(path: bytes, pattern: bytes) -> bool:

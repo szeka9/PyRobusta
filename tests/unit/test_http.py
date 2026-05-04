@@ -462,7 +462,7 @@ class TestWebHelpers(TestWebStateMachineBase):
 
     @classmethod
     def setUpClass(cls):
-        cls.base_config = {"http_multipart": "False", "http_serve_files": "False"}
+        cls.base_config = {"http_multipart": "False", "http_serve_files": "True"}
         # Simplify file-open assertions by treating resources
         # as if they are installed at the root (/) rather than
         # relative to the current working directory.

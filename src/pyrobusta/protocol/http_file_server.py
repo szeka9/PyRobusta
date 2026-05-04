@@ -9,6 +9,11 @@ from os import stat
 from pyrobusta.protocol import http
 from pyrobusta.utils.helpers import normalize_path, add_method
 
+from ..utils.config import (
+    get_config,
+    CONF_HTTP_SERVED_PATHS,
+)
+
 CONTENT_TYPES = (
     b"raw",
     b"application/octet-stream",
@@ -33,6 +38,21 @@ CONTENT_TYPES = (
     b"gif",
     b"image/gif",
 )
+
+
+def is_norm_path_served(path: str):
+    """
+    Returns true if a normalized path is configured to be served.
+    """
+    served_paths = get_config(CONF_HTTP_SERVED_PATHS)
+    parts = path.split("/")
+    for i, _ in enumerate(parts):
+        current_path = "/".join(parts[: i + 1])
+        if not current_path:
+            current_path = "/"
+        if current_path in served_paths:
+            return True
+    return False
 
 
 def _send_file_st(self, _, file_path: bytes):
@@ -85,3 +105,4 @@ def apply_patches():
     """
 
     add_method(http.HttpEngine, _send_file_st)
+    add_method(http.HttpEngine, is_norm_path_served, "static")
