@@ -3,7 +3,7 @@ DEVICE ?= u0
 
 SRC_DIR := src
 TEST_DIR := tests
-EXAMPLE_DIR := example/mip_repo
+EXAMPLE_DIR := example/demo_app
 BUILD_DIR := build
 DIST_DIR := dist
 TLS_DIR := tls

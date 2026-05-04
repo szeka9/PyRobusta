@@ -366,6 +366,28 @@ class TestWebStateMachine(TestWebStateMachineBase):
             "value3",
         )
 
+    def test_url_path_matching(self):
+        for case in (
+            (b"", b""),
+            (b"/", b"/"),
+            (b"///", b"///"),
+            (b"/path/to/resource", b"/path/to/resource"),
+            (b"/path/to/specific/resource", b"/path/to/{wildcard}/resource"),
+            (b"anything", b"{wildcard}"),
+            (b"path/to/resource", b"path/to/{wildcard}"),
+        ):
+            self.assertEqual(self.engine._is_matching_url_path(case[0], case[1]), True)
+
+    def test_url_path_matching_mismatch(self):
+        for case in (
+            (b"", b"/"),
+            (b"", b"{wildcard}"),
+            (b"/path/to/resource/subresource", b"/path/to/resource"),
+            (b"/path/to/", b"/path/to/{wildcard}"),
+            (b"/to/resource", b"{wildcard}/to/resource"),
+        ):
+            self.assertEqual(self.engine._is_matching_url_path(case[0], case[1]), False)
+
     def test_chunked_transfer_encoding_valid(self):
         self.engine.url = b"/api/test"
         self.engine.method = b"GET"
@@ -440,7 +462,7 @@ class TestWebHelpers(TestWebStateMachineBase):
 
     @classmethod
     def setUpClass(cls):
-        cls.base_config = {"http_multipart": "False", "http_serve_files": "False"}
+        cls.base_config = {"http_multipart": "False", "http_serve_files": "True"}
         # Simplify file-open assertions by treating resources
         # as if they are installed at the root (/) rather than
         # relative to the current working directory.

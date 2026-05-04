@@ -1,6 +1,6 @@
 # Device Setup
 
-Use [mpremote](https://docs.micropython.org/en/latest/reference/mpremote.html) command-line tool to access your device over a serial connection.\
+Use [mpremote](https://docs.micropython.org/en/latest/reference/mpremote.html) to access your device over a serial connection.\
 You can install mpremote via pip. It is also included in the project's requirements.txt
 
 ```bash
@@ -22,7 +22,7 @@ Type "help()" for more information.
 
 # Connect to Wi-Fi
 
-During the initial setup, you’ll need to connect your device to a Wi-Fi network in order to install PyRobusta using the mip tool.\
+During the initial setup, you’ll need to connect your device to a Wi-Fi network in order to install PyRobusta using the mip package manager.\
 After connecting to your device with mpremote, run the following script:
 
 ```python

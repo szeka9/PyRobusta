@@ -8,7 +8,6 @@ from io import BytesIO
 
 from ..utils.config import (
     get_config,
-    CONF_HTTP_SERVED_PATHS,
     CONF_HTTP_MULTIPART,
     CONF_HTTP_SERVE_FILES,
 )
@@ -62,6 +61,7 @@ class HttpEngine:
         "query",
         "content_len_cnt",
         "recv_chunk_size",
+        "is_req_empty",
         "mp_boundary",
         "mp_is_first",
         "mp_is_last",
@@ -120,6 +120,7 @@ class HttpEngine:
         self.query = None
         self.content_len_cnt = 0
         self.recv_chunk_size = 0
+        self.is_req_empty = True
 
         # [Multipart state]
         self.mp_boundary = None
@@ -140,6 +141,7 @@ class HttpEngine:
         self.query = None
         self.content_len_cnt = 0
         self.recv_chunk_size = 0
+        self.is_req_empty = True
         self.mp_boundary = None
 
     # =========================================
@@ -222,20 +224,38 @@ class HttpEngine:
             return query[idx_start + len(key) + 1 : idx_end]
         return query[idx_start + len(key) + 1 :]
 
-    @classmethod
-    def is_norm_path_served(cls, path: str):
+    @staticmethod
+    def _is_matching_url_path(path: bytes, pattern: bytes) -> bool:
         """
-        Returns true if a normalized path is configured to be served.
+        Match a URL path against a pattern that can contain wildcard segments
+        e.g. /path/{wildcard}/resource where {wildcard} matches any non-empty
+        string in that segment.
         """
-        served_paths = get_config(CONF_HTTP_SERVED_PATHS)
-        parts = path.split("/")
-        for i, _ in enumerate(parts):
-            current_path = "/".join(parts[: i + 1])
-            if not current_path:
-                current_path = "/"
-            if current_path in served_paths:
-                return True
-        return False
+        if path == pattern:
+            return True
+        i = j = 0
+        n, m = len(path), len(pattern)
+        while i < n and j < m:
+            # Find next segment boundaries
+            ni = path.find(b"/", i)
+            nj = pattern.find(b"/", j)
+            if ni == -1:
+                ni = n
+            if nj == -1:
+                nj = m
+            path_seg = path[i:ni]
+            pat_seg = pattern[j:nj]
+            if path_seg != pat_seg:
+                if not (
+                    len(pat_seg) >= 2
+                    and pat_seg[0] == 123  # {
+                    and pat_seg[-1] == 125  # }
+                    and len(path_seg) > 0
+                ):
+                    return False
+            i = ni + 1
+            j = nj + 1
+        return i >= n and j >= m
 
     @staticmethod
     def _lookup(tuple_, key):
@@ -245,13 +265,13 @@ class HttpEngine:
     @classmethod
     def _get_callback(cls, endpoint, method: bytes):
         for e in cls.ENDPOINTS:
-            if endpoint == e[0] and method == e[2]:
+            if cls._is_matching_url_path(endpoint, e[0]) and method == e[2]:
                 return e[1]
 
     @classmethod
     def _has_endpoint(cls, endpoint: bytes):
         for e in cls.ENDPOINTS:
-            if endpoint == e[0]:
+            if cls._is_matching_url_path(endpoint, e[0]):
                 return True
         return False
 
@@ -466,11 +486,11 @@ class HttpEngine:
             self.resp_handler = None
         self.terminate(status_code, False)
 
-    def is_started(self):
+    def is_request_empty(self):
         """
-        Returns true if the state machine has received any input.
+        Returns false if the state machine has received any input.
         """
-        return self.state != self._start_parser  # pylint: disable=W0143
+        return self.is_req_empty
 
     def is_terminated(self):
         """
@@ -538,6 +558,7 @@ class HttpEngine:
         Initial state.
         """
         if rx.size():
+            self.is_req_empty = False
             self.state = self._parse_request_line_st
 
     def _parse_request_line_st(self, rx):
