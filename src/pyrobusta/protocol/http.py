@@ -62,6 +62,7 @@ class HttpEngine:
         "query",
         "content_len_cnt",
         "recv_chunk_size",
+        "is_req_empty",
         "mp_boundary",
         "mp_is_first",
         "mp_is_last",
@@ -120,6 +121,7 @@ class HttpEngine:
         self.query = None
         self.content_len_cnt = 0
         self.recv_chunk_size = 0
+        self.is_req_empty = True
 
         # [Multipart state]
         self.mp_boundary = None
@@ -140,6 +142,7 @@ class HttpEngine:
         self.query = None
         self.content_len_cnt = 0
         self.recv_chunk_size = 0
+        self.is_req_empty = True
         self.mp_boundary = None
 
     # =========================================
@@ -499,11 +502,11 @@ class HttpEngine:
             self.resp_handler = None
         self.terminate(status_code, False)
 
-    def is_started(self):
+    def is_request_empty(self):
         """
-        Returns true if the state machine has received any input.
+        Returns false if the state machine has received any input.
         """
-        return self.state != self._start_parser  # pylint: disable=W0143
+        return self.is_req_empty
 
     def is_terminated(self):
         """
@@ -571,6 +574,7 @@ class HttpEngine:
         Initial state.
         """
         if rx.size():
+            self.is_req_empty = False
             self.state = self._parse_request_line_st
 
     def _parse_request_line_st(self, rx):

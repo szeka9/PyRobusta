@@ -88,7 +88,7 @@ class HttpConnection(BaseConnection):
             await sleep_ms(self.STATE_MACHINE_SLEEP_MS)
 
         # [3] write response
-        if self._engine.is_started() and self._engine.is_terminated():
+        if not self._engine.is_request_empty() and self._engine.is_terminated():
             self._engine.write_response_head(self._send_buf)
             await self._flush_response()
             if self._engine.resp_handler is not None:
