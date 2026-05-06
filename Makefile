@@ -1,4 +1,4 @@
-PYROBUSTA_VERSION := v0.5.0
+PYROBUSTA_VERSION := v0.6.0
 DEVICE ?= u0
 
 SRC_DIR := src
@@ -126,6 +126,8 @@ redeploy: clean build clean-device deploy
 # -----------------------------
 .PHONY: publish
 publish:
+	test -n "$(DIST_DIR)" && rm -rf "$(PWD)/$(DIST_DIR)"
+	mkdir -p "$(PWD)/$(DIST_DIR)"
 	@sed -E -i.bak 's/(PYROBUSTA_VERSION[[:space:]]*=[[:space:]]*)"[^"]*"/\1"$(PYROBUSTA_VERSION)"/' \
 		$(SRC_DIR)/pyrobusta/utils/config.py \
 		&& rm -f $(SRC_DIR)/pyrobusta/utils/config.py.bak
