@@ -5,13 +5,15 @@ with partial guarantees on RFC compliance.
 
 from json import dumps
 from io import BytesIO
+from os import stat
 
 from ..utils.config import (
     get_config,
     CONF_HTTP_MULTIPART,
     CONF_HTTP_SERVE_FILES,
+    CONF_HTTP_SERVED_PATHS,
 )
-from ..utils import logging
+from ..utils import logging, helpers
 from ..stream.buffer import BufferFullError
 
 
@@ -74,6 +76,8 @@ class HttpEngine:
     RESP_HEADERS = (
         200,
         b"200 OK",
+        201,
+        b"201 Created",
         204,
         b"204 No Content",
         400,
@@ -94,6 +98,31 @@ class HttpEngine:
         b"503 Service Unavailable",
         505,
         b"505 Version Not Supported",
+    )
+
+    CONTENT_TYPES = (
+        b"raw",
+        b"application/octet-stream",
+        b"html",
+        b"text/html",
+        b"css",
+        b"text/css",
+        b"js",
+        b"application/javascript",
+        b"json",
+        b"application/json",
+        b"ico",
+        b"image/x-icon",
+        b"jpeg",
+        b"image/jpeg",
+        b"jpg",
+        b"image/jpeg",
+        b"png",
+        b"image/png",
+        b"txt",
+        b"text/plain",
+        b"gif",
+        b"image/gif",
     )
 
     DELETE = b"DELETE"
@@ -177,6 +206,19 @@ class HttpEngine:
         if endpoint_exists:
             raise ValueError("endpoint exists")
         cls.ENDPOINTS.append((endpoint, callback, method))
+
+    @classmethod
+    def deregister(cls, endpoint: str, method: str) -> None:
+        """
+        Deregister an endpoint.
+        :param endpoint: URL path to be routed e.g. "/app/resource"
+        :param method: HTTP method name
+        """
+        endpoint = endpoint.encode("ascii")
+        method = method.encode("ascii")
+
+        if callback := cls._get_callback(endpoint, method):
+            cls.ENDPOINTS.remove((endpoint, callback, method))
 
     @staticmethod
     def route(endpoint: str, method: str):
@@ -675,7 +717,7 @@ class HttpEngine:
             return
         # Fallback: serve file
         if self.method in (self.GET, self.HEAD):
-            self.state = lambda _rx: self._send_file_st(_rx, self.url)
+            self.state = self._fs_retrieve_st
             return
         self.terminate(404)
 
@@ -723,7 +765,7 @@ class HttpEngine:
                     rx.consume(self.recv_chunk_size + 2)
                     self.state = self._recv_chunk_size_st
                     return
-                callback_response = callback(self, bytes(rx.peek(self.recv_chunk_size)))
+                callback_response = callback(self, b"")
                 rx.consume(self.recv_chunk_size + 2)
             else:
                 callback_response = callback(
@@ -745,12 +787,45 @@ class HttpEngine:
 
         self.set_response_body(data, content_type=dtype)
 
-    def _send_file_st(self, _, path: bytes):  # pylint: disable=W0613
+    def _fs_retrieve_st(self, _):
         """
-        State for returning including a file in the response body (disabled).
-        :param path: path to the resource
+        State for retrieving a file under /www.
+        /www is prepended to the path by default.
         """
-        self.terminate(503, True)
+        if self.url == b"/":
+            target_path = "/www/index.html"
+        else:
+            target_path = "/www" + self.url.decode("ascii")
+
+        norm_path = helpers.normalize_path(target_path)
+        is_path_served = helpers.is_norm_path_served(
+            norm_path, get_config(CONF_HTTP_SERVED_PATHS)
+        )
+
+        try:
+            if not is_path_served:
+                stat(norm_path)
+                self.terminate(403, True)
+                return
+
+            try:
+                extension = target_path.rsplit(".", 1)[-1]
+                content_type = self._lookup(
+                    self.CONTENT_TYPES, extension.encode("ascii")
+                )
+            except ValueError:
+                content_type = self._lookup(self.CONTENT_TYPES, b"raw")
+
+            self.set_response_header(
+                b"content-length", str(stat(norm_path)[6]).encode("ascii")
+            )
+            self.set_response_header(b"content-type", content_type)
+            self.terminate(200, True)
+            if self.method != self.HEAD:
+                self.resp_handler = open(norm_path, "rb")  # pylint: disable=R1732
+            return
+        except OSError:
+            self.terminate(404, True)
 
     def _start_multipart_parser_st(self, rx):  # pylint: disable=W0613
         """

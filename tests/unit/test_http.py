@@ -5,7 +5,7 @@ import unittest
 from unittest import mock
 from unittest.mock import patch, mock_open
 
-from .utils import load_module, fake_stat
+from .utils import load_module, stat_factory
 
 
 class TestWebStateMachineBase(unittest.TestCase):
@@ -57,6 +57,14 @@ class TestWebStateMachineBase(unittest.TestCase):
         # Load remaining modules, enable optional features
         # ------------------------------------------------
         self.http_module = load_module("pyrobusta/protocol/http.py")
+        self.fs_module = load_module("pyrobusta/protocol/http_file_server.py")
+
+        self.fs_patcher = patch.object(
+            self.fs_module, "setup_directories"
+        )
+        self.fs_patcher.start()
+        self.addCleanup(self.fs_patcher.stop)
+
         self.http_module.enable_optional_features()
         self.engine = self.http_module.HttpEngine()
 
@@ -142,7 +150,7 @@ class TestWebStateMachine(TestWebStateMachineBase):
 
     @classmethod
     def setUpClass(cls):
-        cls.base_config = {"http_multipart": "False", "http_serve_files": "False"}
+        cls.base_config = {"http_multipart": "False"}
         cls.cwd = os.getcwd()
 
     def test_status_parsing_valid(self):
@@ -531,47 +539,6 @@ class TestWebStateMachine(TestWebStateMachineBase):
         self.assertEqual(self.engine.state, self.engine._recv_chunk_st)
 
 
-class TestWebHelpers(TestWebStateMachineBase):
-    """
-    Tests for helper functions.
-    """
-
-    @classmethod
-    def setUpClass(cls):
-        cls.base_config = {"http_multipart": "False", "http_serve_files": "True"}
-        # Simplify file-open assertions by treating resources
-        # as if they are installed at the root (/) rather than
-        # relative to the current working directory.
-        cls.cwd = "/"
-
-    def test_path_serving_list(self):
-        self.config["http_served_paths"] = "/path/to/dir1 /path/to/dir2"
-        self.config_module.read_config()
-        self.assertEqual(self.engine.is_norm_path_served(""), False)
-        self.assertEqual(self.engine.is_norm_path_served("/"), False)
-        self.assertEqual(self.engine.is_norm_path_served("/path/to/dir1"), True)
-        self.assertEqual(self.engine.is_norm_path_served("/path/to/dir2"), True)
-        self.assertEqual(self.engine.is_norm_path_served("/path/to/dir12"), False)
-        self.assertEqual(self.engine.is_norm_path_served("/path/to/dir1/file"), True)
-        self.assertEqual(self.engine.is_norm_path_served("/path/to/dir2/file"), True)
-        self.assertEqual(self.engine.is_norm_path_served("/path/to/other"), False)
-        self.assertEqual(self.engine.is_norm_path_served("/path/to"), False)
-
-    def test_path_serving_root(self):
-        self.config["http_served_paths"] = "/"
-        self.config_module.read_config()
-        self.assertEqual(self.engine.is_norm_path_served(""), True)
-        self.assertEqual(self.engine.is_norm_path_served("/"), True)
-        self.assertEqual(self.engine.is_norm_path_served("/path/to/served"), True)
-
-    def test_path_serving_none(self):
-        self.config["http_served_paths"] = ""
-        self.config_module.read_config()
-        self.assertEqual(self.engine.is_norm_path_served(""), False)
-        self.assertEqual(self.engine.is_norm_path_served("/"), False)
-        self.assertEqual(self.engine.is_norm_path_served("/path/to/served"), False)
-
-
 class TestMultipartStateMachine(TestWebStateMachineBase):
     """
     Tests for multipart handling.
@@ -579,7 +546,7 @@ class TestMultipartStateMachine(TestWebStateMachineBase):
 
     @classmethod
     def setUpClass(cls):
-        cls.base_config = {"http_multipart": "True", "http_serve_files": "False"}
+        cls.base_config = {"http_multipart": "True"}
         cls.cwd = os.getcwd()
 
     def test_multipart_parser(self):
@@ -732,85 +699,84 @@ class TestMultipartStateMachine(TestWebStateMachineBase):
         self.assertEqual(self.engine.mp_is_last, True)
 
 
-class TestFileServerStateMachine(TestWebStateMachineBase):
+class TestFileServingStateMachine(TestWebStateMachineBase):
     """
     Tests for file serving.
     """
 
     @classmethod
     def setUpClass(cls):
-        cls.base_config = {
-            "http_multipart": "False",
-            "http_serve_files": "True",
-            "http_served_paths": "/www",
-        }
+        cls.base_config = {"http_served_paths": "/www"}
         # Simplify file-open assertions by treating resources
         # as if they are installed at the root (/) rather than
         # relative to the current working directory.
         cls.cwd = "/"
 
     @staticmethod
-    def patch_all(f):
-        @patch("pyrobusta.protocol.http_file_server.stat", fake_stat)
-        def decorated(*args, **kwargs):
-            return f(*args, **kwargs)
+    def patch_os_stat(stat_is_file=True):
+        def patched(f):
+            @patch("pyrobusta.protocol.http.stat", stat_factory(stat_is_file))
+            def decorated(*args, **kwargs):
+                return f(*args, **kwargs)
 
-        return decorated
+            return decorated
 
-    @patch_all
-    def test_file_serving_missing_file(self, *_):
-        self.engine.url = b"/files/www/nonexistent.js"
-        self.engine.method = b"GET"
-        self.engine.version = b"HTTP/1.1"
-        self.engine.state = self.engine._send_file_st
+        return patched
 
-        self.engine.state(self.rx, self.engine.url)
-
-        self.assertEqual(self.engine.status_code, 404)
-        self.assertEqual(self.engine.state, None)
-
-    @patch_all
+    @patch_os_stat()
     def test_file_serving_root(self, *_):
         self.engine.url = b"/"
         self.engine.method = b"GET"
         self.engine.version = b"HTTP/1.1"
-        self.engine.state = self.engine._send_file_st
+        self.engine.state = self.engine._fs_retrieve_st
         file_content = "index content"
 
         with patch("builtins.open", mock_open(read_data=file_content)) as m:
-            self.engine.state(self.rx, self.engine.url)
+            self.engine.state(self.rx)
             m.assert_called_once_with("/www/index.html", "rb")
 
         self.assertEqual(self.engine.resp_handler.read(), file_content)
         self.assertEqual(self.engine.status_code, 200)
         self.assertEqual(self.engine.state, None)
 
-    @patch_all
-    def test_file_serving_files_endpoint(self, *_):
-        self.engine.url = b"/files/www/scripts.js"
+    @patch_os_stat()
+    def test_file_serving_subdir(self, *_):
+        self.engine.url = b"/style/styles.css"
         self.engine.method = b"GET"
         self.engine.version = b"HTTP/1.1"
-        self.engine.state = self.engine._send_file_st
-        file_content = "data"
+        self.engine.state = self.engine._fs_retrieve_st
+        file_content = "/* Main styelsheet */"
 
         with patch("builtins.open", mock_open(read_data=file_content)) as m:
-            self.engine.state(self.rx, self.engine.url)
-            m.assert_called_once_with("/www/scripts.js", "rb")
+            self.engine.state(self.rx)
+            m.assert_called_once_with("/www/style/styles.css", "rb")
 
         self.assertEqual(self.engine.resp_handler.read(), file_content)
         self.assertEqual(self.engine.status_code, 200)
         self.assertEqual(self.engine.state, None)
 
-    @patch_all
+    @patch_os_stat()
+    def test_file_serving_missing_file(self, *_):
+        self.engine.url = b"/nonexistent.js"
+        self.engine.method = b"GET"
+        self.engine.version = b"HTTP/1.1"
+        self.engine.state = self.engine._fs_retrieve_st
+
+        self.engine.state(self.rx)
+
+        self.assertEqual(self.engine.status_code, 404)
+        self.assertEqual(self.engine.state, None)
+
+    @patch_os_stat()
     def test_file_serving_known_content_type(self, *_):
         self.engine.url = b"/scripts.js"
         self.engine.method = b"GET"
         self.engine.version = b"HTTP/1.1"
-        self.engine.state = self.engine._send_file_st
+        self.engine.state = self.engine._fs_retrieve_st
         file_content = "data"
 
         with patch("builtins.open", mock_open(read_data=file_content)) as m:
-            self.engine.state(self.rx, self.engine.url)
+            self.engine.state(self.rx)
             m.assert_called_once_with("/www/scripts.js", "rb")
 
         self.assertEqual(self.engine.resp_handler.read(), file_content)
@@ -821,16 +787,16 @@ class TestFileServerStateMachine(TestWebStateMachineBase):
         self.assertEqual(self.engine.status_code, 200)
         self.assertEqual(self.engine.state, None)
 
-    @patch_all
+    @patch_os_stat()
     def test_file_serving_fallback_content_type(self, *_):
         self.engine.url = b"/scripts.unknown"
         self.engine.method = b"GET"
         self.engine.version = b"HTTP/1.1"
-        self.engine.state = self.engine._send_file_st
+        self.engine.state = self.engine._fs_retrieve_st
         file_content = "data"
 
         with patch("builtins.open", mock_open(read_data=file_content)) as m:
-            self.engine.state(self.rx, self.engine.url)
+            self.engine.state(self.rx)
             m.assert_called_once_with("/www/scripts.unknown", "rb")
 
         self.assertEqual(self.engine.resp_handler.read(), file_content)
@@ -839,22 +805,6 @@ class TestFileServerStateMachine(TestWebStateMachineBase):
             b"application/octet-stream",
         )
         self.assertEqual(self.engine.status_code, 200)
-        self.assertEqual(self.engine.state, None)
-
-    @patch_all
-    def test_file_serving_unserved_content_rejected(self, *_):
-        self.engine.url = b"/files/unserved/script.js"
-        self.engine.method = b"GET"
-        self.engine.version = b"HTTP/1.1"
-        self.engine.state = self.engine._send_file_st
-        file_content = "data"
-
-        with patch("builtins.open", mock_open(read_data=file_content)) as m:
-            self.engine.state(self.rx, self.engine.url)
-            m.assert_not_called()
-
-        self.assertEqual(self.engine.resp_handler, None)
-        self.assertEqual(self.engine.status_code, 403)
         self.assertEqual(self.engine.state, None)
 
 

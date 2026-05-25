@@ -56,3 +56,48 @@ class TestHelpers(unittest.TestCase):
             ("/path/../../resource/..", "/"),
         ):
             self.assertEqual(self.helpers_module.normalize_path(case[0]), case[1])
+
+    @patch("pyrobusta.utils.helpers.getcwd", return_value="/")
+    def test_path_serving_list(self, _):
+        served_paths = ["/path/to/dir1", "/path/to/dir2"]
+
+        for case in (
+            ("", False),
+            ("/", False),
+            ("/path/to/dir1", True),
+            ("/path/to/dir2", True),
+            ("/path/to/dir12", False),
+            ("/path/to/dir1/file", True),
+            ("/path/to/dir2/file", True),
+            ("/path/to/other", False),
+            ("/path/to", False),
+        ):
+            self.assertEqual(
+                self.helpers_module.is_norm_path_served(case[0], served_paths), case[1]
+            )
+
+    @patch("pyrobusta.utils.helpers.getcwd", return_value="/")
+    def test_path_serving_root(self, _):
+        served_paths = ["/"]
+
+        for case in (
+            ("", True),
+            ("/", True),
+            ("/path/to/served", True),
+        ):
+            self.assertEqual(
+                self.helpers_module.is_norm_path_served(case[0], served_paths), case[1]
+            )
+
+    @patch("pyrobusta.utils.helpers.getcwd", return_value="/")
+    def test_path_serving_none(self, _):
+        served_paths = []
+
+        for case in (
+            ("", False),
+            ("/", False),
+            ("/path/to/served", False),
+        ):
+            self.assertEqual(
+                self.helpers_module.is_norm_path_served(case[0], served_paths), case[1]
+            )

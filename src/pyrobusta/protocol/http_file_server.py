@@ -1,102 +1,294 @@
 """
-State machine extension for file serving.
+Module for extended file serving features, registered at the /files endpoint.
 """
 
 # pylint: disable=W0212,R0401
 
-from os import stat
+from os import stat, listdir, rmdir, remove, rename, mkdir
+from json import dumps
 
 from pyrobusta.protocol import http
-from pyrobusta.utils.helpers import normalize_path, add_method
+from pyrobusta.utils.helpers import (
+    normalize_path,
+    is_norm_path_served,
+    is_file_path_valid,
+    is_path_segment_valid,
+)
+from pyrobusta.utils.assets import iterate_fs, FS_ITER_FILE
 
 from ..utils.config import (
     get_config,
     CONF_HTTP_SERVED_PATHS,
 )
 
-CONTENT_TYPES = (
-    b"raw",
-    b"application/octet-stream",
-    b"html",
-    b"text/html",
-    b"css",
-    b"text/css",
-    b"js",
-    b"application/javascript",
-    b"json",
-    b"application/json",
-    b"ico",
-    b"image/x-icon",
-    b"jpeg",
-    b"image/jpeg",
-    b"jpg",
-    b"image/jpeg",
-    b"png",
-    b"image/png",
-    b"txt",
-    b"text/plain",
-    b"gif",
-    b"image/gif",
-)
+_UPLOAD_ROOT = normalize_path("/www/user_data")
+_TMP_DIR = normalize_path("/tmp")
 
 
-def is_norm_path_served(path: str):
+#################################################
+# CRUD methods
+#################################################
+
+
+def fs_retrieve(http_ctx, _):
     """
-    Returns true if a normalized path is configured to be served.
+    State for retrieving a file or a directory structure.
+    The http_served_paths configuration controls which files/directories
+    can be retrieved.
     """
-    served_paths = get_config(CONF_HTTP_SERVED_PATHS)
-    parts = path.split("/")
-    for i, _ in enumerate(parts):
-        current_path = "/".join(parts[: i + 1])
-        if not current_path:
-            current_path = "/"
-        if current_path in served_paths:
-            return True
-    return False
+    target_path = http_ctx.url[len(b"/files") :].decode("ascii")
+    norm_path = normalize_path(target_path)
+    is_path_served = is_norm_path_served(norm_path, get_config(CONF_HTTP_SERVED_PATHS))
 
-
-def _send_file_st(self, _, file_path: bytes):
-    """
-    State for returning a file. By default, /www is prepended to the path.
-    Alternatively, ready any file from the root when the path starts with /files
-    if it is configured in http_served_paths.
-    :param file_path: path to the file (unnormalized)
-    """
-    if self.url == b"/files":
-        file_path = "/"
-    elif self.url.startswith(b"/files/"):
-        file_path = file_path[7:]
-    elif self.url == b"/":
-        file_path = b"/www/index.html"
-    else:
-        file_path = b"/www" + file_path
-
-    extension = file_path.rsplit(b".", 1)[-1]
-    norm_path = normalize_path(file_path.decode("ascii"))
-    is_path_served = self.is_norm_path_served(norm_path)
-    if not is_path_served:
-        try:
+    try:
+        if not is_path_served:
             stat(norm_path)
-            self.terminate(403, True)
+            http_ctx.terminate(403, True)
+            return "text/plain", "Forbidden"
+
+        # Retrieve directory structure
+        if stat(norm_path)[0] & 0x4000:
+            http_ctx.set_response_header(b"content-type", b"application/json")
+            http_ctx.set_response_header(b"transfer-encoding", b"chunked")
+            http_ctx.terminate(200, True)
+            http_ctx.resp_handler = _traverse_dir_factory(norm_path)
             return
-        except OSError:
-            self.terminate(404, True)
-            return
-    try:
-        content_type = self._lookup(CONTENT_TYPES, extension)
-    except ValueError:
-        content_type = self._lookup(CONTENT_TYPES, b"raw")
-    try:
-        self.set_response_header(
+
+        # Retrieve file
+        try:
+            extension = target_path.rsplit(".", 1)[-1]
+            content_type = http_ctx._lookup(
+                http_ctx.CONTENT_TYPES, extension.encode("ascii")
+            )
+        except ValueError:
+            content_type = http_ctx._lookup(http_ctx.CONTENT_TYPES, b"raw")
+
+        http_ctx.set_response_header(
             b"content-length", str(stat(norm_path)[6]).encode("ascii")
         )
-        self.set_response_header(b"content-type", content_type)
-        self.terminate(200, True)
-        if self.method != self.HEAD:
-            self.resp_handler = open(norm_path, "rb")  # pylint: disable=R1732
-        return
+        http_ctx.set_response_header(b"content-type", content_type)
+        http_ctx.terminate(200, True)
+        if http_ctx.method != http_ctx.HEAD:
+            http_ctx.resp_handler = open(norm_path, "rb")  # pylint: disable=R1732
     except OSError:
-        self.terminate(404, True)
+        http_ctx.terminate(404, True)
+        return "text/plain", "Not found"
+
+
+def delete_file(http_ctx, _):
+    """
+    Callback function for handling delete operations. The URL path
+    must point to the exact file or directory path under _UPLOAD_ROOT.
+    Only empty directories can be deleted.
+    """
+
+    fs_path = normalize_path(http_ctx.url.decode("ascii")[6:])
+
+    try:
+        if not fs_path.startswith(_UPLOAD_ROOT):
+            stat(fs_path)
+            http_ctx.terminate(403, True)
+            return "text/plain", "Forbidden"
+
+        # Delete directory structure
+        if stat(fs_path)[0] & 0x4000:
+            if listdir(fs_path):
+                http_ctx.terminate(400, True)
+                return "text/plain", "Directory not empty"
+            rmdir(fs_path)
+            http_ctx.terminate(204, True)
+            return "text/plain", "Deleted"
+
+        # Delete file
+        remove(fs_path)
+        http_ctx.terminate(204, True)
+        return "text/plain", "Deleted"
+    except OSError:
+        http_ctx.terminate(404, True)
+        return "text/plain", "Not found"
+
+
+def upload_file(http_ctx, payload: bytes):
+    """
+    Callback function for handling single file uploads, supporting chunked transfer encoding.
+    Uploads are saved to _UPLOAD_ROOT, with the name determined by the URL path.
+    """
+    content_type = http_ctx.headers.get("content-type")
+    if content_type and content_type.lower().startswith("multipart/"):
+        http_ctx.terminate(400)
+        return "text/plain", "Bad request"
+
+    is_chunked = http_ctx.headers.get("transfer-encoding") == "chunked"
+
+    if is_chunked:
+        url_path = http_ctx.url.decode("ascii")
+        file_name_idx = url_path.rfind("/") + 1
+        if not file_name_idx:
+            http_ctx.terminate(400)
+            return "text/plain", "Bad request"
+        file_path = normalize_path(
+            _TMP_DIR + "/" + f"{url_path[file_name_idx:]}.{http_ctx.id}"
+        )
+    else:
+        file_path = normalize_path(http_ctx.url.decode("ascii")[6:])
+
+    if not is_file_path_valid(file_path):
+        http_ctx.terminate(400)
+        return "text/plain", "Invalid or missing filename"
+
+    try:
+        if not file_path.startswith(_UPLOAD_ROOT) and not file_path.startswith(_TMP_DIR):
+            http_ctx.terminate(403, True)
+            return "text/plain", "Forbidden"
+
+        if is_chunked:
+            if not payload:  # Last chunk received, finalize upload
+                rename(file_path, normalize_path(http_ctx.url.decode("ascii")[6:]))
+            else:
+                with open(file_path, "ab") as f:
+                    f.write(payload)
+        else:
+            with open(file_path, "wb") as f:
+                f.write(payload)
+
+        http_ctx.terminate(201, True)
+        return "text/plain", "OK"
+    except OSError:
+        http_ctx.terminate(404, True)
+        return "text/plain", "Not found"
+
+
+def bulk_upload_file(http_ctx, payload: tuple):
+    """
+    Callback function for handling bulk file uploads (Content-Type: multipart/form-data)
+    This callback is invoked on every part. Every file is saved to _UPLOAD_ROOT, with
+    the name determined by the content disposition header. When two parts specify the
+    same file name, the content of the second part is appended to the first part.
+    Split files to multiple parts for chunking large files to avoid HTTP 413 errors.
+    """
+    content_type = http_ctx.headers.get("content-type")
+    if not content_type or not content_type.lower().startswith("multipart/form-data"):
+        http_ctx.terminate(400)
+        return "text/plain", "Bad request"
+
+    part_headers, part_body = payload
+
+    try:
+        filename = get_filename(part_headers)
+    except ValueError:
+        http_ctx.terminate(415)
+        return "text/plain", "Invalid content disposition"
+
+    if not is_path_segment_valid(filename):
+        http_ctx.terminate(400)
+        return "text/plain", "Invalid or missing filename"
+
+    # Clean stale partial uploads
+    if http_ctx.mp_is_first:
+        for file in listdir(_TMP_DIR):
+            if file.endswith(f".{http_ctx.id}"):
+                remove(_TMP_DIR + "/" + file)
+
+    # TODO: support X-Upload-Directory
+    target_path = normalize_path(_TMP_DIR + "/" + f"{filename}.{http_ctx.id}")
+    with open(target_path, "ab") as f:
+        f.write(part_body)
+
+    # Finalize uploads
+    if http_ctx.mp_is_last:
+        suffix = f".{http_ctx.id}"
+        for file in listdir(_TMP_DIR):
+            if file.endswith(suffix):
+                rename(_TMP_DIR + "/" + file, _UPLOAD_ROOT + "/" + file[: -len(suffix)])
+
+        http_ctx.terminate(201, True)
+        return "text/plain", "OK"
+
+
+#################################################
+# Helper functions
+#################################################
+
+
+def get_filename(part_headers: dict):
+    """
+    Get filename field from content-disposition headers.
+    :param part_headers: headers of an individual part
+    """
+    cd = part_headers.get("content-disposition", "")
+    filename = None
+
+    if cd[: min(max(cd.find(";"), 0), len(cd))].strip() != "form-data":
+        raise ValueError()
+
+    f_start = cd.find(";") + 1
+    f_end = cd.find(";", f_start)
+
+    while f_start < len(cd):
+        f_end = len(cd) if f_end == -1 else f_end
+        parameter = cd[f_start:f_end].split("=")
+        if len(parameter) == 2 and parameter[0].strip() == "filename":
+            filename = parameter[1].strip().strip("'").strip('"')
+        f_start = f_end + 1
+        f_end = cd.find(";", f_start)
+
+    return filename
+
+
+def _traverse_dir_factory(path):
+    """
+    Factory method for creating a response handler closure
+    for directory content traversal.
+    :param path: normalized path to the directory to traverse
+    """
+
+    def _traverse_dir(tx):
+        """
+        Traverse a directory and produce a JSON-formatted
+        response of the directory contents.
+        :param tx: response buffer
+        """
+        tx.write(b"[")
+        for i, it in enumerate(iterate_fs(path, FS_ITER_FILE)):
+            if i != 0:
+                tx.write(b",")
+
+            file_stat = stat(it)
+            obj = dumps(
+                {
+                    "path": it,
+                    "size": str(file_stat[6]),
+                    "created": str(file_stat[9]),
+                }
+            ).encode("ascii")
+
+            written = 0
+            while written < len(obj):
+                to_write = tx.capacity - tx.size()
+                if not to_write:
+                    raise BufferError()
+                tx.write(obj[written : written + to_write])
+                written += to_write
+                yield False
+        tx.write(b"]\r\n")
+        yield True
+
+    return _traverse_dir
+
+
+def setup_directories():
+    for dir in (_UPLOAD_ROOT, _TMP_DIR):
+        base_dir = normalize_path("/")
+        sub_dirs = dir[len(base_dir) :].lstrip("/")
+
+        for subdir in sub_dirs.split("/"):
+            current_dir = base_dir + "/" + subdir
+            if not subdir in listdir(base_dir):
+                mkdir(current_dir)
+            base_dir = current_dir
+
+    for file in listdir(_TMP_DIR):
+        remove(_TMP_DIR + "/" + file)
 
 
 def apply_patches():
@@ -104,5 +296,14 @@ def apply_patches():
     Apply patches to class attributes for file serving.
     """
 
-    add_method(http.HttpEngine, _send_file_st)
-    add_method(http.HttpEngine, is_norm_path_served, "static")
+    http.HttpEngine.deregister("/files/{fs_path:path}", "GET")
+    http.HttpEngine.deregister("/files/{fs_path:path}", "DELETE")
+    http.HttpEngine.deregister("/files/{fs_path:path}", "PUT")
+    http.HttpEngine.deregister("/files", "POST")
+
+    http.HttpEngine.register("/files/{fs_path:path}", fs_retrieve, "GET")
+    http.HttpEngine.register("/files/{fs_path:path}", delete_file, "DELETE")
+    http.HttpEngine.register("/files/{fs_path:path}", upload_file, "PUT")
+    http.HttpEngine.register("/files", bulk_upload_file, "POST")
+
+    setup_directories()
