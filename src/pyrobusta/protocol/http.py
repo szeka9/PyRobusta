@@ -163,9 +163,9 @@ class HttpEngine:
     @classmethod
     def register(cls, endpoint: str, callback: callable, method: str = "GET") -> None:
         """
-        Register an endpoint with a callback function or file.
+        Register an endpoint with a callback function.
         :param endpoint: URL path to be routed e.g. "/app/resource"
-        :param callback: callback function or file path
+        :param callback: callback function
         :param method: HTTP method name
         """
         endpoint = endpoint.encode("ascii")
@@ -723,27 +723,26 @@ class HttpEngine:
                     rx.consume(self.recv_chunk_size + 2)
                     self.state = self._recv_chunk_size_st
                     return
-                dtype, data = callback(self, bytes(rx.peek(self.recv_chunk_size)))
+                callback_response = callback(self, bytes(rx.peek(self.recv_chunk_size)))
                 rx.consume(self.recv_chunk_size + 2)
             else:
-                dtype, data = callback(
+                callback_response = callback(
                     self, bytes(rx.peek(self.headers["content-length"]))
                 )
         else:
-            if not callable(callback):
-                # Handle as a file path
-                self.state = lambda _rx: self._send_file_st(
-                    _rx, callback.encode("ascii")
-                )
-                return
-            dtype, data = callback(self, b"")
+            callback_response = callback(self, b"")
 
+        if not self.is_terminated():
+            self.terminate(200, True)
+
+        if callback_response is None:
+            return
+
+        dtype, data = callback_response
         if dtype.startswith("multipart/"):
             self.state = lambda _rx: self._generate_multipart_response(_rx, data, dtype)
             return
 
-        if not self.is_terminated():
-            self.terminate(200, True)
         self.set_response_body(data, content_type=dtype)
 
     def _send_file_st(self, _, path: bytes):  # pylint: disable=W0613
