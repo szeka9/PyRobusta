@@ -383,12 +383,23 @@ class HttpEngine:
         """
         if (
             key in self.resp_headers
-            and (index := self.resp_headers.index(key) % 2) == 0
+            and (index := self.resp_headers.index(key)) % 2 == 0
         ):
             self.resp_headers[index + 1] = value
         else:
             self.resp_headers.append(key)
             self.resp_headers.append(value)
+
+    def get_response_header(self, key: bytes):
+        """
+        Get a response header by key.
+        :param key: HTTP header key
+        """
+        if (
+            key in self.resp_headers
+            and (index := self.resp_headers.index(key)) % 2 == 0
+        ):
+            return self.resp_headers[index + 1]
 
     def write_response_head(self, tx):
         """

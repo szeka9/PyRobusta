@@ -68,6 +68,73 @@ class TestWebStateMachineBase(unittest.TestCase):
         self.tx = buffer_module.SlidingBuffer(bytearray(1024))
 
 
+class TestWebStateMachineHelpers(TestWebStateMachineBase):
+    """
+    Tests for state machine helper functions.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.base_config = {}
+        cls.cwd = os.getcwd()
+
+    def test_response_header_setter(self):
+        self.engine.url = b"/test"
+        self.engine.method = b"GET"
+        self.engine.version = b"HTTP/1.1"
+
+        self.engine.set_response_header(b"content-type", b"application/json")
+        self.engine.set_response_header(b"transfer-encoding", b"chunked")
+
+        self.assertEqual(self.engine.get_response_header(b"content-type"), b"application/json")
+        self.assertEqual(self.engine.get_response_header(b"transfer-encoding"), b"chunked")
+
+    def test_response_header_setter_override(self):
+        self.engine.url = b"/test"
+        self.engine.method = b"GET"
+        self.engine.version = b"HTTP/1.1"
+
+        self.engine.set_response_header(b"content-type", b"application/json")
+        self.engine.set_response_header(b"connection", b"keep-alive")
+
+        self.engine.set_response_header(b"content-type", b"text/plain")
+        self.engine.set_response_header(b"connection", b"close")
+
+        self.assertEqual(self.engine.get_response_header(b"content-type"), b"text/plain")
+        self.assertEqual(self.engine.get_response_header(b"connection"), b"close")
+
+    def test_generate_response_head(self):
+        self.engine.url = b"/test"
+        self.engine.method = b"GET"
+        self.engine.version = b"HTTP/1.1"
+
+        self.engine.set_response_header(b"content-type", b"application/json")
+        self.engine.set_response_header(b"transfer-encoding", b"chunked")
+
+        self.engine.terminate(200)
+
+        self.engine.write_response_head(self.tx)
+        self.assertNotEqual(bytes(self.tx.peek()).find(b"\r\ncontent-type: application/json\r\n"), -1)
+        self.assertNotEqual(bytes(self.tx.peek()).find(b"\r\ntransfer-encoding: chunked\r\n"), -1)
+
+    def test_generate_response_head_override(self):
+        self.engine.url = b"/test"
+        self.engine.method = b"GET"
+        self.engine.version = b"HTTP/1.1"
+
+        self.engine.set_response_header(b"content-type", b"application/json")
+        self.engine.set_response_header(b"date", b"Tue, 29 Feb 2026 15:32:12 GMT")
+        self.engine.terminate(200)
+
+        self.engine.set_response_header(b"content-type", b"text/plain")
+        self.engine.set_response_header(b"date", b"Tue, 29 Feb 2026 15:32:13 GMT")
+        self.engine.terminate(400)
+
+        self.engine.write_response_head(self.tx)
+        self.assertNotEqual(bytes(self.tx.peek()).find(b"\r\ncontent-type: text/plain\r\n"), -1)
+        self.assertNotEqual(bytes(self.tx.peek()).find(b"\r\ndate: Tue, 29 Feb 2026 15:32:13 GMT\r\n"), -1)
+
+
 class TestWebStateMachine(TestWebStateMachineBase):
     """
     Tests for the core functionality of the state machine.
