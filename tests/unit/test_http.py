@@ -442,6 +442,12 @@ class TestWebStateMachine(TestWebStateMachineBase):
             (b"/path/to/specific/resource", b"/path/to/{wildcard}/resource"),
             (b"anything", b"{wildcard}"),
             (b"path/to/resource", b"path/to/{wildcard}"),
+            (b"path/to/resource", b"path/to/{wildcard:path}"),
+            (b"path/to/resource/", b"path/to/{wildcard:path}"),
+            (
+                b"path/to/resource/subresource/subsubresource",
+                b"path/to/{wildcard:path}",
+            ),
         ):
             self.assertEqual(self.engine._is_matching_url_path(case[0], case[1]), True)
 
@@ -449,9 +455,12 @@ class TestWebStateMachine(TestWebStateMachineBase):
         for case in (
             (b"", b"/"),
             (b"", b"{wildcard}"),
+            (b"", b"{wildcard:path}"),
             (b"/path/to/resource/subresource", b"/path/to/resource"),
             (b"/path/to/", b"/path/to/{wildcard}"),
+            (b"/path/to/", b"/path/to/{wildcard:path}"),
             (b"/to/resource", b"{wildcard}/to/resource"),
+            (b"path/to/resource/subresource/subsubresource", b"path/to/{wildcard}"),
         ):
             self.assertEqual(self.engine._is_matching_url_path(case[0], case[1]), False)
 

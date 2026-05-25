@@ -229,7 +229,9 @@ class HttpEngine:
         """
         Match a URL path against a pattern that can contain wildcard segments
         e.g. /path/{wildcard}/resource where {wildcard} matches any non-empty
-        string in that segment.
+        string in that segment. /path/to/{wildcard:path} matches multiple path
+        segments, only allowed for trailing segments.
+        (e.g. "/{wildcard:path}/resource" is forbidden)
         """
         if path == pattern:
             return True
@@ -253,6 +255,8 @@ class HttpEngine:
                     and len(path_seg) > 0
                 ):
                     return False
+                if pat_seg.endswith(b":path}"):
+                    return True
             i = ni + 1
             j = nj + 1
         return i >= n and j >= m
