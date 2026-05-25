@@ -49,6 +49,7 @@ class HttpEngine:
     """
 
     __slots__ = (
+        "id",
         "state",
         "status_code",
         "resp_headers",
@@ -103,9 +104,19 @@ class HttpEngine:
     PUT = b"PUT"
     METHODS = (DELETE, GET, HEAD, OPTIONS, POST, PUT)
     SUPPORTED_VERSIONS = (b"HTTP/1.1", b"HTTP/1.0")
+    SESSION_COUNTER = 0
+
+    @classmethod
+    def new_session_id(cls):
+        """
+        Create a new unique ID for the HTTP session.
+        """
+        cls.SESSION_COUNTER = (cls.SESSION_COUNTER + 1) & 0xFFFFFFFF
+        return cls.SESSION_COUNTER
 
     def __init__(self):
         # [State machine]
+        self.id = self.new_session_id()
         self.state = self._start_parser
         self.status_code = None
         self.resp_headers = []
@@ -129,6 +140,7 @@ class HttpEngine:
         """
         Reset internal state to reuse a state machine object.
         """
+        self.id = self.new_session_id()
         self.state = self._start_parser
         self.status_code = None
         self.resp_headers.clear()
@@ -515,7 +527,7 @@ class HttpEngine:
 
     def run(self, rx):
         """
-        Run the state machine with request buffers provided.
+        Run the state machine, consuming the content of a request buffer (rx).
         Unlike individual states, this method does not raise an exception.
         This method yields on every state transition allowing the calling side
         to flush the response buffer.
@@ -743,7 +755,7 @@ class HttpEngine:
 
     def _start_multipart_parser_st(self, rx):  # pylint: disable=W0613
         """
-        Initial state for processing multipart requests (disabled).
+        Initial state for processing multipart requests (placeholder).
         """
         self.terminate(503)
 
@@ -751,7 +763,7 @@ class HttpEngine:
         self, rx, callback, dtype
     ):  # pylint: disable=W0613
         """
-        Generate multipart response depening on the exact content type (disabled).
+        Generate multipart response depening on the exact content type (placeholder).
         """
         self.terminate(503, True)
 
