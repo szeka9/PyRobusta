@@ -23,7 +23,7 @@ base_config = {
     "socket_max_con": 1,
     "http_mem_cap": 0.05,
     "http_multipart": False,
-    "http_serve_files": True,
+    "http_files_api": False,
     "tls": False,
     "http_port": 8080,
     "https_port": 4443,
@@ -343,7 +343,7 @@ if __name__ == "__main__":
             "https_port",
             "http_served_paths",
             "log_level",
-            "http_serve_files",
+            "http_files_api",
         },
     )
 

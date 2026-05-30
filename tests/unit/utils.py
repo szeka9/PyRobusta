@@ -29,18 +29,22 @@ def load_module(relative_path):
     return mod
 
 
-def fake_stat(size=1024):
-    return os.stat_result(
-        (
-            0o100644,  # st_mode (regular file, 644 perms)
-            12345678,  # st_ino
-            2049,  # st_dev
-            1,  # st_nlink
-            1000,  # st_uid
-            1000,  # st_gid
-            size,  # st_size
-            int(time.time()),  # st_atime
-            int(time.time()),  # st_mtime
-            int(time.time()),  # st_ctime
+def stat_factory(is_file):
+    def fake_stat(_):
+        st_mode = 0o100000 | 0o644 if is_file else 0o040000 | 0o755
+        return os.stat_result(
+            (
+                st_mode,  # st_mode
+                12345678,  # st_ino
+                2049,  # st_dev
+                1,  # st_nlink
+                1000,  # st_uid
+                1000,  # st_gid
+                1024,  # st_size
+                int(time.time()),  # st_atime
+                int(time.time()),  # st_mtime
+                int(time.time()),  # st_ctime
+            )
         )
-    )
+
+    return fake_stat

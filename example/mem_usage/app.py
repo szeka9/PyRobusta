@@ -47,3 +47,7 @@ async def main():
     asyncio.create_task(server.start_socket_server())
     while True:
         await asyncio.sleep(1)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

@@ -96,11 +96,21 @@ class HttpConnection(BaseConnection):
 
     async def _response_handler(self, resp_handler):
         if "closure" == type(resp_handler).__name__:
-            for is_finished in resp_handler(self._send_buf):
-                await self._flush_response()
-                if is_finished:
-                    break
-                await sleep_ms(self.STATE_MACHINE_SLEEP_MS)
+            if self._engine.get_response_header(b"transfer-encoding") == b"chunked":
+                for is_finished in resp_handler(self._send_buf):
+                    await self.write(b"%x\r\n" % self._send_buf.size())
+                    await self._flush_response()
+                    await self.write(b"\r\n")
+                    if is_finished:
+                        await self.write(b"0\r\n\r\n")
+                        break
+                    await sleep_ms(self.STATE_MACHINE_SLEEP_MS)
+            else:
+                for is_finished in resp_handler(self._send_buf):
+                    await self._flush_response()
+                    if is_finished:
+                        break
+                    await sleep_ms(self.STATE_MACHINE_SLEEP_MS)
         elif type(resp_handler).__name__ in ("FileIO", "BytesIO"):
             try:
                 while True:

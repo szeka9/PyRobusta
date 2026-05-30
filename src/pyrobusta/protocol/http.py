@@ -5,13 +5,15 @@ with partial guarantees on RFC compliance.
 
 from json import dumps
 from io import BytesIO
+from os import stat
 
 from ..utils.config import (
     get_config,
     CONF_HTTP_MULTIPART,
-    CONF_HTTP_SERVE_FILES,
+    CONF_HTTP_FILES_API,
+    CONF_HTTP_SERVED_PATHS,
 )
-from ..utils import logging
+from ..utils import logging, helpers
 from ..stream.buffer import BufferFullError
 
 
@@ -44,11 +46,13 @@ class HttpEngine:
     - allows applications to set response attributes (headers, status code)
 
     Feature flags (configured in pyrobusta.env)
-    - http_serve_files: serve files stored on the device
+    - http_files_api: serve files at the /files endpoint, with support for uploads,
+      removal and directory listing
     - http_multipart: support for multipart requests/responses
     """
 
     __slots__ = (
+        "id",
         "state",
         "status_code",
         "resp_headers",
@@ -73,6 +77,8 @@ class HttpEngine:
     RESP_HEADERS = (
         200,
         b"200 OK",
+        201,
+        b"201 Created",
         204,
         b"204 No Content",
         400,
@@ -95,6 +101,31 @@ class HttpEngine:
         b"505 Version Not Supported",
     )
 
+    CONTENT_TYPES = (
+        b"raw",
+        b"application/octet-stream",
+        b"html",
+        b"text/html",
+        b"css",
+        b"text/css",
+        b"js",
+        b"application/javascript",
+        b"json",
+        b"application/json",
+        b"ico",
+        b"image/x-icon",
+        b"jpeg",
+        b"image/jpeg",
+        b"jpg",
+        b"image/jpeg",
+        b"png",
+        b"image/png",
+        b"txt",
+        b"text/plain",
+        b"gif",
+        b"image/gif",
+    )
+
     DELETE = b"DELETE"
     GET = b"GET"
     HEAD = b"HEAD"
@@ -103,9 +134,19 @@ class HttpEngine:
     PUT = b"PUT"
     METHODS = (DELETE, GET, HEAD, OPTIONS, POST, PUT)
     SUPPORTED_VERSIONS = (b"HTTP/1.1", b"HTTP/1.0")
+    SESSION_COUNTER = 0
+
+    @classmethod
+    def new_session_id(cls):
+        """
+        Create a new unique ID for the HTTP session.
+        """
+        cls.SESSION_COUNTER = (cls.SESSION_COUNTER + 1) & 0xFFFFFFFF
+        return cls.SESSION_COUNTER
 
     def __init__(self):
         # [State machine]
+        self.id = self.new_session_id()
         self.state = self._start_parser
         self.status_code = None
         self.resp_headers = []
@@ -129,6 +170,7 @@ class HttpEngine:
         """
         Reset internal state to reuse a state machine object.
         """
+        self.id = self.new_session_id()
         self.state = self._start_parser
         self.status_code = None
         self.resp_headers.clear()
@@ -151,9 +193,9 @@ class HttpEngine:
     @classmethod
     def register(cls, endpoint: str, callback: callable, method: str = "GET") -> None:
         """
-        Register an endpoint with a callback function or file.
+        Register an endpoint with a callback function.
         :param endpoint: URL path to be routed e.g. "/app/resource"
-        :param callback: callback function or file path
+        :param callback: callback function
         :param method: HTTP method name
         """
         endpoint = endpoint.encode("ascii")
@@ -165,6 +207,19 @@ class HttpEngine:
         if endpoint_exists:
             raise ValueError("endpoint exists")
         cls.ENDPOINTS.append((endpoint, callback, method))
+
+    @classmethod
+    def deregister(cls, endpoint: str, method: str) -> None:
+        """
+        Deregister an endpoint.
+        :param endpoint: URL path to be routed e.g. "/app/resource"
+        :param method: HTTP method name
+        """
+        endpoint = endpoint.encode("ascii")
+        method = method.encode("ascii")
+
+        if callback := cls._get_callback(endpoint, method):
+            cls.ENDPOINTS.remove((endpoint, callback, method))
 
     @staticmethod
     def route(endpoint: str, method: str):
@@ -229,7 +284,9 @@ class HttpEngine:
         """
         Match a URL path against a pattern that can contain wildcard segments
         e.g. /path/{wildcard}/resource where {wildcard} matches any non-empty
-        string in that segment.
+        string in that segment. /path/to/{wildcard:path} matches multiple path
+        segments, only allowed for trailing segments.
+        (e.g. "/{wildcard:path}/resource" is forbidden)
         """
         if path == pattern:
             return True
@@ -253,6 +310,8 @@ class HttpEngine:
                     and len(path_seg) > 0
                 ):
                     return False
+                if pat_seg.endswith(b":path}"):
+                    return True
             i = ni + 1
             j = nj + 1
         return i >= n and j >= m
@@ -383,12 +442,23 @@ class HttpEngine:
         """
         if (
             key in self.resp_headers
-            and (index := self.resp_headers.index(key) % 2) == 0
+            and (index := self.resp_headers.index(key)) % 2 == 0
         ):
             self.resp_headers[index + 1] = value
         else:
             self.resp_headers.append(key)
             self.resp_headers.append(value)
+
+    def get_response_header(self, key: bytes):
+        """
+        Get a response header by key.
+        :param key: HTTP header key
+        """
+        if (
+            key in self.resp_headers
+            and (index := self.resp_headers.index(key)) % 2 == 0
+        ):
+            return self.resp_headers[index + 1]
 
     def write_response_head(self, tx):
         """
@@ -500,7 +570,7 @@ class HttpEngine:
 
     def run(self, rx):
         """
-        Run the state machine with request buffers provided.
+        Run the state machine, consuming the content of a request buffer (rx).
         Unlike individual states, this method does not raise an exception.
         This method yields on every state transition allowing the calling side
         to flush the response buffer.
@@ -648,7 +718,7 @@ class HttpEngine:
             return
         # Fallback: serve file
         if self.method in (self.GET, self.HEAD):
-            self.state = lambda _rx: self._send_file_st(_rx, self.url)
+            self.state = self._fs_retrieve_st
             return
         self.terminate(404)
 
@@ -696,39 +766,71 @@ class HttpEngine:
                     rx.consume(self.recv_chunk_size + 2)
                     self.state = self._recv_chunk_size_st
                     return
-                dtype, data = callback(self, bytes(rx.peek(self.recv_chunk_size)))
+                callback_response = callback(self, b"")
                 rx.consume(self.recv_chunk_size + 2)
             else:
-                dtype, data = callback(
+                callback_response = callback(
                     self, bytes(rx.peek(self.headers["content-length"]))
                 )
         else:
-            if not callable(callback):
-                # Handle as a file path
-                self.state = lambda _rx: self._send_file_st(
-                    _rx, callback.encode("ascii")
-                )
-                return
-            dtype, data = callback(self, b"")
+            callback_response = callback(self, b"")
 
+        if not self.is_terminated():
+            self.terminate(200, True)
+
+        if callback_response is None:
+            return
+
+        dtype, data = callback_response
         if dtype.startswith("multipart/"):
             self.state = lambda _rx: self._generate_multipart_response(_rx, data, dtype)
             return
 
-        if not self.is_terminated():
-            self.terminate(200, True)
         self.set_response_body(data, content_type=dtype)
 
-    def _send_file_st(self, _, path: bytes):  # pylint: disable=W0613
+    def _fs_retrieve_st(self, _):
         """
-        State for returning including a file in the response body (disabled).
-        :param path: path to the resource
+        State for retrieving a file under /www.
+        /www is prepended to the path by default.
         """
-        self.terminate(503, True)
+        if self.url == b"/":
+            target_path = "/www/index.html"
+        else:
+            target_path = "/www" + self.url.decode("ascii")
+
+        norm_path = helpers.normalize_path(target_path)
+        is_path_served = helpers.is_norm_path_served(
+            norm_path, get_config(CONF_HTTP_SERVED_PATHS)
+        )
+
+        try:
+            if not is_path_served:
+                stat(norm_path)
+                self.terminate(403, True)
+                return
+
+            try:
+                extension = target_path.rsplit(".", 1)[-1]
+                content_type = self._lookup(
+                    self.CONTENT_TYPES, extension.encode("ascii")
+                )
+            except ValueError:
+                content_type = self._lookup(self.CONTENT_TYPES, b"raw")
+
+            self.set_response_header(
+                b"content-length", str(stat(norm_path)[6]).encode("ascii")
+            )
+            self.set_response_header(b"content-type", content_type)
+            self.terminate(200, True)
+            if self.method != self.HEAD:
+                self.resp_handler = open(norm_path, "rb")  # pylint: disable=R1732
+            return
+        except OSError:
+            self.terminate(404, True)
 
     def _start_multipart_parser_st(self, rx):  # pylint: disable=W0613
         """
-        Initial state for processing multipart requests (disabled).
+        Initial state for processing multipart requests (placeholder).
         """
         self.terminate(503)
 
@@ -736,7 +838,7 @@ class HttpEngine:
         self, rx, callback, dtype
     ):  # pylint: disable=W0613
         """
-        Generate multipart response depening on the exact content type (disabled).
+        Generate multipart response depening on the exact content type (placeholder).
         """
         self.terminate(503, True)
 
@@ -750,7 +852,7 @@ def enable_optional_features():
 
         http_multipart.apply_patches()
 
-    if get_config(CONF_HTTP_SERVE_FILES):
+    if get_config(CONF_HTTP_FILES_API):
         from pyrobusta.protocol import http_file_server
 
         http_file_server.apply_patches()

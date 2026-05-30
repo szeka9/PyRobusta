@@ -137,7 +137,9 @@ def _parse_complete_part_st(self, rx):
         raise http.InvalidContentLength()
     self.mp_is_last = True
     dtype, data = callback(self, (part_headers, part_body))
-    self.terminate(200, True)
+
+    if not self.is_terminated():
+        self.terminate(200, True)
     self.set_response_body(data, dtype)
 
 

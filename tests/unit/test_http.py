@@ -1,81 +1,105 @@
 import os
-import sys
 import unittest
 
 from unittest import mock
 from unittest.mock import patch, mock_open
 
-from .utils import load_module, fake_stat
+from .utils import stat_factory
+from .http_base import TestHttpBase
 
 
-class TestWebStateMachineBase(unittest.TestCase):
+class TestWebStateMachineHelpers(TestHttpBase):
     """
-    Base class for state machine tests.
+    Tests for state machine helper functions.
     """
 
     @classmethod
     def setUpClass(cls):
-        cls.base_config = {}
+        cls.base_config = {"http_multipart": "False", "http_files_api": "False"}
         cls.cwd = os.getcwd()
 
-    def setUp(self):
-        # -------------------------------
-        # Patch current working directory
-        # -------------------------------
-        self.helpers_module = load_module("pyrobusta/utils/helpers.py")
-        self.cwd_patcher = patch.object(
-            self.helpers_module, "getcwd", return_value=self.cwd
+    def test_response_header_setter(self):
+        self.engine.url = b"/test"
+        self.engine.method = b"GET"
+        self.engine.version = b"HTTP/1.1"
+
+        self.engine.set_response_header(b"content-type", b"application/json")
+        self.engine.set_response_header(b"transfer-encoding", b"chunked")
+
+        self.assertEqual(
+            self.engine.get_response_header(b"content-type"), b"application/json"
         )
-        self.cwd_patcher.start()
-        self.addCleanup(self.cwd_patcher.stop)
-
-        # -------------------
-        # Patch config module
-        # -------------------
-        self.config = dict(self.base_config)
-        self.config_module = load_module("pyrobusta/utils/config.py")
-        self.module_patcher = patch.dict(
-            sys.modules,
-            {"pyrobusta.utils.config": self.config_module},
+        self.assertEqual(
+            self.engine.get_response_header(b"transfer-encoding"), b"chunked"
         )
-        self.module_patcher.start()
-        self.addCleanup(self.module_patcher.stop)
 
-        def open_side_effect(*args, **kwargs):
-            data = "\n".join(f"{k}={v}" for k, v in self.config.items())
-            return mock_open(read_data=data)(*args, **kwargs)
+    def test_response_header_setter_override(self):
+        self.engine.url = b"/test"
+        self.engine.method = b"GET"
+        self.engine.version = b"HTTP/1.1"
 
-        self.open_patcher = patch.object(
-            self.config_module,
-            "open",
-            side_effect=open_side_effect,
+        self.engine.set_response_header(b"content-type", b"application/json")
+        self.engine.set_response_header(b"connection", b"keep-alive")
+
+        self.engine.set_response_header(b"content-type", b"text/plain")
+        self.engine.set_response_header(b"connection", b"close")
+
+        self.assertEqual(
+            self.engine.get_response_header(b"content-type"), b"text/plain"
         )
-        self.open_patcher.start()
-        self.addCleanup(self.open_patcher.stop)
+        self.assertEqual(self.engine.get_response_header(b"connection"), b"close")
 
-        # ------------------------------------------------
-        # Load remaining modules, enable optional features
-        # ------------------------------------------------
-        self.http_module = load_module("pyrobusta/protocol/http.py")
-        self.http_module.enable_optional_features()
-        self.engine = self.http_module.HttpEngine()
+    def test_generate_response_head(self):
+        self.engine.url = b"/test"
+        self.engine.method = b"GET"
+        self.engine.version = b"HTTP/1.1"
 
-        # --------------------
-        # HTTP engine, buffers
-        # --------------------
-        buffer_module = load_module("pyrobusta/stream/buffer.py")
-        self.rx = buffer_module.SlidingBuffer(bytearray(1024))
-        self.tx = buffer_module.SlidingBuffer(bytearray(1024))
+        self.engine.set_response_header(b"content-type", b"application/json")
+        self.engine.set_response_header(b"transfer-encoding", b"chunked")
+
+        self.engine.terminate(200)
+
+        self.engine.write_response_head(self.tx)
+        self.assertEqual(bytes(self.tx.peek()).find(b"HTTP/1.1 200 OK\r\n"), 0)
+        self.assertNotEqual(
+            bytes(self.tx.peek()).find(b"\r\ncontent-type: application/json\r\n"), -1
+        )
+        self.assertNotEqual(
+            bytes(self.tx.peek()).find(b"\r\ntransfer-encoding: chunked\r\n"), -1
+        )
+
+    def test_generate_response_head_override(self):
+        self.engine.url = b"/test"
+        self.engine.method = b"GET"
+        self.engine.version = b"HTTP/1.1"
+
+        self.engine.set_response_header(b"content-type", b"application/json")
+        self.engine.set_response_header(b"date", b"Tue, 29 Feb 2026 15:32:12 GMT")
+        self.engine.terminate(200)
+
+        self.engine.set_response_header(b"content-type", b"text/plain")
+        self.engine.set_response_header(b"date", b"Tue, 29 Feb 2026 15:32:13 GMT")
+        self.engine.terminate(400)
+
+        self.engine.write_response_head(self.tx)
+        self.assertEqual(bytes(self.tx.peek()).find(b"HTTP/1.1 400 Bad Request\r\n"), 0)
+        self.assertNotEqual(
+            bytes(self.tx.peek()).find(b"\r\ncontent-type: text/plain\r\n"), -1
+        )
+        self.assertNotEqual(
+            bytes(self.tx.peek()).find(b"\r\ndate: Tue, 29 Feb 2026 15:32:13 GMT\r\n"),
+            -1,
+        )
 
 
-class TestWebStateMachine(TestWebStateMachineBase):
+class TestWebStateMachine(TestHttpBase):
     """
     Tests for the core functionality of the state machine.
     """
 
     @classmethod
     def setUpClass(cls):
-        cls.base_config = {"http_multipart": "False", "http_serve_files": "False"}
+        cls.base_config = {"http_multipart": "False", "http_files_api": "False"}
         cls.cwd = os.getcwd()
 
     def test_status_parsing_valid(self):
@@ -375,6 +399,12 @@ class TestWebStateMachine(TestWebStateMachineBase):
             (b"/path/to/specific/resource", b"/path/to/{wildcard}/resource"),
             (b"anything", b"{wildcard}"),
             (b"path/to/resource", b"path/to/{wildcard}"),
+            (b"path/to/resource", b"path/to/{wildcard:path}"),
+            (b"path/to/resource/", b"path/to/{wildcard:path}"),
+            (
+                b"path/to/resource/subresource/subsubresource",
+                b"path/to/{wildcard:path}",
+            ),
         ):
             self.assertEqual(self.engine._is_matching_url_path(case[0], case[1]), True)
 
@@ -382,9 +412,12 @@ class TestWebStateMachine(TestWebStateMachineBase):
         for case in (
             (b"", b"/"),
             (b"", b"{wildcard}"),
+            (b"", b"{wildcard:path}"),
             (b"/path/to/resource/subresource", b"/path/to/resource"),
             (b"/path/to/", b"/path/to/{wildcard}"),
+            (b"/path/to/", b"/path/to/{wildcard:path}"),
             (b"/to/resource", b"{wildcard}/to/resource"),
+            (b"path/to/resource/subresource/subsubresource", b"path/to/{wildcard}"),
         ):
             self.assertEqual(self.engine._is_matching_url_path(case[0], case[1]), False)
 
@@ -455,208 +488,7 @@ class TestWebStateMachine(TestWebStateMachineBase):
         self.assertEqual(self.engine.state, self.engine._recv_chunk_st)
 
 
-class TestWebHelpers(TestWebStateMachineBase):
-    """
-    Tests for helper functions.
-    """
-
-    @classmethod
-    def setUpClass(cls):
-        cls.base_config = {"http_multipart": "False", "http_serve_files": "True"}
-        # Simplify file-open assertions by treating resources
-        # as if they are installed at the root (/) rather than
-        # relative to the current working directory.
-        cls.cwd = "/"
-
-    def test_path_serving_list(self):
-        self.config["http_served_paths"] = "/path/to/dir1 /path/to/dir2"
-        self.config_module.read_config()
-        self.assertEqual(self.engine.is_norm_path_served(""), False)
-        self.assertEqual(self.engine.is_norm_path_served("/"), False)
-        self.assertEqual(self.engine.is_norm_path_served("/path/to/dir1"), True)
-        self.assertEqual(self.engine.is_norm_path_served("/path/to/dir2"), True)
-        self.assertEqual(self.engine.is_norm_path_served("/path/to/dir12"), False)
-        self.assertEqual(self.engine.is_norm_path_served("/path/to/dir1/file"), True)
-        self.assertEqual(self.engine.is_norm_path_served("/path/to/dir2/file"), True)
-        self.assertEqual(self.engine.is_norm_path_served("/path/to/other"), False)
-        self.assertEqual(self.engine.is_norm_path_served("/path/to"), False)
-
-    def test_path_serving_root(self):
-        self.config["http_served_paths"] = "/"
-        self.config_module.read_config()
-        self.assertEqual(self.engine.is_norm_path_served(""), True)
-        self.assertEqual(self.engine.is_norm_path_served("/"), True)
-        self.assertEqual(self.engine.is_norm_path_served("/path/to/served"), True)
-
-    def test_path_serving_none(self):
-        self.config["http_served_paths"] = ""
-        self.config_module.read_config()
-        self.assertEqual(self.engine.is_norm_path_served(""), False)
-        self.assertEqual(self.engine.is_norm_path_served("/"), False)
-        self.assertEqual(self.engine.is_norm_path_served("/path/to/served"), False)
-
-
-class TestMultipartStateMachine(TestWebStateMachineBase):
-    """
-    Tests for multipart handling.
-    """
-
-    @classmethod
-    def setUpClass(cls):
-        cls.base_config = {"http_multipart": "True", "http_serve_files": "False"}
-        cls.cwd = os.getcwd()
-
-    def test_multipart_parser(self):
-        for case in [
-            ({}, None),
-            (
-                {"content-type": 'multipart/form-data; boundary ="test-boundary"'},
-                "test-boundary",
-            ),
-            (
-                {"content-type": 'multipart/form-data; boundary =" test-boundary "'},
-                " test-boundary ",
-            ),
-            (
-                {"content-type": "multipart/form-data ;boundary= test-boundary "},
-                "test-boundary",
-            ),
-            (
-                {"content-type": "multipart/form-data;boundary=a test boundary "},
-                "a test boundary",
-            ),
-        ]:
-            with self.subTest(headers=case[0], expected=case[1]):
-                self.assertEqual(self.engine._get_mp_boundary(case[0]), case[1])
-
-        for case in [
-            {"content-type": "multipart/form-data"},
-            {"content-type": 'multipart/form-data;boundary=""'},
-            {"content-type": "multipart/form-data;boundary=\r\n"},
-            {"content-type": 'multipart/form-data;boundary="missing-quote'},
-            {"content-type": 'multipart/form-data;boundary=missing-quote"'},
-        ]:
-            with self.subTest(headers=case):
-                with self.assertRaises(self.http_module.InvalidHeaders):
-                    self.engine._get_mp_boundary(case)
-
-    def test_multipart_receiver_valid(self):
-        self.engine.state = self.engine._start_multipart_parser_st
-        self.engine.headers["content-length"] = 100
-        self.engine.mp_boundary = b"test-boundary"
-        body_part = b"--test-boundary\r\nContent-Type:text/plain"
-
-        for i in range(len(body_part)):
-            self.rx.write(body_part[i : i + 1])
-            self.engine.state(self.rx)
-
-        self.assertEqual(self.engine.state, self.engine._parse_boundary_st)
-        self.assertEqual(self.rx.peek(), b"Content-Type:text/plain")
-
-    def test_multipart_receiver_boundary_mismatch(self):
-        self.engine.state = self.engine._start_multipart_parser_st
-        self.engine.version = b"HTTP/1.1"
-        self.engine.headers["content-length"] = 100
-        self.engine.mp_boundary = b"test-boundary"
-        body_part = b"--test-boundary-delimiter\r\nContent-Type:text/plain"
-
-        with self.assertRaises(self.http_module.MalformedRequest):
-            for i in range(len(body_part)):
-                self.rx.write(body_part[i : i + 1])
-                self.engine.state(self.rx)
-
-    def test_multipart_receiver_complete_part(self):
-        self.engine.state = self.engine._parse_boundary_st
-        self.engine.url = b"/api/test"
-        self.engine.method = b"GET"
-
-        test_callback = mock.Mock()
-        self.engine.register("/api/test", test_callback)
-
-        self.engine.headers["content-length"] = 1000
-        self.engine.mp_boundary = b"test-boundary"
-        self.engine.mp_delimiter = b"--test-boundary\r\n"
-        self.engine.mp_last_delimiter = b"--test-boundary--"
-
-        body_part = (
-            b'Content-Disposition:form-data;name="file-chunk";filename="upload.txt"\r\n'
-            b"Content-Type:text/plain\r\n\r\n"
-            b"Upload content\r\n"
-            b"--test-boundary\r\n"
-        )
-
-        for i in range(len(body_part)):
-            self.assertEqual(self.engine.state, self.engine._parse_boundary_st)
-            self.rx.write(body_part[i : i + 1])
-            self.engine.state(self.rx)
-
-        self.assertEqual(self.engine.state, self.engine._parse_complete_part_st)
-        self.assertEqual(self.rx.peek(), body_part)
-        self.assertEqual(self.engine.mp_is_first, True)
-
-        self.engine.state(self.rx)
-
-        self.assertEqual(self.engine.state, self.engine._parse_boundary_st)
-        test_callback.assert_called_once_with(
-            self.engine,
-            (
-                {
-                    "content-disposition": 'form-data;name="file-chunk";filename="upload.txt"',
-                    "content-type": "text/plain",
-                },
-                b"Upload content",
-            ),
-        )
-        self.assertEqual(self.engine.mp_is_first, False)
-        self.assertEqual(self.engine.mp_is_last, False)
-
-    def test_multipart_receiver_last_part(self):
-        self.engine.state = self.engine._parse_boundary_st
-        self.engine.url = b"/api/test"
-        self.engine.method = b"GET"
-        self.engine.version = b"HTTP/1.1"
-        self.engine.headers["content-length"] = 131
-        self.engine.mp_boundary = b"test-boundary"
-        self.engine.mp_delimiter = b"--test-boundary\r\n"
-        self.engine.mp_last_delimiter = b"--test-boundary--"
-
-        test_callback = mock.Mock(return_value=("text/plain", "OK"))
-        self.engine.register("/api/test", test_callback)
-
-        body_part = (
-            b'Content-Disposition:form-data;name="file-chunk";filename="upload.txt"\r\n'
-            b"Content-Type:text/plain\r\n\r\n"
-            b"Upload content\r\n"
-            b"--test-boundary--"
-        )
-
-        for i in range(len(body_part)):
-            self.assertEqual(self.engine.state, self.engine._parse_boundary_st)
-            self.rx.write(body_part[i : i + 1])
-            self.engine.state(self.rx)
-
-        self.assertEqual(self.engine.state, self.engine._parse_complete_part_st)
-        self.assertEqual(self.rx.peek(), body_part)
-
-        self.engine.state(self.rx)
-
-        self.assertEqual(self.engine.state, None)
-        self.assertEqual(self.engine.status_code, 200)
-        test_callback.assert_called_once_with(
-            self.engine,
-            (
-                {
-                    "content-disposition": 'form-data;name="file-chunk";filename="upload.txt"',
-                    "content-type": "text/plain",
-                },
-                b"Upload content",
-            ),
-        )
-        self.assertEqual(self.engine.mp_is_first, True)
-        self.assertEqual(self.engine.mp_is_last, True)
-
-
-class TestFileServerStateMachine(TestWebStateMachineBase):
+class TestFileServingStateMachine(TestHttpBase):
     """
     Tests for file serving.
     """
@@ -665,7 +497,9 @@ class TestFileServerStateMachine(TestWebStateMachineBase):
     def setUpClass(cls):
         cls.base_config = {
             "http_multipart": "False",
-            "http_serve_files": "True",
+            # Only built-in file serving is tested here,
+            # so disable /files endpoint to avoid conflicts
+            "http_files_api": "False",
             "http_served_paths": "/www",
         }
         # Simplify file-open assertions by treating resources
@@ -674,67 +508,70 @@ class TestFileServerStateMachine(TestWebStateMachineBase):
         cls.cwd = "/"
 
     @staticmethod
-    def patch_all(f):
-        @patch("pyrobusta.protocol.http_file_server.stat", fake_stat)
-        def decorated(*args, **kwargs):
-            return f(*args, **kwargs)
+    def patch_os_stat(stat_is_file=True):
+        def patched(f):
+            @patch("pyrobusta.protocol.http.stat", stat_factory(stat_is_file))
+            def decorated(*args, **kwargs):
+                return f(*args, **kwargs)
 
-        return decorated
+            return decorated
 
-    @patch_all
-    def test_file_serving_missing_file(self, *_):
-        self.engine.url = b"/files/www/nonexistent.js"
-        self.engine.method = b"GET"
-        self.engine.version = b"HTTP/1.1"
-        self.engine.state = self.engine._send_file_st
+        return patched
 
-        self.engine.state(self.rx, self.engine.url)
-
-        self.assertEqual(self.engine.status_code, 404)
-        self.assertEqual(self.engine.state, None)
-
-    @patch_all
+    @patch_os_stat()
     def test_file_serving_root(self, *_):
         self.engine.url = b"/"
         self.engine.method = b"GET"
         self.engine.version = b"HTTP/1.1"
-        self.engine.state = self.engine._send_file_st
+        self.engine.state = self.engine._fs_retrieve_st
         file_content = "index content"
 
         with patch("builtins.open", mock_open(read_data=file_content)) as m:
-            self.engine.state(self.rx, self.engine.url)
+            self.engine.state(self.rx)
             m.assert_called_once_with("/www/index.html", "rb")
 
         self.assertEqual(self.engine.resp_handler.read(), file_content)
         self.assertEqual(self.engine.status_code, 200)
         self.assertEqual(self.engine.state, None)
 
-    @patch_all
-    def test_file_serving_files_endpoint(self, *_):
-        self.engine.url = b"/files/www/scripts.js"
+    @patch_os_stat()
+    def test_file_serving_subdir(self, *_):
+        self.engine.url = b"/style/styles.css"
         self.engine.method = b"GET"
         self.engine.version = b"HTTP/1.1"
-        self.engine.state = self.engine._send_file_st
-        file_content = "data"
+        self.engine.state = self.engine._fs_retrieve_st
+        file_content = "/* Main styelsheet */"
 
         with patch("builtins.open", mock_open(read_data=file_content)) as m:
-            self.engine.state(self.rx, self.engine.url)
-            m.assert_called_once_with("/www/scripts.js", "rb")
+            self.engine.state(self.rx)
+            m.assert_called_once_with("/www/style/styles.css", "rb")
 
         self.assertEqual(self.engine.resp_handler.read(), file_content)
         self.assertEqual(self.engine.status_code, 200)
         self.assertEqual(self.engine.state, None)
 
-    @patch_all
+    @patch_os_stat()
+    def test_file_serving_missing_file(self, *_):
+        self.engine.url = b"/nonexistent.js"
+        self.engine.method = b"GET"
+        self.engine.version = b"HTTP/1.1"
+        self.engine.state = self.engine._fs_retrieve_st
+
+        self.engine.state(self.rx)
+
+        self.assertEqual(self.engine.status_code, 404)
+        self.assertEqual(self.engine.state, None)
+
+    @patch_os_stat()
     def test_file_serving_known_content_type(self, *_):
         self.engine.url = b"/scripts.js"
         self.engine.method = b"GET"
         self.engine.version = b"HTTP/1.1"
-        self.engine.state = self.engine._send_file_st
+        self.engine.state = self.engine._fs_retrieve_st
         file_content = "data"
 
         with patch("builtins.open", mock_open(read_data=file_content)) as m:
-            self.engine.state(self.rx, self.engine.url)
+            self.engine.state(self.rx)
             m.assert_called_once_with("/www/scripts.js", "rb")
 
         self.assertEqual(self.engine.resp_handler.read(), file_content)
@@ -745,16 +582,16 @@ class TestFileServerStateMachine(TestWebStateMachineBase):
         self.assertEqual(self.engine.status_code, 200)
         self.assertEqual(self.engine.state, None)
 
-    @patch_all
+    @patch_os_stat()
     def test_file_serving_fallback_content_type(self, *_):
         self.engine.url = b"/scripts.unknown"
         self.engine.method = b"GET"
         self.engine.version = b"HTTP/1.1"
-        self.engine.state = self.engine._send_file_st
+        self.engine.state = self.engine._fs_retrieve_st
         file_content = "data"
 
         with patch("builtins.open", mock_open(read_data=file_content)) as m:
-            self.engine.state(self.rx, self.engine.url)
+            self.engine.state(self.rx)
             m.assert_called_once_with("/www/scripts.unknown", "rb")
 
         self.assertEqual(self.engine.resp_handler.read(), file_content)
@@ -763,22 +600,6 @@ class TestFileServerStateMachine(TestWebStateMachineBase):
             b"application/octet-stream",
         )
         self.assertEqual(self.engine.status_code, 200)
-        self.assertEqual(self.engine.state, None)
-
-    @patch_all
-    def test_file_serving_unserved_content_rejected(self, *_):
-        self.engine.url = b"/files/unserved/script.js"
-        self.engine.method = b"GET"
-        self.engine.version = b"HTTP/1.1"
-        self.engine.state = self.engine._send_file_st
-        file_content = "data"
-
-        with patch("builtins.open", mock_open(read_data=file_content)) as m:
-            self.engine.state(self.rx, self.engine.url)
-            m.assert_not_called()
-
-        self.assertEqual(self.engine.resp_handler, None)
-        self.assertEqual(self.engine.status_code, 403)
         self.assertEqual(self.engine.state, None)
 
 

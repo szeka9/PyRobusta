@@ -10,7 +10,7 @@ of parameters relative to a defined baseline configuration.
 socket_max_con=1
 http_mem_cap=0.05
 http_multipart=False
-http_serve_files=True
+http_files_api=False
 tls=False
 http_port=8080
 https_port=4443
