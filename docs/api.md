@@ -1,6 +1,6 @@
 ***
 
-# File Management Endpoint (`/files`)
+# File Management API
 
 This endpoint provides file management capabilities, allowing clients to upload, retrieve, and manage files through various HTTP methods. `http_files_api` must be set to `True` in pyrobusta.env to enable this API.
 
