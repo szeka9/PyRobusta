@@ -10,7 +10,7 @@ from os import stat
 from ..utils.config import (
     get_config,
     CONF_HTTP_MULTIPART,
-    CONF_HTTP_SERVE_FILES,
+    CONF_HTTP_FILES_API,
     CONF_HTTP_SERVED_PATHS,
 )
 from ..utils import logging, helpers
@@ -46,7 +46,8 @@ class HttpEngine:
     - allows applications to set response attributes (headers, status code)
 
     Feature flags (configured in pyrobusta.env)
-    - http_serve_files: serve files stored on the device
+    - http_files_api: serve files at the /files endpoint, with support for uploads,
+      removal and directory listing
     - http_multipart: support for multipart requests/responses
     """
 
@@ -851,7 +852,7 @@ def enable_optional_features():
 
         http_multipart.apply_patches()
 
-    if get_config(CONF_HTTP_SERVE_FILES):
+    if get_config(CONF_HTTP_FILES_API):
         from pyrobusta.protocol import http_file_server
 
         http_file_server.apply_patches()

@@ -26,7 +26,7 @@ class TestFileServerRetrieve(TestHttpBase):
     def setUpClass(cls):
         cls.base_config = {
             "http_multipart": "False",
-            "http_serve_files": "True",
+            "http_files_api": "True",
             "http_served_paths": "/www",
         }
         # Simplify file-open assertions by treating resources
@@ -161,7 +161,7 @@ class TestFileServerDelete(TestHttpBase):
     def setUpClass(cls):
         cls.base_config = {
             "http_multipart": "False",
-            "http_serve_files": "True",
+            "http_files_api": "True",
             "http_served_paths": "/www",
         }
         # Simplify file-open assertions by treating resources
@@ -231,7 +231,7 @@ class TestFileServerUpload(TestHttpBase):
     def setUpClass(cls):
         cls.base_config = {
             "http_multipart": "False",
-            "http_serve_files": "True",
+            "http_files_api": "True",
             "http_served_paths": "/www",
         }
         # Simplify file-open assertions by treating resources
@@ -339,7 +339,7 @@ class TestFileServerBulkUpload(TestHttpBase):
         cls.base_config = {
             # Bulk upload requires multipart handling
             "http_multipart": "True",
-            "http_serve_files": "True",
+            "http_files_api": "True",
             "http_served_paths": "/www",
         }
         # Simplify file-open assertions by treating resources

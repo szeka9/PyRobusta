@@ -28,7 +28,7 @@ CONF_HTTPS_PORT = const(3)
 CONF_HTTP_MULTIPART = const(4)
 CONF_HTTP_MEM_CAP = const(5)
 CONF_HTTP_SERVED_PATHS = const(6)
-CONF_HTTP_SERVE_FILES = const(7)
+CONF_HTTP_FILES_API = const(7)
 CONF_SOCKET_MAX_CON = const(8)
 CONF_TLS = const(9)
 CONF_LOG_LEVEL = const(10)
@@ -52,8 +52,8 @@ _CONFIG_CACHE = [
     0.1,
     CONF_HTTP_SERVED_PATHS,
     ["/www", "/lib/pyrobusta"],
-    CONF_HTTP_SERVE_FILES,
-    True,
+    CONF_HTTP_FILES_API,
+    False,
     CONF_SOCKET_MAX_CON,
     2,
     CONF_TLS,
@@ -70,7 +70,7 @@ def parse_config(key, value):
     """
     Normalize a configuration value depending on the key.
     """
-    if key in (CONF_HTTP_MULTIPART, CONF_HTTP_SERVE_FILES, CONF_TLS):
+    if key in (CONF_HTTP_MULTIPART, CONF_HTTP_FILES_API, CONF_TLS):
         return value.lower() == "true"
     if key in (CONF_HTTP_PORT, CONF_HTTPS_PORT, CONF_SOCKET_MAX_CON):
         return int(value)

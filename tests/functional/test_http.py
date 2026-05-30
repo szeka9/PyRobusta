@@ -9,6 +9,7 @@ from pyrobusta.server import http_server
 from pyrobusta.protocol.http import HttpEngine
 from pyrobusta.utils.config import (
     CONF_HTTP_SERVED_PATHS,
+    CONF_HTTP_FILES_API,
     CONF_TLS,
     CONF_LOG_LEVEL,
     _CONFIG_CACHE,
@@ -287,7 +288,7 @@ async def test_fs_access_control():
 
 @garbage_collect
 async def test_fs_path_traversal():
-    setup_config(served_paths="/test")
+    setup_config(served_paths="/test", files_api_enabled=True)
     server, server_task = await start_server()
     test_root = normalize_path("/test")
     styles_dir = normalize_path("/test/style")
@@ -437,7 +438,7 @@ async def test_keepalive():
 #################################################
 
 
-def setup_config(tls_enabled=False, served_paths=""):
+def setup_config(tls_enabled=False, served_paths="", files_api_enabled=False):
     http_server.HttpServer.LISTEN_PORT_HTTP = 8080
     http_server.HttpServer.LISTEN_PORT_HTTPS = 4443
 
@@ -446,6 +447,7 @@ def setup_config(tls_enabled=False, served_paths=""):
     _CONFIG_CACHE[2 * CONF_HTTP_SERVED_PATHS + 1] = parse_config(
         CONF_HTTP_SERVED_PATHS, served_paths
     )
+    _CONFIG_CACHE[2 * CONF_HTTP_FILES_API + 1] = files_api_enabled
 
 
 def test_registration():

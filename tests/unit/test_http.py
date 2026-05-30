@@ -15,7 +15,7 @@ class TestWebStateMachineHelpers(TestHttpBase):
 
     @classmethod
     def setUpClass(cls):
-        cls.base_config = {"http_multipart": "False", "http_serve_files": "False"}
+        cls.base_config = {"http_multipart": "False", "http_files_api": "False"}
         cls.cwd = os.getcwd()
 
     def test_response_header_setter(self):
@@ -99,7 +99,7 @@ class TestWebStateMachine(TestHttpBase):
 
     @classmethod
     def setUpClass(cls):
-        cls.base_config = {"http_multipart": "False", "http_serve_files": "False"}
+        cls.base_config = {"http_multipart": "False", "http_files_api": "False"}
         cls.cwd = os.getcwd()
 
     def test_status_parsing_valid(self):
@@ -499,7 +499,7 @@ class TestFileServingStateMachine(TestHttpBase):
             "http_multipart": "False",
             # Only built-in file serving is tested here,
             # so disable /files endpoint to avoid conflicts
-            "http_serve_files": "False",
+            "http_files_api": "False",
             "http_served_paths": "/www",
         }
         # Simplify file-open assertions by treating resources

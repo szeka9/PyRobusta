@@ -13,7 +13,7 @@ class TestMultipartStateMachine(TestHttpBase):
 
     @classmethod
     def setUpClass(cls):
-        cls.base_config = {"http_multipart": "True", "http_serve_files": "False"}
+        cls.base_config = {"http_multipart": "True", "http_files_api": "False"}
         cls.cwd = os.getcwd()
 
     def test_multipart_parser(self):
