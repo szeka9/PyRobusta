@@ -137,7 +137,9 @@ def upload_file(http_ctx, payload: bytes):
         return "text/plain", "Invalid or missing filename"
 
     try:
-        if not file_path.startswith(_UPLOAD_ROOT) and not file_path.startswith(_TMP_DIR):
+        if not file_path.startswith(_UPLOAD_ROOT) and not file_path.startswith(
+            _TMP_DIR
+        ):
             http_ctx.terminate(403, True)
             return "text/plain", "Forbidden"
 
@@ -189,7 +191,7 @@ def bulk_upload_file(http_ctx, payload: tuple):
             if file.endswith(f".{http_ctx.id}"):
                 remove(_TMP_DIR + "/" + file)
 
-    # TODO: support X-Upload-Directory
+    # TODO: support X-Upload-Directory; pylint: disable=W0511
     target_path = normalize_path(_TMP_DIR + "/" + f"{filename}.{http_ctx.id}")
     with open(target_path, "ab") as f:
         f.write(part_body)
@@ -277,9 +279,12 @@ def _traverse_dir_factory(path):
 
 
 def setup_directories():
-    for dir in (_UPLOAD_ROOT, _TMP_DIR):
+    """
+    Set up the required directories for file uploads.
+    """
+    for http_dir in (_UPLOAD_ROOT, _TMP_DIR):
         base_dir = normalize_path("/")
-        sub_dirs = dir[len(base_dir) :].lstrip("/")
+        sub_dirs = http_dir[len(base_dir) :].lstrip("/")
 
         for subdir in sub_dirs.split("/"):
             current_dir = base_dir + "/" + subdir

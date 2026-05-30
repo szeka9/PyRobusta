@@ -52,12 +52,12 @@ def is_file_path_valid(file_path: str):
     segment_start = file_path.find("/") + 1
     if not segment_start:
         raise ValueError()
-    
+
     while True:
         next_segment = file_path.find("/", segment_start + 1) + 1
         if not next_segment:
             return is_path_segment_valid(file_path[segment_start:])
-        if not is_path_segment_valid(file_path[segment_start:next_segment-1]):
+        if not is_path_segment_valid(file_path[segment_start : next_segment - 1]):
             return False
         segment_start = next_segment
 
@@ -70,10 +70,7 @@ def is_path_segment_valid(filename: str):
         not filename
         or len(filename) > 32
         or not all(
-            ('A' <= c <= 'Z') or
-            ('a' <= c <= 'z') or
-            ('0' <= c <= '9') or
-            c in "._-"
+            ("A" <= c <= "Z") or ("a" <= c <= "z") or ("0" <= c <= "9") or c in "._-"
             for c in filename
         )
     ):

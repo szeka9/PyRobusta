@@ -1,11 +1,9 @@
-import os
-import sys
-import unittest
 import json
 
 from unittest.mock import patch, mock_open, call
 
-from .utils import load_module, stat_factory
+from .utils import stat_factory
+from .http_base import TestHttpBase
 
 
 def patch_os_stat(stat_is_file=True):
@@ -19,73 +17,7 @@ def patch_os_stat(stat_is_file=True):
     return patched
 
 
-class TestFileServerBase(unittest.TestCase):
-    """
-    Base class for HTTP file server module.
-    """
-
-    @classmethod
-    def setUpClass(cls):
-        cls.base_config = {}
-        cls.cwd = os.getcwd()
-
-    def setUp(self):
-        # -------------------------------
-        # Patch current working directory
-        # -------------------------------
-        self.helpers_module = load_module("pyrobusta/utils/helpers.py")
-        self.cwd_patcher = patch.object(
-            self.helpers_module, "getcwd", return_value=self.cwd
-        )
-        self.cwd_patcher.start()
-        self.addCleanup(self.cwd_patcher.stop)
-
-        # -------------------
-        # Patch config module
-        # -------------------
-        self.config = dict(self.base_config)
-        self.config_module = load_module("pyrobusta/utils/config.py")
-        self.module_patcher = patch.dict(
-            sys.modules,
-            {"pyrobusta.utils.config": self.config_module},
-        )
-        self.module_patcher.start()
-        self.addCleanup(self.module_patcher.stop)
-
-        def open_side_effect(*args, **kwargs):
-            data = "\n".join(f"{k}={v}" for k, v in self.config.items())
-            return mock_open(read_data=data)(*args, **kwargs)
-
-        self.open_patcher = patch.object(
-            self.config_module,
-            "open",
-            side_effect=open_side_effect,
-        )
-        self.open_patcher.start()
-        self.addCleanup(self.open_patcher.stop)
-
-        # ------------------------------------------------
-        # Load remaining modules, enable optional features
-        # ------------------------------------------------
-        self.http_module = load_module("pyrobusta/protocol/http.py")
-        self.fs_module = load_module("pyrobusta/protocol/http_file_server.py")
-
-        self.fs_patcher = patch.object(self.fs_module, "setup_directories")
-        self.fs_patcher.start()
-        self.addCleanup(self.fs_patcher.stop)
-
-        self.http_module.enable_optional_features()
-        self.engine = self.http_module.HttpEngine()
-
-        # --------------------
-        # HTTP engine, buffers
-        # --------------------
-        buffer_module = load_module("pyrobusta/stream/buffer.py")
-        self.rx = buffer_module.SlidingBuffer(bytearray(1024))
-        self.tx = buffer_module.SlidingBuffer(bytearray(1024))
-
-
-class TestFileServerRetrieve(TestFileServerBase):
+class TestFileServerRetrieve(TestHttpBase):
     """
     Tests for GET /files/.
     """
@@ -93,6 +25,7 @@ class TestFileServerRetrieve(TestFileServerBase):
     @classmethod
     def setUpClass(cls):
         cls.base_config = {
+            "http_multipart": "False",
             "http_serve_files": "True",
             "http_served_paths": "/www",
         }
@@ -219,7 +152,7 @@ class TestFileServerRetrieve(TestFileServerBase):
         self.assertListEqual(response_files, directory_content)
 
 
-class TestFileServerDelete(TestFileServerBase):
+class TestFileServerDelete(TestHttpBase):
     """
     Tests for DELETE /files/.
     """
@@ -227,6 +160,7 @@ class TestFileServerDelete(TestFileServerBase):
     @classmethod
     def setUpClass(cls):
         cls.base_config = {
+            "http_multipart": "False",
             "http_serve_files": "True",
             "http_served_paths": "/www",
         }
@@ -288,7 +222,7 @@ class TestFileServerDelete(TestFileServerBase):
         self.assertEqual(self.engine.state, None)
 
 
-class TestFileServerUpload(TestFileServerBase):
+class TestFileServerUpload(TestHttpBase):
     """
     Tests for POST /files/.
     """
@@ -296,7 +230,7 @@ class TestFileServerUpload(TestFileServerBase):
     @classmethod
     def setUpClass(cls):
         cls.base_config = {
-            "http_multipart": "True",
+            "http_multipart": "False",
             "http_serve_files": "True",
             "http_served_paths": "/www",
         }
@@ -395,7 +329,7 @@ class TestFileServerUpload(TestFileServerBase):
         self.assertEqual(self.engine.status_code, 201)
 
 
-class TestFileServerBulkUpload(TestFileServerBase):
+class TestFileServerBulkUpload(TestHttpBase):
     """
     Tests for POST /files/.
     """
@@ -403,6 +337,7 @@ class TestFileServerBulkUpload(TestFileServerBase):
     @classmethod
     def setUpClass(cls):
         cls.base_config = {
+            # Bulk upload requires multipart handling
             "http_multipart": "True",
             "http_serve_files": "True",
             "http_served_paths": "/www",
@@ -445,11 +380,21 @@ class TestFileServerBulkUpload(TestFileServerBase):
             while self.engine.state is not None:
                 self.engine.state(self.rx)
 
-            remove_mock.assert_called_once_with("/tmp/upload.txt.1")
-            open_mock.assert_called_once_with("/tmp/upload.txt.1", "ab")
+            # stale upload is removed
+            remove_mock.assert_called_once_with(f"/tmp/upload.txt.{self.engine.id}")
+
+            # file is opened in append mode to allow for chunked uploads, even if the complete
+            # file is sent in a single part
+            open_mock.assert_called_once_with(f"/tmp/upload.txt.{self.engine.id}", "ab")
+
+            # file is renamed to final destination after upload completion
             rename_mock.assert_called_once_with(
-                "/tmp/upload.txt.1", "/www/user_data/upload.txt"
+                f"/tmp/upload.txt.{self.engine.id}", "/www/user_data/upload.txt"
             )
+
+            self.assertEqual(remove_mock.call_count, 1)
+            self.assertEqual(open_mock.call_count, 1)
+            self.assertEqual(rename_mock.call_count, 1)
 
         self.assertEqual(self.engine.status_code, 201)
 
@@ -494,21 +439,29 @@ class TestFileServerBulkUpload(TestFileServerBase):
                 self.engine.state(self.rx)
 
             remove_mock_calls = [
-                call("/tmp/upload1.txt.1"),
-                call("/tmp/upload2.txt.1"),
+                call(f"/tmp/upload1.txt.{self.engine.id}"),
+                call(f"/tmp/upload2.txt.{self.engine.id}"),
             ]
             open_mock_calls = [
-                call("/tmp/upload1.txt.1", "ab"),
-                call("/tmp/upload2.txt.1", "ab"),
+                call(f"/tmp/upload1.txt.{self.engine.id}", "ab"),
+                call(f"/tmp/upload2.txt.{self.engine.id}", "ab"),
             ]
             rename_mock_calls = [
-                call("/tmp/upload1.txt.1", "/www/user_data/upload1.txt"),
-                call("/tmp/upload2.txt.1", "/www/user_data/upload2.txt"),
+                call(
+                    f"/tmp/upload1.txt.{self.engine.id}", "/www/user_data/upload1.txt"
+                ),
+                call(
+                    f"/tmp/upload2.txt.{self.engine.id}", "/www/user_data/upload2.txt"
+                ),
             ]
 
             remove_mock.assert_has_calls(remove_mock_calls)
             open_mock.assert_has_calls(open_mock_calls, any_order=True)
             rename_mock.assert_has_calls(rename_mock_calls)
+
+            self.assertEqual(remove_mock.call_count, 2)
+            self.assertEqual(open_mock.call_count, 2)
+            self.assertEqual(rename_mock.call_count, 2)
 
         self.assertEqual(self.engine.status_code, 201)
 
@@ -517,7 +470,7 @@ class TestFileServerBulkUpload(TestFileServerBase):
         self.engine.method = b"POST"
         self.engine.version = b"HTTP/1.1"
 
-        self.engine.headers["content-length"] = 287
+        self.engine.headers["content-length"] = 285
         self.engine.headers["content-type"] = "multipart/form-data"
 
         self.engine.mp_boundary = b"test-boundary"
@@ -527,11 +480,11 @@ class TestFileServerBulkUpload(TestFileServerBase):
         self.engine.state = self.engine._start_multipart_parser_st
         body_part = (
             b"--test-boundary\r\n"
-            b'Content-Disposition:form-data;name="complete-file";filename="upload1.txt"\r\n'
+            b'Content-Disposition:form-data;name="file-chunk-1";filename="upload1.txt"\r\n'
             b"Content-Type:text/plain\r\n\r\n"
             b"Upload content\r\n"
             b"--test-boundary\r\n"
-            b'Content-Disposition:form-data;name="complete-file";filename="upload1.txt"\r\n'
+            b'Content-Disposition:form-data;name="file-chunk-2";filename="upload1.txt"\r\n'
             b"Content-Type:text/plain\r\n\r\n"
             b"Upload content\r\n"
             b"--test-boundary--"
@@ -552,14 +505,95 @@ class TestFileServerBulkUpload(TestFileServerBase):
                 self.engine.state(self.rx)
 
             open_mock_calls = [
-                call("/tmp/upload1.txt.1", "ab"),
-                call("/tmp/upload1.txt.1", "ab"),
+                call(f"/tmp/upload1.txt.{self.engine.id}", "ab"),
+                call(f"/tmp/upload1.txt.{self.engine.id}", "ab"),
             ]
 
-            remove_mock.assert_called_once_with("/tmp/upload1.txt.1")
+            remove_mock.assert_called_once_with(f"/tmp/upload1.txt.{self.engine.id}")
             open_mock.assert_has_calls(open_mock_calls, any_order=True)
             rename_mock.assert_called_once_with(
-                "/tmp/upload1.txt.1", "/www/user_data/upload1.txt"
+                f"/tmp/upload1.txt.{self.engine.id}", "/www/user_data/upload1.txt"
             )
+
+            self.assertEqual(remove_mock.call_count, 1)
+            self.assertEqual(open_mock.call_count, 2)
+            self.assertEqual(rename_mock.call_count, 1)
+
+        self.assertEqual(self.engine.status_code, 201)
+
+    def test_file_serving_multiple_file_chunked_upload(self, *_):
+        self.engine.url = b"/files"
+        self.engine.method = b"POST"
+        self.engine.version = b"HTTP/1.1"
+
+        self.engine.headers["content-length"] = 548
+        self.engine.headers["content-type"] = "multipart/form-data"
+
+        self.engine.mp_boundary = b"test-boundary"
+        self.engine.mp_delimiter = b"--test-boundary\r\n"
+        self.engine.mp_last_delimiter = b"--test-boundary--"
+
+        self.engine.state = self.engine._start_multipart_parser_st
+        body_part = (
+            b"--test-boundary\r\n"
+            b'Content-Disposition:form-data;name="file-chunk-1";filename="upload1.txt"\r\n'
+            b"Content-Type:text/plain\r\n\r\n"
+            b"Upload content #1\r\n"
+            b"--test-boundary\r\n"
+            b'Content-Disposition:form-data;name="file-chunk-2";filename="upload2.txt"\r\n'
+            b"Content-Type:text/plain\r\n\r\n"
+            b"Upload content #1\r\n"
+            b"--test-boundary\r\n"
+            b'Content-Disposition:form-data;name="file-chunk-3";filename="upload1.txt"\r\n'
+            b"Content-Type:text/plain\r\n\r\n"
+            b"Upload content #2\r\n"
+            b"--test-boundary\r\n"
+            b'Content-Disposition:form-data;name="file-chunk-4";filename="upload2.txt"\r\n'
+            b"Content-Type:text/plain\r\n\r\n"
+            b"Upload content #2\r\n"
+            b"--test-boundary--"
+        )
+        self.rx.write(body_part)
+
+        with patch(
+            "pyrobusta.protocol.http_file_server.listdir",
+            lambda _: [
+                f"upload1.txt.{self.engine.id}",
+                f"upload2.txt.{self.engine.id}",
+            ],
+        ), patch("pyrobusta.protocol.http_file_server.remove") as remove_mock, patch(
+            "builtins.open"
+        ) as open_mock, patch(
+            "pyrobusta.protocol.http_file_server.rename"
+        ) as rename_mock:
+            while self.engine.state is not None:
+                self.engine.state(self.rx)
+
+            remove_mock_calls = [
+                call(f"/tmp/upload1.txt.{self.engine.id}"),
+                call(f"/tmp/upload2.txt.{self.engine.id}"),
+            ]
+            open_mock_calls = [
+                call(f"/tmp/upload1.txt.{self.engine.id}", "ab"),
+                call(f"/tmp/upload2.txt.{self.engine.id}", "ab"),
+                call(f"/tmp/upload1.txt.{self.engine.id}", "ab"),
+                call(f"/tmp/upload2.txt.{self.engine.id}", "ab"),
+            ]
+            rename_mock_calls = [
+                call(
+                    f"/tmp/upload1.txt.{self.engine.id}", "/www/user_data/upload1.txt"
+                ),
+                call(
+                    f"/tmp/upload2.txt.{self.engine.id}", "/www/user_data/upload2.txt"
+                ),
+            ]
+
+            remove_mock.assert_has_calls(remove_mock_calls)
+            open_mock.assert_has_calls(open_mock_calls, any_order=True)
+            rename_mock.assert_has_calls(rename_mock_calls)
+
+            self.assertEqual(remove_mock.call_count, 2)
+            self.assertEqual(open_mock.call_count, 4)
+            self.assertEqual(rename_mock.call_count, 2)
 
         self.assertEqual(self.engine.status_code, 201)
