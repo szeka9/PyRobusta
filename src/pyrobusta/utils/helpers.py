@@ -49,9 +49,9 @@ def is_file_path_valid(file_path: str):
     """
     Returns true if an absolute file path is valid.
     """
-    segment_start = file_path.find("/") + 1
-    if not segment_start:
-        raise ValueError()
+    if file_path[0] != "/":
+        return False
+    segment_start = 1
 
     while True:
         next_segment = file_path.find("/", segment_start + 1) + 1
@@ -73,6 +73,7 @@ def is_path_segment_valid(filename: str):
             ("A" <= c <= "Z") or ("a" <= c <= "z") or ("0" <= c <= "9") or c in "._-"
             for c in filename
         )
+        or filename in (".", "..")
     ):
         return False
     return True

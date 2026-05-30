@@ -101,3 +101,30 @@ class TestHelpers(unittest.TestCase):
             self.assertEqual(
                 self.helpers_module.is_norm_path_served(case[0], served_paths), case[1]
             )
+
+    def test_path_segment_validation(self):
+        valid_segments = ["file", "dir1", "dir-2", "dir_3", "file.ext", "a"]
+        invalid_segments = [
+            "",
+            ".",
+            "..",
+            "dir/segment",
+            "dir\\segment",
+            "/dir/segment/file",
+        ]
+
+        for segment in valid_segments:
+            self.assertTrue(self.helpers_module.is_path_segment_valid(segment))
+
+        for segment in invalid_segments:
+            self.assertFalse(self.helpers_module.is_path_segment_valid(segment))
+
+    def test_file_path_validation(self):
+        valid_paths = ["/file", "/dir1/file", "/dir-2/file", "/dir_3/file"]
+        invalid_paths = ["file", "dir1/file", "/dir\\segment/file"]
+
+        for path in valid_paths:
+            self.assertTrue(self.helpers_module.is_file_path_valid(path))
+
+        for path in invalid_paths:
+            self.assertFalse(self.helpers_module.is_file_path_valid(path))
