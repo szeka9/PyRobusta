@@ -91,7 +91,10 @@ class HttpConnection(BaseConnection):
         if not self._engine.is_request_empty() and self._engine.is_terminated():
             self._engine.write_response_head(self._send_buf)
             await self._flush_response()
-            if self._engine.resp_handler is not None:
+            if (
+                self._engine.resp_handler is not None
+                and not self._engine.method == self._engine.HEAD
+            ):
                 await self._response_handler(self._engine.resp_handler)
 
     async def _response_handler(self, resp_handler):

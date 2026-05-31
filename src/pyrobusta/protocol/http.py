@@ -488,7 +488,7 @@ class HttpEngine:
         object, stored by the resp_handler member. resp_handler
         can be used for writing the body by the transport layer.
         This method also updates the content-type and content-length
-        headers.
+        headers. In the case of a HEAD request, the body is omitted.
         :param body: body to be sent in the response
         :param content_type: content-type of the body
         """
@@ -690,7 +690,7 @@ class HttpEngine:
                 self.terminate(204, True)
                 return
             if self.has_payload():
-                if self.method == self.HEAD:
+                if self.method in (self.GET, self.HEAD):
                     raise MalformedRequest()
                 if mp_boundary := self._get_mp_boundary(self.headers):
                     # Request body is multipart
@@ -756,6 +756,8 @@ class HttpEngine:
     def _app_endpoint_st(self, rx):
         """
         Process a request by registered callback functions.
+        HEAD requests are temporarily mapped to GET for routing and callback execution,
+        but the response body is not sent back.
         """
         method = self.GET if self.method == self.HEAD else self.method
         callback = self._get_callback(self.url, method)
@@ -766,6 +768,7 @@ class HttpEngine:
                     rx.consume(self.recv_chunk_size + 2)
                     self.state = self._recv_chunk_size_st
                     return
+                # Last chunk, callback with empty body to signal end of request body
                 callback_response = callback(self, b"")
                 rx.consume(self.recv_chunk_size + 2)
             else:
