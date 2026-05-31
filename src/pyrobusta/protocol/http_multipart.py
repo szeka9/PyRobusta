@@ -137,7 +137,10 @@ def _parse_complete_part_st(self, rx):
     # Process last part
     self._consume_payload(rx, len(self.mp_last_delimiter))
 
-    if self.content_len_cnt + 2 == self.headers["content-length"] and rx.peek(2) == b"\r\n":
+    if (
+        self.content_len_cnt + 2 == self.headers["content-length"]
+        and rx.peek(2) == b"\r\n"
+    ):
         # Consume optional trailing CRLF
         self._consume_payload(rx, 2, last=True)
     else:
