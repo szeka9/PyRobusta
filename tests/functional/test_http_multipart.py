@@ -2,6 +2,8 @@ import asyncio
 import ssl
 import gc
 
+from os import mkdir, listdir, remove, rmdir
+
 from pyrobusta.server import http_server
 from pyrobusta.protocol import http_multipart
 from pyrobusta.protocol.http import (
@@ -12,6 +14,7 @@ from pyrobusta.utils.config import (
     CONF_TLS,
     CONF_LOG_LEVEL,
     CONF_HTTP_MULTIPART,
+    CONF_HTTP_FILES_API,
     _CONFIG_CACHE,
 )
 
@@ -78,6 +81,30 @@ def multipart_response(num_responses):
     return response_generator
 
 
+def fmkdir(path: str):
+    try:
+        mkdir(path)
+    except OSError:
+        pass
+
+
+def delete_path(path):
+    for name in listdir(path):
+        if path == "/":
+            full = "/" + name
+        else:
+            full = path + "/" + name
+
+        try:
+            remove(full)
+        except OSError:
+            delete_path(full)
+            try:
+                rmdir(full)
+            except OSError:
+                pass
+
+
 #################################################
 # Test driver
 #################################################
@@ -142,13 +169,14 @@ async def test_multipart_response(tls_enabled):
 #################################################
 
 
-def setup_config(tls_enabled=False):
+def setup_config(tls_enabled=False, files_api_enabled=False):
     http_server.HttpServer.LISTEN_PORT_HTTP = 8080
     http_server.HttpServer.LISTEN_PORT_HTTPS = 4443
 
     _CONFIG_CACHE[2 * CONF_LOG_LEVEL + 1] = "warning"
     _CONFIG_CACHE[2 * CONF_TLS + 1] = tls_enabled
     _CONFIG_CACHE[2 * CONF_HTTP_MULTIPART + 1] = True
+    _CONFIG_CACHE[2 * CONF_HTTP_FILES_API + 1] = files_api_enabled
     enable_optional_features()
 
 

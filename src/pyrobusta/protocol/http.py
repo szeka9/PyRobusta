@@ -488,7 +488,7 @@ class HttpEngine:
         object, stored by the resp_handler member. resp_handler
         can be used for writing the body by the transport layer.
         This method also updates the content-type and content-length
-        headers.
+        headers. In the case of a HEAD request, the body is omitted.
         :param body: body to be sent in the response
         :param content_type: content-type of the body
         """
@@ -616,6 +616,20 @@ class HttpEngine:
             "content-length" in self.headers and self.headers["content-length"] > 0
         ) or self.is_chunked()
 
+    def _consume_payload(self, rx, size, last=False):
+        """
+        Consume data from the request buffer and increment content length counter.
+        Raise an exception if the content length is exceeded. Allow strict checking
+        of content length when the last flag is set.
+        """
+        if "content-length" in self.headers and (
+            (self.content_len_cnt + size > self.headers["content-length"])
+            or (last and self.headers["content-length"] != self.content_len_cnt + size)
+        ):
+            raise InvalidContentLength()
+        self.content_len_cnt += size
+        rx.consume(size)
+
     # ================================================================================
     # Parser states
     # - all states must handle rx buffer argument for reading request data
@@ -690,7 +704,7 @@ class HttpEngine:
                 self.terminate(204, True)
                 return
             if self.has_payload():
-                if self.method == self.HEAD:
+                if self.method in (self.GET, self.HEAD):
                     raise MalformedRequest()
                 if mp_boundary := self._get_mp_boundary(self.headers):
                     # Request body is multipart
@@ -731,7 +745,7 @@ class HttpEngine:
         self.recv_chunk_size = int(bytes(rx.peek(blank_idx)), 16)
         if self.recv_chunk_size < 0:
             raise InvalidContentLength()
-        rx.consume(blank_idx + 2)
+        self._consume_payload(rx, blank_idx + 2)
         self.state = self._recv_chunk_st
 
     def _recv_chunk_st(self, rx):
@@ -756,6 +770,8 @@ class HttpEngine:
     def _app_endpoint_st(self, rx):
         """
         Process a request by registered callback functions.
+        HEAD requests are temporarily mapped to GET for routing and callback execution,
+        but the response body is not sent back.
         """
         method = self.GET if self.method == self.HEAD else self.method
         callback = self._get_callback(self.url, method)
@@ -763,15 +779,17 @@ class HttpEngine:
             if self.is_chunked():
                 if self.recv_chunk_size:
                     callback(self, bytes(rx.peek(self.recv_chunk_size)))
-                    rx.consume(self.recv_chunk_size + 2)
+                    self._consume_payload(rx, self.recv_chunk_size + 2)
                     self.state = self._recv_chunk_size_st
                     return
+                # Last chunk, callback with empty body to signal end of request body
                 callback_response = callback(self, b"")
-                rx.consume(self.recv_chunk_size + 2)
+                self._consume_payload(rx, self.recv_chunk_size + 2, last=True)
             else:
                 callback_response = callback(
                     self, bytes(rx.peek(self.headers["content-length"]))
                 )
+                self._consume_payload(rx, self.headers["content-length"], last=True)
         else:
             callback_response = callback(self, b"")
 

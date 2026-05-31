@@ -487,6 +487,88 @@ class TestWebStateMachine(TestHttpBase):
         self.assertEqual(self.engine.status_code, None)
         self.assertEqual(self.engine.state, self.engine._recv_chunk_st)
 
+    def test_payload_length_matches_content_length(self):
+        self.engine.url = b"/api/test"
+        self.engine.method = b"POST"
+        self.engine.version = b"HTTP/1.1"
+        self.engine.headers["content-length"] = 11
+        self.engine.state = self.engine._recv_payload_st
+
+        test_callback = mock.Mock(return_value=("text/plain", "OK"))
+        self.engine.register("/api/test", test_callback, "POST")
+
+        payload = b"hello world"
+        for i in range(len(payload)):
+            self.rx.write(payload[i : i + 1])
+            self.engine.state(self.rx)
+
+        while self.engine.state is not None:
+            self.engine.state(self.rx)
+
+        self.assertEqual(self.engine.status_code, 200)
+        self.assertEqual(self.engine.state, None)
+        test_callback.assert_called_with(self.engine, payload)
+
+    def test_payload_length_exceeds_content_length(self):
+        """
+        Test if the engine correctly reads the payload until content-length
+        and ignores remaining data. The remaining data should not cause an
+        error since the parser should be able to read it in a subsequent request
+        if the connection is kept alive.
+        """
+
+        self.engine.url = b"/api/test"
+        self.engine.method = b"POST"
+        self.engine.version = b"HTTP/1.1"
+        self.engine.headers["content-length"] = 11
+        self.engine.state = self.engine._recv_payload_st
+
+        test_callback = mock.Mock(return_value=("text/plain", "OK"))
+        self.engine.register("/api/test", test_callback, "POST")
+
+        payload = b"hello world!"
+        for i in range(len(payload)):
+            self.rx.write(payload[i : i + 1])
+            self.engine.state(self.rx)
+            if self.engine.state is None:
+                break
+
+        while self.engine.state is not None:
+            self.engine.state(self.rx)
+
+        self.assertEqual(self.engine.status_code, 200)
+        self.assertEqual(self.engine.state, None)
+        test_callback.assert_called_with(self.engine, b"hello world")
+        self.assertEqual(
+            self.rx.peek(), b"!"
+        )  # Remaining data after content-length is ignored
+
+    def test_payload_length_less_than_content_length(self):
+        """
+        Test if the engine correctly waits for the full payload when
+        content-length is not yet satisfied.
+        """
+        self.engine.url = b"/api/test"
+        self.engine.method = b"POST"
+        self.engine.version = b"HTTP/1.1"
+        self.engine.headers["content-length"] = 11
+        self.engine.state = self.engine._recv_payload_st
+
+        test_callback = mock.Mock(return_value=("text/plain", "OK"))
+        self.engine.register("/api/test", test_callback, "POST")
+
+        payload = b"hello"
+        for i in range(len(payload)):
+            self.rx.write(payload[i : i + 1])
+            self.engine.state(self.rx)
+            if self.engine.state is None:
+                break
+
+        self.engine.state(self.rx)
+
+        self.assertEqual(self.engine.status_code, None)
+        self.assertEqual(self.engine.state, self.engine._recv_payload_st)
+
 
 class TestFileServingStateMachine(TestHttpBase):
     """
