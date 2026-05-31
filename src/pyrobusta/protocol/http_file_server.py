@@ -126,9 +126,7 @@ def upload_file(http_ctx, payload: bytes):
         if not file_name_idx:
             http_ctx.terminate(400)
             return "text/plain", "Bad request"
-        file_path = normalize_path(
-            _TMP_DIR + "/" + f"{url_path[file_name_idx:]}.{http_ctx.id}"
-        )
+        file_path = _TMP_DIR + "/" + f"{url_path[file_name_idx:]}.{http_ctx.id}"
     else:
         file_path = normalize_path(http_ctx.url.decode("ascii")[6:])
 
@@ -192,7 +190,7 @@ def bulk_upload_file(http_ctx, payload: tuple):
                 remove(_TMP_DIR + "/" + file)
 
     # TODO: support X-Upload-Directory; pylint: disable=W0511
-    target_path = normalize_path(_TMP_DIR + "/" + f"{filename}.{http_ctx.id}")
+    target_path = _TMP_DIR + "/" + f"{filename}.{http_ctx.id}"
     with open(target_path, "ab") as f:
         f.write(part_body)
 
