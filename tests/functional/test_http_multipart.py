@@ -2,6 +2,8 @@ import asyncio
 import ssl
 import gc
 
+from os import mkdir, listdir, remove, rmdir
+
 from pyrobusta.server import http_server
 from pyrobusta.protocol import http_multipart
 from pyrobusta.protocol.http import (
@@ -12,6 +14,7 @@ from pyrobusta.utils.config import (
     CONF_TLS,
     CONF_LOG_LEVEL,
     CONF_HTTP_MULTIPART,
+    CONF_HTTP_FILES_API,
     _CONFIG_CACHE,
 )
 
@@ -78,6 +81,29 @@ def multipart_response(num_responses):
     return response_generator
 
 
+def fmkdir(path: str):
+    try:
+        mkdir(path)
+    except OSError:
+        pass
+
+
+def delete_path(path):
+    for name in listdir(path):
+        if path == "/":
+            full = "/" + name
+        else:
+            full = path + "/" + name
+
+        try:
+            remove(full)
+        except OSError:
+            delete_path(full)
+            try:
+                rmdir(full)
+            except OSError:
+                pass
+
 #################################################
 # Test driver
 #################################################
@@ -136,19 +162,58 @@ async def test_multipart_response(tls_enabled):
     server_task.cancel()
     await server.terminate()
 
+async def test_file_upload():
+    setup_config(files_api_enabled=True)
+    server, server_task = await start_server()
+
+    user_data = http_server.normalize_path("/www/user_data")
+    tmp_dir = http_server.normalize_path("/tmp")
+    fmkdir(user_data)
+    fmkdir(tmp_dir)
+
+    try:
+        data=(
+            # Status line + headers
+            b'POST /files HTTP/1.1\r\nHost: localhost\r\n'
+            b'Connection:close\r\nUser-Agent: curl/8.5.0\r\nAccept: */*\r\nContent-Length: 384\r\n'
+            b'Content-Type: multipart/form-data; boundary=------------------------1ukf3aC3uDA7tUn2xudQXn\r\n\r\n'
+            # Body with 2 file parts
+            b'--------------------------1ukf3aC3uDA7tUn2xudQXn\r\n'
+            b'Content-Disposition: form-data; name="file1"; filename="upload-1.txt"\r\n'
+            b'Content-Type: text/plain\r\n\r\n'
+            b'File 1 content\n\r\n'
+            b'--------------------------1ukf3aC3uDA7tUn2xudQXn\r\n'
+            b'Content-Disposition: form-data; name="file2"; filename="upload-2.txt"\r\n'
+            b'Content-Type: text/plain\r\n\r\n'
+            b'File 2 content\n\r\n'
+            b'--------------------------1ukf3aC3uDA7tUn2xudQXn--\r\n'
+        )
+
+        response = await send_request(data)
+        test_assert(
+            f"test file upload response is 201 Created",
+            response.startswith(b"HTTP/1.1 201 Created"),
+            True,
+        )
+    finally:
+        delete_path(user_data)
+        delete_path(tmp_dir)
+        server_task.cancel()
+        await server.terminate()
 
 #################################################
 # Test methods
 #################################################
 
 
-def setup_config(tls_enabled=False):
+def setup_config(tls_enabled=False, files_api_enabled=False):
     http_server.HttpServer.LISTEN_PORT_HTTP = 8080
     http_server.HttpServer.LISTEN_PORT_HTTPS = 4443
 
     _CONFIG_CACHE[2 * CONF_LOG_LEVEL + 1] = "warning"
     _CONFIG_CACHE[2 * CONF_TLS + 1] = tls_enabled
     _CONFIG_CACHE[2 * CONF_HTTP_MULTIPART + 1] = True
+    _CONFIG_CACHE[2 * CONF_HTTP_FILES_API + 1] = files_api_enabled
     enable_optional_features()
 
 
@@ -174,6 +239,7 @@ def test_main():
     test_multipart_patches()
     asyncio.run(test_multipart_response(tls_enabled=False))
     asyncio.run(test_multipart_response(tls_enabled=True))
+    asyncio.run(test_file_upload())
 
 
 test_main()

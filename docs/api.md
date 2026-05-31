@@ -2,7 +2,7 @@
 
 # File Management API
 
-This endpoint provides file management capabilities, allowing clients to upload, retrieve, and manage files through various HTTP methods. `http_files_api` must be set to `True` in pyrobusta.env to enable this API.
+This API provides file management capabilities, allowing clients to upload, retrieve, and manage files through various HTTP methods. `http_files_api` must be set to `True` in pyrobusta.env to enable this API.
 
 ## Summary
 
@@ -19,7 +19,7 @@ This endpoint provides file management capabilities, allowing clients to upload,
 
 ### 1. File Retrieval/Listing (`GET /files/{path}`)
 
-This endpoint allows general file system interaction, enabling operations such as listing directory contents and retrieving metadata as well as downloading files.
+This method allows general file system interaction, enabling operations such as listing directory contents and retrieving metadata as well as downloading files.
 
 *   **Method:** `GET`
 *   **Path:** `/files/{path}`
@@ -42,7 +42,7 @@ This method handles general file uploads, designed for uploading multiple files 
 
 The upload path is restricted to /www/user_data, however, content-disposition headers only have to specify the file name, /www/user_data is prepended by default.
 
-`http_multipart` must be set to `True` in the configuration to use this endpoint.
+`http_multipart` must be set to `True` in the configuration to use this method.
 
 *   **Method:** `POST`
 *   **Path:** `/files`

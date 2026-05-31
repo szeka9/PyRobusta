@@ -1,5 +1,12 @@
 """
 State machine extension for multipart parsing.
+
+This parser does not support chunked multipart requests,
+and requires content-length header for multipart parsing.
+
+Requests with a preambule and epilogue are not supported,
+and the parser expects the body to start with a boundary
+delimiter.
 """
 
 # pylint: disable=W0212,R0401
@@ -70,6 +77,8 @@ def _multipart_wrapper_factory(callback: callable, boundary: bytes):
 def _start_multipart_parser_st(self, rx):
     """
     Initial state for processing multipart requests.
+    Chunked requests are not supported, and content-length
+    header is required for multipart parsing.
     """
     if not "content-length" in self.headers:
         raise http.InvalidContentLength()
@@ -79,8 +88,7 @@ def _start_multipart_parser_st(self, rx):
     self.mp_last_delimiter = b"--" + self.mp_boundary + b"--"
     if rx.peek(start_delimiter + 2) != self.mp_delimiter:
         raise http.MalformedRequest()
-    rx.consume(start_delimiter + 2)
-    self.content_len_cnt += start_delimiter + 2
+    self._consume_payload(rx, start_delimiter + 2)
     self.state = self._parse_boundary_st
 
 
@@ -88,11 +96,15 @@ def _parse_boundary_st(self, rx):
     """
     State for parsing multipart boundary delimiter.
     """
-    if (
-        rx.find(b"\r\n" + self.mp_delimiter) == -1
-        and rx.find(b"\r\n" + self.mp_last_delimiter) == -1
-    ):
+    is_intermediate = rx.find(b"\r\n" + self.mp_delimiter) != -1
+    is_last = rx.find(b"\r\n" + self.mp_last_delimiter) != -1
+
+    if not is_intermediate and not is_last:
         return
+
+    if is_last and self.content_len_cnt + rx.size() < self.headers["content-length"]:
+        return
+
     self.state = self._parse_complete_part_st
 
 
@@ -103,16 +115,12 @@ def _parse_complete_part_st(self, rx):
     """
     next_delimiter = rx.find(b"\r\n--" + self.mp_boundary)
     part = rx.peek(next_delimiter)
-    rx.consume(next_delimiter + 2)  # Consume leading CRLF
-    self.content_len_cnt += next_delimiter + 2
+    self._consume_payload(rx, next_delimiter + 2)  # Consume leading CRLF
     is_final = (
         rx.size() >= len(self.mp_last_delimiter)
         and rx.peek(len(self.mp_last_delimiter)) == self.mp_last_delimiter
     )
 
-    # Validate part and content-length
-    if self.headers["content-length"] < self.content_len_cnt:
-        raise http.InvalidContentLength()
     part_headers, part_body = http.HttpEngine._parse_body_part(part)
     callback = http.HttpEngine._get_callback(self.url, self.method)
 
@@ -121,20 +129,20 @@ def _parse_complete_part_st(self, rx):
         callback(self, (part_headers, part_body))
         if rx.peek(len(self.mp_delimiter)) != self.mp_delimiter:
             raise http.MalformedRequest()
-        rx.consume(len(self.mp_delimiter))
-        self.content_len_cnt += len(self.mp_delimiter)
+        self._consume_payload(rx, len(self.mp_delimiter))
         self.mp_is_first = False
         self.state = self._parse_boundary_st
         return
 
     # Process last part
-    rx.consume(len(self.mp_last_delimiter))
-    self.content_len_cnt += len(self.mp_last_delimiter)
-    if (
-        self.headers["content-length"] != self.content_len_cnt
-        and self.content_len_cnt + rx.size() < self.headers["content-length"]
-    ):
-        raise http.InvalidContentLength()
+    self._consume_payload(rx, len(self.mp_last_delimiter))
+
+    if self.content_len_cnt + 2 == self.headers["content-length"] and rx.peek(2) == b"\r\n":
+        # Consume optional trailing CRLF
+        self._consume_payload(rx, 2, last=True)
+    else:
+        self._consume_payload(rx, 0, last=True)
+
     self.mp_is_last = True
     dtype, data = callback(self, (part_headers, part_body))
 

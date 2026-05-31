@@ -525,8 +525,7 @@ class TestFileServerBulkUpload(TestHttpBase):
         self.engine.url = b"/files"
         self.engine.method = b"POST"
         self.engine.version = b"HTTP/1.1"
-
-        self.engine.headers["content-length"] = 548
+        self.engine.headers["content-length"] = 565
         self.engine.headers["content-type"] = "multipart/form-data"
 
         self.engine.mp_boundary = b"test-boundary"
