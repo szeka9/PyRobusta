@@ -25,6 +25,16 @@ This method allows general file system interaction, enabling operations such as 
 *   **Path:** `/files/{path}`
 *   **Success Response:** 200 OK.
 
+#### Example request
+
+```bash
+$ curl 192.168.1.100/files/www
+[
+    {"path": "/www/examples.html", "created": "90", "size": "4507"},
+    {"path": "/www/index.html", "created": "91", "size": "1198"}
+]
+```
+
 ### 2. File Upload / Overwrite (`PUT /files/{file path}`)
 
 This method is used to upload a file or overwrite an existing file at a specific path.
@@ -35,6 +45,16 @@ The upload path is restricted to /www/user_data.
 *   **Body:** Raw file content (e.g., binary data).
 *   **Success Response:** 201 Created.
 *   **Notes:** `transfer-encoding: chunked` is supported.
+
+#### Example request
+
+```bash
+$ curl -X PUT --data 'This is a test.' http://192.168.1.100/files/www/user_data/test.txt
+OK
+
+$ curl 192.168.1.100/files/www/user_data/test.txt
+This is a test.
+```
 
 ### 3. File Upload (`POST /files`)
 
@@ -49,6 +69,19 @@ The upload path is restricted to /www/user_data, however, content-disposition he
 *   **Body:** File content encapsulated in multipart/form-data.
 *   **Success Response:** 201 Created.
 
+#### Example request
+
+```bash
+$ echo "File 1 content" > /tmp/upload-1.txt
+$ echo "File 2 content" > /tmp/upload-2.txt
+$ curl -X POST --form file1='@/tmp/upload-1.txt' --form file2='@/tmp/upload-2.txt' http://192.168.1.100/files
+$ curl 192.168.1.100/files/www/user_data
+[
+    {"path": "/www/user_data/upload-1.txt", "created": "418", "size": "15"},
+    {"path": "/www/user_data/upload-2.txt", "created": "418", "size": "15"}
+]
+```
+
 ### 4. File Delete (`DELETE /files/{file path}`)
 
 This method is used to delete a file at a specific path.
@@ -57,3 +90,9 @@ The path is restricted to /www/user_data.
 *   **Method:** `PUT`
 *   **Path:** `/files/{file path}`
 *   **Success Response:** 204 No Content.
+
+#### Example request
+
+```bash
+$ curl -X DELETE 192.168.1.100/files/www/user_data/test.txt
+```
