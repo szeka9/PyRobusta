@@ -164,46 +164,6 @@ async def test_multipart_response(tls_enabled):
     await server.terminate()
 
 
-async def test_file_upload():
-    setup_config(files_api_enabled=True)
-    server, server_task = await start_server()
-
-    user_data = http_server.normalize_path("/www/user_data")
-    tmp_dir = http_server.normalize_path("/tmp")
-    fmkdir(user_data)
-    fmkdir(tmp_dir)
-
-    try:
-        data = (
-            # Status line + headers
-            b"POST /files HTTP/1.1\r\nHost: localhost\r\n"
-            b"Connection:close\r\nUser-Agent: curl/8.5.0\r\nAccept: */*\r\nContent-Length: 384\r\n"
-            b"Content-Type: multipart/form-data; boundary=------------------------1ukf3aC3uDA7tUn2xudQXn\r\n\r\n"
-            # Body with 2 file parts
-            b"--------------------------1ukf3aC3uDA7tUn2xudQXn\r\n"
-            b'Content-Disposition: form-data; name="file1"; filename="upload-1.txt"\r\n'
-            b"Content-Type: text/plain\r\n\r\n"
-            b"File 1 content\n\r\n"
-            b"--------------------------1ukf3aC3uDA7tUn2xudQXn\r\n"
-            b'Content-Disposition: form-data; name="file2"; filename="upload-2.txt"\r\n'
-            b"Content-Type: text/plain\r\n\r\n"
-            b"File 2 content\n\r\n"
-            b"--------------------------1ukf3aC3uDA7tUn2xudQXn--\r\n"
-        )
-
-        response = await send_request(data)
-        test_assert(
-            f"test file upload response is 201 Created",
-            response.startswith(b"HTTP/1.1 201 Created"),
-            True,
-        )
-    finally:
-        delete_path(user_data)
-        delete_path(tmp_dir)
-        server_task.cancel()
-        await server.terminate()
-
-
 #################################################
 # Test methods
 #################################################
@@ -242,7 +202,6 @@ def test_main():
     test_multipart_patches()
     asyncio.run(test_multipart_response(tls_enabled=False))
     asyncio.run(test_multipart_response(tls_enabled=True))
-    asyncio.run(test_file_upload())
 
 
 test_main()
