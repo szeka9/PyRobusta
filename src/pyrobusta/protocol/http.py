@@ -620,11 +620,19 @@ class HttpEngine:
         """
         Consume data from the request buffer and increment content length counter.
         Raise an exception if the content length is exceeded. Allow strict checking
-        of content length when the last flag is set.
+        of content length when the last flag is set. When the request is chunked,
+        the content length should not be set, otherwise it is ignored.
         """
-        if "content-length" in self.headers and (
-            (self.content_len_cnt + size > self.headers["content-length"])
-            or (last and self.headers["content-length"] != self.content_len_cnt + size)
+        if (
+            not self.is_chunked()
+            and "content-length" in self.headers
+            and (
+                (self.content_len_cnt + size > self.headers["content-length"])
+                or (
+                    last
+                    and self.headers["content-length"] != self.content_len_cnt + size
+                )
+            )
         ):
             raise InvalidContentLength()
         self.content_len_cnt += size
@@ -713,7 +721,9 @@ class HttpEngine:
                 elif self.is_chunked():
                     # Request body is chunked
                     if "content-length" in self.headers:
-                        raise MalformedRequest()
+                        # Ignore content-length as per RFC 9112,
+                        # chunked transfer-encoding takes precedence
+                        pass
                     self.state = self._recv_chunk_size_st
                 else:
                     self.state = self._recv_payload_st
