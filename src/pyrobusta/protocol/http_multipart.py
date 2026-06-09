@@ -29,6 +29,7 @@ def _generate_multipart_response(self, _, callback: callable, dtype: str):
     self.set_response_header(
         b"content-type", dtype.encode("ascii") + b"; boundary=" + boundary
     )
+    self.set_response_header(b"transfer-encoding", b"chunked")
     if self.method != self.HEAD:
         self.resp_handler = self._multipart_wrapper_factory(callback, boundary)
 
@@ -51,25 +52,32 @@ def _multipart_wrapper_factory(callback: callable, boundary: bytes):
         :return bool: true if the stream is completed
         """
         while True:
-            tx.write(delimiter)
             part = callback()
+
             if not part:
-                tx.write(b"--")
+                tx.write(delimiter)
+                tx.write(b"--\r\n")
                 yield True
+                return
+
             content_type, part_body = part
-            tx.write(b"\r\n")
-            tx.write(b"content-type:")
-            tx.write(content_type.encode("ascii"))
-            tx.write(b"\r\n\r\n")
-            written = 0
-            while written < len(part_body):
-                to_write = tx.capacity - tx.size()
-                if not to_write:
-                    raise BufferError()
-                tx.write(part_body[written : written + to_write])
-                written += to_write
-                yield False
-            tx.write(b"\r\n")
+            headers = (
+                delimiter
+                + b"\r\ncontent-type:"
+                + content_type.encode("ascii")
+                + b"\r\n\r\n"
+            )
+
+            for chunk_part in (headers, part_body, b"\r\n"):
+                written = 0
+                while written < len(chunk_part):
+                    to_write = tx.capacity - tx.size()
+                    if not to_write:
+                        raise BufferError()
+                    chunk_part = chunk_part[written : written + to_write]
+                    tx.write(chunk_part)
+                    written += len(chunk_part)
+                    yield False
 
     return _multipart_wrapper
 
