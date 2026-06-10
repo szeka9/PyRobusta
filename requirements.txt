@@ -1,4 +1,9 @@
 mpremote==1.27.0
+locust==2.27.0
+gevent==24.2.1
+greenlet==3.0.3
+requests==2.32.3
+urllib3==2.2.2
 pylint
 black
 requests
