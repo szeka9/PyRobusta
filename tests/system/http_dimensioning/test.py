@@ -1,18 +1,53 @@
 """
-Measure memory usage of HTTP server.
+This test performs load tests while dimensioning the HTTP server
+with different configurations, measuring the resulting heap usage
+and performance. The test is designed to run against a device
+running the boot.py
+
+Tests are performed with the Locust load testing framework, simulating
+multiple concurrent users accessing the device's HTTP server with
+different request patterns.
+
+The test workflow includes:
+1. Applying a configuration to the device using mpremote.
+
+2. Performing a load test with Locust, simulating concurrent
+   users making requests to the device.
+
+3. Measuring the heap usage of the device before and after
+   the load test using a dedicated endpoint.
+
+4. Collecting performance metrics such as response times and
+   request rates from Locust.
+
+5. Visualizing the results with time series plots of heap usage and a
+   summary table of performance metrics for each configuration.
 """
 
+from flask import json
+from gevent import os
+import gevent.monkey
+
+gevent.monkey.patch_all()
+
+import urllib3
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+import gevent
 import requests
 import sys
 import socket
 import subprocess
 import tempfile
-import threading
 import math
 
-from time import sleep
+from time import sleep, monotonic
+from locust.env import Environment
+from locust.stats import stats_printer
 
 from utils import generate_measurement_table, generate_plot
+from http_user import DefaultUser, FilesApiUser, MultipartUser
 
 # ---------------------------
 # Test configuration settings
@@ -121,6 +156,14 @@ def get_test_config(sram_bytes, buffer_small, buffer_large):
             }
             for max_con in socket_counts
         ],
+        "files_api": [
+            {
+                "http_mem_cap": round_up_sig((buffer_small / sram_bytes) * max_con, 3),
+                "http_files_api": True,
+                "socket_max_con": max_con,
+            }
+            for max_con in socket_counts
+        ],
         "tls": [
             {
                 "http_mem_cap": round_up_sig((buffer_small / sram_bytes) * max_con, 3),
@@ -207,54 +250,54 @@ def measure_footprint(config, device_ip):
 def load_test(config, device_ip):
     proto = "https" if config["tls"] else "http"
     port = 4443 if config["tls"] else 8080
+    host = f"{proto}://{device_ip}:{port}"
     max_con = config.get("socket_max_con", 1)
 
-    base_url = f"{proto}://{device_ip}:{port}"
+    user_classes = [DefaultUser]
+    if config.get("http_multipart", False):
+        user_classes = [MultipartUser]
+    if config.get("http_files_api", False):
+        user_classes = [FilesApiUser]
 
-    stop_flag = False
-    results = {
-        "ok": 0,
-        "errors": 0,
+    env = Environment(
+        user_classes=user_classes,
+        host=host,
+    )
+
+    runner = env.create_local_runner()
+    runner.start(
+        user_count=max_con,
+        spawn_rate=max_con,
+    )
+
+    start_time = monotonic()
+    while monotonic() - start_time < LOAD_TEST_DURATION:
+        gevent.sleep(5)
+
+        print(
+            f"users={runner.user_count} "
+            f"state={runner.state} "
+            f"requests={env.stats.total.num_requests} "
+            f"failures={env.stats.total.num_failures}"
+        )
+
+    runner.quit()
+
+    total = env.stats.total
+    stats = {
+        "ok": total.num_requests,
+        "errors": total.num_failures,
+        "avg_ms": total.avg_response_time,
+        "min_ms": total.min_response_time,
+        "max_ms": total.max_response_time,
+        "rps": total.current_rps,
+        "p95_ms": total.get_response_time_percentile(0.95),
+        "p99_ms": total.get_response_time_percentile(0.99),
     }
-
-    lock = threading.Lock()
-
-    def worker():
-        nonlocal stop_flag
-        while not stop_flag:
-            try:
-                resp = requests.get(
-                    f"{base_url}/index.html",
-                    verify=False,
-                    timeout=5,
-                    headers={"Connection": "close"},
-                )
-                resp.raise_for_status()
-
-                with lock:
-                    results["ok"] += 1
-
-            except Exception:
-                with lock:
-                    results["errors"] += 1
-
-    threads = []
-    for _ in range(max_con):
-        t = threading.Thread(target=worker, daemon=True)
-        t.start()
-        threads.append(t)
-
-    # Run load phase
-    sleep(LOAD_TEST_DURATION)
-
-    # Stop workers
-    stop_flag = True
-    for t in threads:
-        t.join(timeout=2)
 
     try:
         usage = requests.get(
-            f"{base_url}/mem/time-series",
+            f"{host}/mem/time-series",
             verify=False,
             timeout=5,
             headers={"Connection": "close"},
@@ -263,17 +306,9 @@ def load_test(config, device_ip):
         print(f"Measured: {usage}")
     except Exception as e:
         print(f"WARNING - exception: {e}")
-        return {
-            "load": [],
-            "load_stats": results,
-            "concurrency": max_con,
-        }
+        return [], stats
 
-    return {
-        "load": usage,
-        "load_stats": results,
-        "concurrency": max_con,
-    }
+    return usage, stats
 
 
 def test_config_delta(device_name, device_ip, base_config, config_delta={}):
@@ -293,8 +328,8 @@ def test_config_delta(device_name, device_ip, base_config, config_delta={}):
 
     apply_mpremote_config(target_config, device_name)
     idle = measure_footprint(target_config, device_ip)
-    load = load_test(target_config, device_ip)
-    return idle, load
+    usage, stats = load_test(target_config, device_ip)
+    return idle, usage, stats
 
 
 if __name__ == "__main__":
@@ -305,38 +340,46 @@ if __name__ == "__main__":
     validate_device_ip(device_ip)
     apply_mpremote_config(base_config, device_id)
 
-    measured_idle, measured_load = test_config_delta(device_id, device_ip, base_config)
-    baseline = {
+    idle, usage, stats = test_config_delta(device_id, device_ip, base_config)
+
+    base_measurement = {
         "id": "base",
-        "idle": measured_idle,
+        "idle": idle,
+        "usage": usage,
+        "stats": stats,
         "config": base_config,
     }
-    baseline.update(measured_load)
+    generate_plot(base_measurement, device_name)
 
-    measurements = []
+    measurements = [base_measurement]
     sram_bytes, buffer_small, buffer_large = get_mem_params(device_id)
     test_config = get_test_config(sram_bytes, buffer_small, buffer_large)
     for case in test_config:
         delta_cnt = 0
         for i, delta in enumerate(test_config[case]):
-            measured_idle, measured_load = test_config_delta(
+            load_idle, load_usage, load_stats = test_config_delta(
                 device_id, device_ip, base_config, delta
             )
-            if measured_idle and measured_load:
+            if load_idle and load_usage and load_stats:
                 delta_cnt += 1
                 m = {
                     "id": f"{case}_{delta_cnt:03d}",
-                    "idle": measured_idle,
-                    "delta": delta,
+                    "idle": load_idle,
+                    "usage": load_usage,
+                    "stats": load_stats,
+                    "config": base_config | delta,
                 }
-                m.update(measured_load)
                 measurements.append(m)
+                generate_plot(m, device_name)
 
-    print(baseline)
-    print(measurements)
+    target_dir = device_name.replace("-", "_").lower()
+    if target_dir not in os.listdir("./docs/dimensioning/"):
+        os.mkdir(f"./docs/dimensioning/{target_dir}")
+
+    with open(f"docs/dimensioning/{target_dir}/measurements.json", "w") as f:
+        json.dump(measurements, f, indent=4)
 
     table = generate_measurement_table(
-        baseline,
         measurements,
         excluded_keys={
             "http_port",
@@ -346,9 +389,5 @@ if __name__ == "__main__":
             "http_files_api",
         },
     )
-
-    generate_plot(baseline, device_name)
-    for m in measurements:
-        generate_plot(m, device_name)
 
     print(table)
