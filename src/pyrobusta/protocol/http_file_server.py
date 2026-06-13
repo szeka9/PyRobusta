@@ -254,7 +254,7 @@ def _traverse_dir_factory(path):
                 tx.write(b",")
 
             file_stat = stat(it)
-            obj = dumps(
+            data = dumps(
                 {
                     "path": it,
                     "size": str(file_stat[6]),
@@ -263,11 +263,11 @@ def _traverse_dir_factory(path):
             ).encode("ascii")
 
             written = 0
-            while written < len(obj):
+            while written < len(data):
                 to_write = tx.capacity - tx.size()
                 if not to_write:
                     raise BufferError()
-                tx.write(obj[written : written + to_write])
+                tx.write(data[written : written + to_write])
                 written += to_write
                 yield False
         tx.write(b"]\r\n")
