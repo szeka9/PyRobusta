@@ -387,9 +387,7 @@ class HttpEngine:
         and return the boundary value.
         """
         content_type = headers.get("content-type")
-        if not content_type or not content_type.lower().startswith(
-            "multipart/form-data"
-        ):
+        if not content_type or not content_type.lower().startswith("multipart/"):
             return None
 
         parts = content_type.split(";")
@@ -440,6 +438,7 @@ class HttpEngine:
         :param key: HTTP header key
         :param value: HTTP header value
         """
+        key = key.lower()
         if (
             key in self.resp_headers
             and (index := self.resp_headers.index(key)) % 2 == 0
@@ -810,7 +809,8 @@ class HttpEngine:
             return
 
         dtype, data = callback_response
-        if dtype.startswith("multipart/"):
+        if dtype.startswith("multipart/") and callable(data):
+            self.set_response_header(b"transfer-encoding", b"chunked")
             self.state = lambda _rx: self._generate_multipart_response(_rx, data, dtype)
             return
 

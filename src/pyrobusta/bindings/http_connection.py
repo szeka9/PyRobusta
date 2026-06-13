@@ -98,7 +98,7 @@ class HttpConnection(BaseConnection):
                 await self._response_handler(self._engine.resp_handler)
 
     async def _response_handler(self, resp_handler):
-        if "closure" == type(resp_handler).__name__:
+        if callable(resp_handler):
             if self._engine.get_response_header(b"transfer-encoding") == b"chunked":
                 for is_finished in resp_handler(self._send_buf):
                     await self.write(b"%x\r\n" % self._send_buf.size())
