@@ -121,7 +121,14 @@ class TestHelpers(unittest.TestCase):
 
     def test_file_path_validation(self):
         valid_paths = ["/file", "/dir1/file", "/dir-2/file", "/dir_3/file"]
-        invalid_paths = ["file", "dir1/file", "/dir\\segment/file"]
+        invalid_paths = [
+            "file",
+            "dir1/file",
+            "/dir\\segment/file",
+            "/",
+            "/dir/",
+            "/dir/file/",
+        ]
 
         for path in valid_paths:
             self.assertTrue(self.helpers_module.is_file_path_valid(path))

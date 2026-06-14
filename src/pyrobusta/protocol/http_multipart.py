@@ -15,16 +15,16 @@ from pyrobusta.protocol import http
 from pyrobusta.utils.helpers import add_method
 
 
-def _generate_multipart_response(self, _, callback: callable, dtype: str):
+def generate_multipart_response(self, callback: callable, dtype: str):
     """
     Generate multipart response depening on the exact content type.
     The callback function is called without arguments, and it must return bytes-like objects.
     :param callback: function for part generation, each call generates a separate part
     :param dtype: exact multipart content-type (multipart/*)
     """
-    if type(callback).__name__ not in ("function", "closure"):
+    if not callable(callback):
         raise ValueError("Invalid response handler")
-    self.terminate(200, True)
+
     boundary = self.MULTIPART_BOUNDARY
     self.set_response_header(
         b"content-type", dtype.encode("ascii") + b"; boundary=" + boundary
@@ -134,12 +134,16 @@ def _parse_complete_part_st(self, rx):
 
     # Process complete part
     if not is_final:
-        callback(self, (part_headers, part_body))
+        callback_response = callback(self, (part_headers, part_body))
         if rx.peek(len(self.mp_delimiter)) != self.mp_delimiter:
             raise http.MalformedRequest()
         self._consume_payload(rx, len(self.mp_delimiter))
         self.mp_is_first = False
-        self.state = self._parse_boundary_st
+        if not self.is_terminated():
+            # Proceed to next part if there is no early termination
+            self.state = self._parse_boundary_st
+        elif callback_response:
+            self._handle_route_response(callback_response)
         return
 
     # Process last part
@@ -155,11 +159,9 @@ def _parse_complete_part_st(self, rx):
         self._consume_payload(rx, 0, last=True)
 
     self.mp_is_last = True
-    dtype, data = callback(self, (part_headers, part_body))
+    callback_response = callback(self, (part_headers, part_body))
 
-    if not self.is_terminated():
-        self.terminate(200, True)
-    self.set_response_body(data, dtype)
+    self._handle_route_response(callback_response)
 
 
 def apply_patches():
@@ -178,7 +180,7 @@ def apply_patches():
     http.HttpEngine.__init__ = new_init
     http.HttpEngine.MULTIPART_BOUNDARY = b"pyrobusta-boundary"
 
-    add_method(http.HttpEngine, _generate_multipart_response)
+    add_method(http.HttpEngine, generate_multipart_response)
     add_method(http.HttpEngine, _multipart_wrapper_factory, "static")
     add_method(http.HttpEngine, _start_multipart_parser_st)
     add_method(http.HttpEngine, _parse_boundary_st)

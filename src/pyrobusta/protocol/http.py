@@ -236,7 +236,7 @@ class HttpEngine:
         return decorator
 
     # =========================================
-    # Static helpers for parsing
+    # Helpers for parsing
     # =========================================
 
     @staticmethod
@@ -255,18 +255,20 @@ class HttpEngine:
                 i += 1
         return "".join(out)
 
-    @staticmethod
-    def get_url_encoded_query_param(query: str, key: str, default: str = None):
+    def get_query_param(self, key: str, default: str = None) -> str:
         """
         Parse a query and return the value belonging to a key
         according to the x-www-form-urlencoded format.
-        :param query: query part
         :param key: key to parse from the query
         :param default: default value to return when key is not present
+        :return: value of the key or default
         """
-        if query.startswith(key + "="):
+        if not self.query or not key:
+            return default
+
+        if self.query.startswith(key + "="):
             idx_start = 0
-        elif (idx_start := query.find("&" + key + "=")) != -1:
+        elif (idx_start := self.query.find("&" + key + "=")) != -1:
             idx_start += 1
         elif default is None:
             raise KeyError()
@@ -274,10 +276,10 @@ class HttpEngine:
             return default
 
         idx_end = -1
-        idx_end = query.find("&", idx_start)
+        idx_end = self.query.find("&", idx_start)
         if idx_end > -1:
-            return query[idx_start + len(key) + 1 : idx_end]
-        return query[idx_start + len(key) + 1 :]
+            return self.query[idx_start + len(key) + 1 : idx_end]
+        return self.query[idx_start + len(key) + 1 :]
 
     @staticmethod
     def _is_matching_url_path(path: bytes, pattern: bytes) -> bool:
@@ -524,6 +526,27 @@ class HttpEngine:
             self.version == b"HTTP/1.1" and "close" not in connection_tokens
         )
 
+    def _handle_route_response(self, callback_response: tuple | None):
+        """
+        Terminate the state machine based on the return value of a
+        user-defined route handler. If the handler does not explicitly
+        set a status code, default to HTTP 200. If the handler returns
+        a response body and content type, set them accordingly.
+        """
+        if not self.is_terminated():
+            self.terminate(200, True)
+
+        if callback_response is None:
+            return
+
+        dtype, data = callback_response
+        if dtype.startswith("multipart/") and callable(data):
+            self.set_response_header(b"transfer-encoding", b"chunked")
+            self.generate_multipart_response(data, dtype)
+            return
+
+        self.set_response_body(data, content_type=dtype)
+
     def terminate(self, status_code: int, request_complete: bool = False):
         """
         Regular state machine termination with a specific status code.
@@ -605,7 +628,13 @@ class HttpEngine:
         """
         Determines if the request has a payload with chunked transfer-encoding.
         """
-        return self.headers.get("transfer-encoding") == "chunked"
+        return self.headers.get("transfer-encoding", "").lower() == "chunked"
+
+    def is_multipart(self):
+        """
+        Determines if the request has a multipart payload.
+        """
+        return self.headers.get("content-type", "").lower().startswith("multipart/")
 
     def has_payload(self):
         """
@@ -787,13 +816,17 @@ class HttpEngine:
         if self.has_payload():
             if self.is_chunked():
                 if self.recv_chunk_size:
-                    callback(self, bytes(rx.peek(self.recv_chunk_size)))
+                    callback_response = callback(
+                        self, bytes(rx.peek(self.recv_chunk_size))
+                    )
                     self._consume_payload(rx, self.recv_chunk_size + 2)
-                    self.state = self._recv_chunk_size_st
-                    return
-                # Last chunk, callback with empty body to signal end of request body
-                callback_response = callback(self, b"")
-                self._consume_payload(rx, self.recv_chunk_size + 2, last=True)
+                    if not self.is_terminated():
+                        self.state = self._recv_chunk_size_st
+                        return
+                else:
+                    # Last chunk, callback with empty body to signal end of request body
+                    callback_response = callback(self, b"")
+                    self._consume_payload(rx, self.recv_chunk_size + 2, last=True)
             else:
                 callback_response = callback(
                     self, bytes(rx.peek(self.headers["content-length"]))
@@ -802,19 +835,7 @@ class HttpEngine:
         else:
             callback_response = callback(self, b"")
 
-        if not self.is_terminated():
-            self.terminate(200, True)
-
-        if callback_response is None:
-            return
-
-        dtype, data = callback_response
-        if dtype.startswith("multipart/") and callable(data):
-            self.set_response_header(b"transfer-encoding", b"chunked")
-            self.state = lambda _rx: self._generate_multipart_response(_rx, data, dtype)
-            return
-
-        self.set_response_body(data, content_type=dtype)
+        self._handle_route_response(callback_response)
 
     def _fs_retrieve_st(self, _):
         """
@@ -860,15 +881,13 @@ class HttpEngine:
         """
         Initial state for processing multipart requests (placeholder).
         """
-        self.terminate(503)
+        self.abort(503)
 
-    def _generate_multipart_response(
-        self, rx, callback, dtype
-    ):  # pylint: disable=W0613
+    def generate_multipart_response(self, callback, dtype):  # pylint: disable=W0613
         """
         Generate multipart response depening on the exact content type (placeholder).
         """
-        self.terminate(503, True)
+        self.abort(503)
 
 
 def enable_optional_features():

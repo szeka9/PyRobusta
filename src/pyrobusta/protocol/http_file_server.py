@@ -113,42 +113,33 @@ def upload_file(http_ctx, payload: bytes):
     Callback function for handling single file uploads, supporting chunked transfer encoding.
     Uploads are saved to _UPLOAD_ROOT, with the name determined by the URL path.
     """
-    content_type = http_ctx.headers.get("content-type")
-    if content_type and content_type.lower().startswith("multipart/"):
+    target_path = http_ctx.url.decode("ascii")[6:]
+
+    if http_ctx.is_multipart() or not is_file_path_valid(target_path):
         http_ctx.terminate(400)
         return "text/plain", "Bad request"
 
-    is_chunked = http_ctx.headers.get("transfer-encoding") == "chunked"
-
-    if is_chunked:
-        url_path = http_ctx.url.decode("ascii")
-        file_name_idx = url_path.rfind("/") + 1
-        if not file_name_idx:
-            http_ctx.terminate(400)
-            return "text/plain", "Bad request"
-        file_path = _TMP_DIR + "/" + f"{url_path[file_name_idx:]}.{http_ctx.id}"
-    else:
-        file_path = normalize_path(http_ctx.url.decode("ascii")[6:])
-
-    if not is_file_path_valid(file_path):
-        http_ctx.terminate(400)
-        return "text/plain", "Invalid or missing filename"
+    if not normalize_path(target_path).startswith(_UPLOAD_ROOT):
+        http_ctx.terminate(403, True)
+        return "text/plain", "Forbidden"
 
     try:
-        if not file_path.startswith(_UPLOAD_ROOT) and not file_path.startswith(
-            _TMP_DIR
-        ):
-            http_ctx.terminate(403, True)
-            return "text/plain", "Forbidden"
+        if http_ctx.is_chunked():
+            file_name_idx = target_path.rfind("/") + 1
+            if not file_name_idx:
+                http_ctx.terminate(400)
+                return "text/plain", "Bad request"
 
-        if is_chunked:
-            if not payload:  # Last chunk received, finalize upload
-                rename(file_path, normalize_path(http_ctx.url.decode("ascii")[6:]))
-            else:
-                with open(file_path, "ab") as f:
+            tmp_path = _TMP_DIR + "/" + f"{target_path[file_name_idx:]}.{http_ctx.id}"
+
+            if payload:  # Wait for more chunks before setting response status
+                with open(tmp_path, "ab") as f:
                     f.write(payload)
+                return
+            # Last chunk received, finalize upload
+            rename(tmp_path, normalize_path(target_path))
         else:
-            with open(file_path, "wb") as f:
+            with open(normalize_path(target_path), "wb") as f:
                 f.write(payload)
 
         http_ctx.terminate(201, True)
@@ -166,8 +157,7 @@ def bulk_upload_file(http_ctx, payload: tuple):
     same file name, the content of the second part is appended to the first part.
     Split files to multiple parts for chunking large files to avoid HTTP 413 errors.
     """
-    content_type = http_ctx.headers.get("content-type")
-    if not content_type or not content_type.lower().startswith("multipart/form-data"):
+    if not http_ctx.is_multipart():
         http_ctx.terminate(400)
         return "text/plain", "Bad request"
 
