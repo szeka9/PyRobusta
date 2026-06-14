@@ -276,6 +276,23 @@ class TestFileServerUpload(TestHttpBase):
 
         self.assertEqual(self.engine.status_code, 400)
 
+    def test_file_serving_complete_file_invalid_path(self, *_):
+        self.engine.url = b"/files/www/user_data/file/"
+        self.engine.method = b"PUT"
+        self.engine.version = b"HTTP/1.1"
+
+        self.engine.headers["content-length"] = 28
+        self.engine.headers["content-type"] = "application/octet-stream"
+
+        self.engine.state = self.engine._app_endpoint_st
+        body_part = b"File uploaded for testing.\r\n"
+        self.rx.write(body_part)
+
+        while self.engine.state is not None:
+            self.engine.state(self.rx)
+
+        self.assertEqual(self.engine.status_code, 400)
+
     def test_file_serving_chunked_file_upload(self, *_):
         self.engine.url = b"/files/www/user_data/chunked.txt"
         self.engine.method = b"PUT"
