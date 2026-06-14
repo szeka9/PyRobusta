@@ -319,9 +319,7 @@ class TestWebStateMachine(TestHttpBase):
             self.rx.write(request[i : i + 1])
             self.engine.state(self.rx)
 
-        self.assertEqual(
-            self.engine.get_url_encoded_query_param(self.engine.query, "param"), "value"
-        )
+        self.assertEqual(self.engine.get_query_param("param"), "value")
 
     def test_multiple_url_encoded_query_parameter(self):
         request = (
@@ -333,15 +331,15 @@ class TestWebStateMachine(TestHttpBase):
             self.engine.state(self.rx)
 
         self.assertEqual(
-            self.engine.get_url_encoded_query_param(self.engine.query, "param1"),
+            self.engine.get_query_param("param1"),
             "value1",
         )
         self.assertEqual(
-            self.engine.get_url_encoded_query_param(self.engine.query, "param2"),
+            self.engine.get_query_param("param2"),
             "value2",
         )
         self.assertEqual(
-            self.engine.get_url_encoded_query_param(self.engine.query, "param3"),
+            self.engine.get_query_param("param3"),
             "value3",
         )
 
@@ -353,22 +351,20 @@ class TestWebStateMachine(TestHttpBase):
             self.engine.state(self.rx)
 
         self.assertEqual(
-            self.engine.get_url_encoded_query_param(self.engine.query, "param1"),
+            self.engine.get_query_param("param1"),
             "",
         )
         self.assertEqual(
-            self.engine.get_url_encoded_query_param(self.engine.query, "param2"),
+            self.engine.get_query_param("param2"),
             "",
         )
         self.assertEqual(
-            self.engine.get_url_encoded_query_param(
-                self.engine.query, "param3", "default"
-            ),
+            self.engine.get_query_param("param3", "default"),
             "default",
         )
 
         with self.assertRaises(KeyError):
-            self.engine.get_url_encoded_query_param(self.engine.query, "param3")
+            self.engine.get_query_param("param3")
 
     def test_overlapping_url_encoded_query_parameter(self):
         request = b"GET /api/test?data=value1&ta=value2&a=value3 HTTP/1.1\r\n"
@@ -378,15 +374,15 @@ class TestWebStateMachine(TestHttpBase):
             self.engine.state(self.rx)
 
         self.assertEqual(
-            self.engine.get_url_encoded_query_param(self.engine.query, "data"),
+            self.engine.get_query_param("data"),
             "value1",
         )
         self.assertEqual(
-            self.engine.get_url_encoded_query_param(self.engine.query, "ta"),
+            self.engine.get_query_param("ta"),
             "value2",
         )
         self.assertEqual(
-            self.engine.get_url_encoded_query_param(self.engine.query, "a"),
+            self.engine.get_query_param("a"),
             "value3",
         )
 

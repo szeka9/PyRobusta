@@ -12,8 +12,8 @@ def version(http_ctx, _):
     include_server_version = False
 
     if http_ctx.query:
-        is_detailed = http_ctx.get_url_encoded_query_param(
-            http_ctx.query, "detailed", default="false"
+        is_detailed = http_ctx.get_query_param(
+            "detailed", default="false"
         ).lower()
 
         if is_detailed not in ("true", "false"):

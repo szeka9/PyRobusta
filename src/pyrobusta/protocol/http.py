@@ -236,7 +236,7 @@ class HttpEngine:
         return decorator
 
     # =========================================
-    # Static helpers for parsing
+    # Helpers for parsing
     # =========================================
 
     @staticmethod
@@ -255,18 +255,20 @@ class HttpEngine:
                 i += 1
         return "".join(out)
 
-    @staticmethod
-    def get_url_encoded_query_param(query: str, key: str, default: str = None):
+    def get_query_param(self, key: str, default: str = None) -> str:
         """
         Parse a query and return the value belonging to a key
         according to the x-www-form-urlencoded format.
-        :param query: query part
         :param key: key to parse from the query
         :param default: default value to return when key is not present
+        :return: value of the key or default
         """
-        if query.startswith(key + "="):
+        if not self.query or not key:
+            return default
+
+        if self.query.startswith(key + "="):
             idx_start = 0
-        elif (idx_start := query.find("&" + key + "=")) != -1:
+        elif (idx_start := self.query.find("&" + key + "=")) != -1:
             idx_start += 1
         elif default is None:
             raise KeyError()
@@ -274,10 +276,10 @@ class HttpEngine:
             return default
 
         idx_end = -1
-        idx_end = query.find("&", idx_start)
+        idx_end = self.query.find("&", idx_start)
         if idx_end > -1:
-            return query[idx_start + len(key) + 1 : idx_end]
-        return query[idx_start + len(key) + 1 :]
+            return self.query[idx_start + len(key) + 1 : idx_end]
+        return self.query[idx_start + len(key) + 1 :]
 
     @staticmethod
     def _is_matching_url_path(path: bytes, pattern: bytes) -> bool:

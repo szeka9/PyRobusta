@@ -13,13 +13,11 @@ def mem_usage(http_ctx, _):
     usage_percentage = 100 * used / (free + used)
 
     if http_ctx.query:
-        value_format = http_ctx.get_url_encoded_query_param(
-            http_ctx.query, "format", "bytes"
-        )
+        value_format = http_ctx.get_query_param("format", "bytes")
         if value_format not in ("%", "bytes"):
             raise ValueError("invalid format")
 
-        selector = http_ctx.get_url_encoded_query_param(http_ctx.query, "key", "")
+        selector = http_ctx.get_query_param("key", "")
         if selector == "free":
             if value_format == "%":
                 free = round(100 * free / (used + free), 2)
