@@ -542,7 +542,7 @@ class HttpEngine:
         dtype, data = callback_response
         if dtype.startswith("multipart/") and callable(data):
             self.set_response_header(b"transfer-encoding", b"chunked")
-            self.state = lambda _rx: self._generate_multipart_response(_rx, data, dtype)
+            self.generate_multipart_response(data, dtype)
             return
 
         self.set_response_body(data, content_type=dtype)
@@ -881,15 +881,13 @@ class HttpEngine:
         """
         Initial state for processing multipart requests (placeholder).
         """
-        self.terminate(503)
+        self.abort(503)
 
-    def _generate_multipart_response(
-        self, rx, callback, dtype
-    ):  # pylint: disable=W0613
+    def generate_multipart_response(self, callback, dtype):  # pylint: disable=W0613
         """
         Generate multipart response depening on the exact content type (placeholder).
         """
-        self.terminate(503, True)
+        self.abort(503)
 
 
 def enable_optional_features():
