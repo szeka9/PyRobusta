@@ -134,12 +134,17 @@ def _parse_complete_part_st(self, rx):
 
     # Process complete part
     if not is_final:
-        callback(self, (part_headers, part_body))
+        callback_response = callback(self, (part_headers, part_body))
         if rx.peek(len(self.mp_delimiter)) != self.mp_delimiter:
             raise http.MalformedRequest()
         self._consume_payload(rx, len(self.mp_delimiter))
         self.mp_is_first = False
-        self.state = self._parse_boundary_st
+        if not self.is_terminated():
+            # Proceed to next part if there is no early termination
+            self.state = self._parse_boundary_st
+        elif callback_response:
+            dtype, data = callback_response
+            self.set_response_body(data, dtype)
         return
 
     # Process last part
@@ -155,11 +160,9 @@ def _parse_complete_part_st(self, rx):
         self._consume_payload(rx, 0, last=True)
 
     self.mp_is_last = True
-    dtype, data = callback(self, (part_headers, part_body))
+    callback_response = callback(self, (part_headers, part_body))
 
-    if not self.is_terminated():
-        self.terminate(200, True)
-    self.set_response_body(data, dtype)
+    self._handle_route_response(callback_response)
 
 
 def apply_patches():

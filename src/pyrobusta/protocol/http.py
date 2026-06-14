@@ -526,6 +526,27 @@ class HttpEngine:
             self.version == b"HTTP/1.1" and "close" not in connection_tokens
         )
 
+    def _handle_route_response(self, callback_response: tuple | None):
+        """
+        Terminate the state machine based on the return value of a
+        user-defined route handler. If the handler does not explicitly
+        set a status code, default to HTTP 200. If the handler returns
+        a response body and content type, set them accordingly.
+        """
+        if not self.is_terminated():
+            self.terminate(200, True)
+
+        if callback_response is None:
+            return
+
+        dtype, data = callback_response
+        if dtype.startswith("multipart/") and callable(data):
+            self.set_response_header(b"transfer-encoding", b"chunked")
+            self.state = lambda _rx: self._generate_multipart_response(_rx, data, dtype)
+            return
+
+        self.set_response_body(data, content_type=dtype)
+
     def terminate(self, status_code: int, request_complete: bool = False):
         """
         Regular state machine termination with a specific status code.
@@ -607,7 +628,13 @@ class HttpEngine:
         """
         Determines if the request has a payload with chunked transfer-encoding.
         """
-        return self.headers.get("transfer-encoding") == "chunked"
+        return self.headers.get("transfer-encoding", "").lower() == "chunked"
+
+    def is_multipart(self):
+        """
+        Determines if the request has a multipart payload.
+        """
+        return self.headers.get("content-type", "").lower().startswith("multipart/")
 
     def has_payload(self):
         """
@@ -789,13 +816,17 @@ class HttpEngine:
         if self.has_payload():
             if self.is_chunked():
                 if self.recv_chunk_size:
-                    callback(self, bytes(rx.peek(self.recv_chunk_size)))
+                    callback_response = callback(
+                        self, bytes(rx.peek(self.recv_chunk_size))
+                    )
                     self._consume_payload(rx, self.recv_chunk_size + 2)
-                    self.state = self._recv_chunk_size_st
-                    return
-                # Last chunk, callback with empty body to signal end of request body
-                callback_response = callback(self, b"")
-                self._consume_payload(rx, self.recv_chunk_size + 2, last=True)
+                    if not self.is_terminated():
+                        self.state = self._recv_chunk_size_st
+                        return
+                else:
+                    # Last chunk, callback with empty body to signal end of request body
+                    callback_response = callback(self, b"")
+                    self._consume_payload(rx, self.recv_chunk_size + 2, last=True)
             else:
                 callback_response = callback(
                     self, bytes(rx.peek(self.headers["content-length"]))
@@ -804,19 +835,7 @@ class HttpEngine:
         else:
             callback_response = callback(self, b"")
 
-        if not self.is_terminated():
-            self.terminate(200, True)
-
-        if callback_response is None:
-            return
-
-        dtype, data = callback_response
-        if dtype.startswith("multipart/") and callable(data):
-            self.set_response_header(b"transfer-encoding", b"chunked")
-            self.state = lambda _rx: self._generate_multipart_response(_rx, data, dtype)
-            return
-
-        self.set_response_body(data, content_type=dtype)
+        self._handle_route_response(callback_response)
 
     def _fs_retrieve_st(self, _):
         """
