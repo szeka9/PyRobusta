@@ -255,6 +255,16 @@ class HttpEngine:
                 i += 1
         return "".join(out)
 
+    def path_segment(self, idx: int):
+        """
+        Return the nth path segment of the URL path.
+        The index is shifted by one to ignore the first
+        empty segment before the leading slash ('/').
+        :param idx: index of the segment
+        :return: string path segment
+        """
+        return self.url.split(b"/")[idx + 1].decode("ascii")
+
     def get_query_param(self, key: str, default: str = None) -> str:
         """
         Parse a query and return the value belonging to a key

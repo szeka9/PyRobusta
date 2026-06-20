@@ -37,7 +37,7 @@ def version(http_ctx, _):
 @HttpEngine.route("/{app_or_server}/version", "GET")
 def version(http_ctx, _):
     include_server_version = False
-    resource = http_ctx.url.split(b"/")[1]
+    resource = http_ctx.path_segment(0)
 
     if resource not in (b"app", b"server"):
         http_ctx.terminate(404, True)
