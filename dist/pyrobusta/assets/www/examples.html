@@ -95,7 +95,7 @@ def version(http_ctx, _):
         ).lower()
 
         if is_detailed not in ("true", "false"):
-            http_ctx.terminate(400, True)
+            http_ctx.terminate(400)
             return "text/plain", "Invalid query"
 
         include_server_version = is_detailed.lower() == "true"
@@ -118,7 +118,7 @@ def version(http_ctx, _):
     resource = http_ctx.path_segment(0)
 
     if resource not in (b"app", b"server"):
-        http_ctx.terminate(404, True)
+        http_ctx.terminate(404)
         return "text/plain", "Not found"
 
     version_string = APP_VERSION if resource == b"app" else PYROBUSTA_VERSION

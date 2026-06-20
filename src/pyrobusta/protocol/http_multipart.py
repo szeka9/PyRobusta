@@ -139,7 +139,7 @@ def _parse_complete_part_st(self, rx):
             raise http.MalformedRequest()
         self._consume_payload(rx, len(self.mp_delimiter))
         self.mp_is_first = False
-        if not self.is_terminated():
+        if not self.state == self._terminal_st:
             # Proceed to next part if there is no early termination
             self.state = self._parse_boundary_st
         elif callback_response:

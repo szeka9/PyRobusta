@@ -141,7 +141,7 @@ class TestWebStateMachine(TestHttpBase):
         self.assertEqual(self.engine.method, b"NOTSUPORTED")
         self.assertEqual(self.engine.url, b"/index.html")
         self.assertEqual(self.engine.version, b"HTTP/1.1")
-        self.assertEqual(self.engine.state, None)
+        self.assertEqual(self.engine.state, self.engine._terminal_st)
         self.assertEqual(self.engine.status_code, 405)
 
     def test_status_parsing_unsupported_version(self):
@@ -156,7 +156,7 @@ class TestWebStateMachine(TestHttpBase):
         self.assertEqual(self.engine.method, b"GET")
         self.assertEqual(self.engine.url, b"/index.html")
         self.assertEqual(self.engine.version, b"HTTP/2")
-        self.assertEqual(self.engine.state, None)
+        self.assertEqual(self.engine.state, self.engine._terminal_st)
         self.assertEqual(self.engine.status_code, 505)
 
     def test_header_parsing_valid(self):
@@ -219,7 +219,7 @@ class TestWebStateMachine(TestHttpBase):
         self.engine.state(self.rx)
 
         self.assertEqual(self.engine.status_code, 405)
-        self.assertEqual(self.engine.state, None)
+        self.assertEqual(self.engine.state, self.engine._terminal_st)
         self.assertIn(b"allow", self.engine.resp_headers)
         self.assertIn(b"POST", self.engine.resp_headers)
 
@@ -237,7 +237,7 @@ class TestWebStateMachine(TestHttpBase):
         self.engine.state(self.rx)
 
         self.assertEqual(self.engine.status_code, 204)
-        self.assertEqual(self.engine.state, None)
+        self.assertEqual(self.engine.state, self.engine._terminal_st)
         self.assertIn(b"allow", self.engine.resp_headers)
         self.assertIn(b"GET, POST, PUT", self.engine.resp_headers)
 
@@ -256,7 +256,6 @@ class TestWebStateMachine(TestHttpBase):
             self.engine.state(self.rx)
 
         self.assertEqual(self.engine.status_code, 200)
-        self.assertEqual(self.engine.state, None)
         self.assertEqual(
             int(self.engine._lookup(self.engine.resp_headers, b"content-length")),
             len(test_response),
@@ -278,7 +277,6 @@ class TestWebStateMachine(TestHttpBase):
             self.engine.state(self.rx)
 
         self.assertEqual(self.engine.status_code, 200)
-        self.assertEqual(self.engine.state, None)
         self.assertEqual(
             int(self.engine._lookup(self.engine.resp_headers, b"content-length")),
             len(test_response),
@@ -445,7 +443,7 @@ class TestWebStateMachine(TestHttpBase):
             )
 
         self.assertEqual(self.engine.status_code, 200)
-        self.assertEqual(self.engine.state, None)
+        self.assertEqual(self.engine.state, self.engine._terminal_st)
 
     def test_chunked_transfer_encoding_invalid_chunk_size_smaller(self):
         self.engine.url = b"/api/test"
@@ -502,7 +500,6 @@ class TestWebStateMachine(TestHttpBase):
             self.engine.state(self.rx)
 
         self.assertEqual(self.engine.status_code, 200)
-        self.assertEqual(self.engine.state, None)
         test_callback.assert_called_with(self.engine, payload)
 
     def test_payload_length_exceeds_content_length(self):
@@ -533,7 +530,6 @@ class TestWebStateMachine(TestHttpBase):
             self.engine.state(self.rx)
 
         self.assertEqual(self.engine.status_code, 200)
-        self.assertEqual(self.engine.state, None)
         test_callback.assert_called_with(self.engine, b"hello world")
         self.assertEqual(
             self.rx.peek(), b"!"
@@ -610,7 +606,7 @@ class TestFileServingStateMachine(TestHttpBase):
 
         self.assertEqual(self.engine.resp_handler.read(), file_content)
         self.assertEqual(self.engine.status_code, 200)
-        self.assertEqual(self.engine.state, None)
+        self.assertEqual(self.engine.state, self.engine._terminal_st)
 
     @patch_os_stat()
     def test_file_serving_subdir(self, *_):
@@ -626,7 +622,7 @@ class TestFileServingStateMachine(TestHttpBase):
 
         self.assertEqual(self.engine.resp_handler.read(), file_content)
         self.assertEqual(self.engine.status_code, 200)
-        self.assertEqual(self.engine.state, None)
+        self.assertEqual(self.engine.state, self.engine._terminal_st)
 
     @patch_os_stat()
     def test_file_serving_missing_file(self, *_):
@@ -638,7 +634,7 @@ class TestFileServingStateMachine(TestHttpBase):
         self.engine.state(self.rx)
 
         self.assertEqual(self.engine.status_code, 404)
-        self.assertEqual(self.engine.state, None)
+        self.assertEqual(self.engine.state, self.engine._terminal_st)
 
     @patch_os_stat()
     def test_file_serving_known_content_type(self, *_):
@@ -658,7 +654,7 @@ class TestFileServingStateMachine(TestHttpBase):
             b"application/javascript",
         )
         self.assertEqual(self.engine.status_code, 200)
-        self.assertEqual(self.engine.state, None)
+        self.assertEqual(self.engine.state, self.engine._terminal_st)
 
     @patch_os_stat()
     def test_file_serving_fallback_content_type(self, *_):
@@ -678,7 +674,7 @@ class TestFileServingStateMachine(TestHttpBase):
             b"application/octet-stream",
         )
         self.assertEqual(self.engine.status_code, 200)
-        self.assertEqual(self.engine.state, None)
+        self.assertEqual(self.engine.state, self.engine._terminal_st)
 
 
 if __name__ == "__main__":
