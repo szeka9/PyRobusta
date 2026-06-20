@@ -503,7 +503,7 @@ class HttpEngine:
         :param body: body to be sent in the response
         :param content_type: content-type of the body
         """
-        self.resp_handler = None
+        self._unset_response_handler()
 
         if not body:
             body_encoded = b""
@@ -515,12 +515,16 @@ class HttpEngine:
             body_encoded = dumps(body).encode()
         else:
             raise ValueError("Unhandled body type")
+
         self.set_response_header(
             b"content-length", str(len(body_encoded)).encode("ascii")
         )
-        self.set_response_header(b"content-type", content_type.encode("ascii"))
-        if self.method != self.HEAD:
-            self.resp_handler = BytesIO(body_encoded)
+
+        if len(body_encoded):
+            self.set_response_header(b"content-type", content_type.encode("ascii"))
+
+            if self.method != self.HEAD:
+                self.resp_handler = BytesIO(body_encoded)
 
     def _unset_response_handler(self):
         """
