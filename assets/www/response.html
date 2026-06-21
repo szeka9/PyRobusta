@@ -268,7 +268,7 @@ def multipart_response(num_responses, part_size):
 
 
 @HttpEngine.route("/multipart", "GET")
-def multipart_callback(http_ctx, _):
+def multipart_handler(http_ctx, _):
     http_ctx.set_response_header(b"transfer-encoding", b"chunked")
     part_count = int(http_ctx.headers.get("x-part-count", 1))
     part_size = int(http_ctx.headers.get("x-part-size", 1024))

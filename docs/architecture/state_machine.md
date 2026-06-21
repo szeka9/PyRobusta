@@ -36,7 +36,7 @@ stateDiagram-v2
 ```mermaid
 stateDiagram-v2
 
-    route_request_st --> app_endpoint_st: endpoint + no payload
+    route_request_st --> handle_route_st: route + no payload
 
     route_request_st --> recv_payload_st: content-length body
     route_request_st --> recv_chunk_size_st: chunked encoding
@@ -48,13 +48,13 @@ stateDiagram-v2
     route_request_st --> [*]: 405 method not allowed
     route_request_st --> [*]: 204 OPTIONS
 
-    recv_payload_st --> app_endpoint_st: full body received
+    recv_payload_st --> handle_route_st: full body received
     recv_payload_st --> recv_payload_st: waiting for content-length
 
     recv_chunk_size_st --> recv_chunk_st: size parsed
     recv_chunk_size_st --> recv_chunk_size_st: waiting for chunk size
 
-    recv_chunk_st --> app_endpoint_st: chunk complete
+    recv_chunk_st --> handle_route_st: chunk complete
     recv_chunk_st --> recv_chunk_st: waiting for full chunk
 ```
 
@@ -62,13 +62,13 @@ stateDiagram-v2
 ```mermaid
 stateDiagram-v2
 
-    app_endpoint_st --> app_endpoint_st: execute callback / process request
+    handle_route_st --> handle_route_st: execute handler / process request
 
-    app_endpoint_st --> recv_chunk_size_st: more chunked data expected
+    handle_route_st --> recv_chunk_size_st: more chunked data expected
 
-    app_endpoint_st --> generate_multipart_response_st: multipart response
+    handle_route_st --> generate_multipart_response_st: multipart response
 
-    app_endpoint_st --> [*]: 200 OK (default completion)
+    handle_route_st --> [*]: 200 OK (default completion)
 
     fs_retrieve_st --> [*]: 200 file served
     fs_retrieve_st --> [*]: 403 forbidden

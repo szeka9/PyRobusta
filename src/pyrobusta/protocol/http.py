@@ -41,12 +41,12 @@ class HttpEngine:
     - each instance represents a connection, allowing a request to be parsed
       through a state machine
     - provides an adapter/routing layer for applications
-      through registered endpoints (see also: register(), route())
+      through registered routes (see also: register(), route())
     - supports percent encoded URLs and query parameters (x-www-form-urlencoded)
     - allows applications to set response attributes (headers, status code)
 
     Feature flags (configured in pyrobusta.env)
-    - http_files_api: serve files at the /files endpoint, with support for uploads,
+    - http_files_api: serve files at the /files API, with support for uploads,
       removal and directory listing
     - http_multipart: support for multipart requests/responses
     """
@@ -73,7 +73,7 @@ class HttpEngine:
         "mp_last_delimiter",
     )
 
-    ENDPOINTS = []  # (endpoint, callback, method)
+    ROUTES = []  # (route, handler, HTTP method)
     RESP_HEADERS = (
         200,
         b"200 OK",
@@ -191,46 +191,46 @@ class HttpEngine:
     # =========================================
 
     @classmethod
-    def register(cls, endpoint: str, callback: callable, method: str = "GET") -> None:
+    def register(cls, route: str, handler: callable, method: str = "GET") -> None:
         """
-        Register an endpoint with a callback function.
-        :param endpoint: URL path to be routed e.g. "/app/resource"
-        :param callback: callback function
+        Register a route handler.
+        :param route: URL path to be routed e.g. "/app/resource"
+        :param handler: function callback
         :param method: HTTP method name
         """
-        endpoint = endpoint.encode("ascii")
+        route = route.encode("ascii")
         method = method.encode("ascii")
-        endpoint_exists = cls._get_callback(endpoint, method) is not None
+        route_exists = cls._get_handler(route, method) is not None
 
         if method not in cls.METHODS:
             raise ValueError(f"method must be one of {cls.METHODS}")
-        if endpoint_exists:
-            raise ValueError("endpoint exists")
-        cls.ENDPOINTS.append((endpoint, callback, method))
+        if route_exists:
+            raise ValueError("route exists")
+        cls.ROUTES.append((route, handler, method))
 
     @classmethod
-    def deregister(cls, endpoint: str, method: str) -> None:
+    def deregister(cls, route: str, method: str) -> None:
         """
-        Deregister an endpoint.
-        :param endpoint: URL path to be routed e.g. "/app/resource"
+        Deregister a route handler.
+        :param route: URL path to be routed e.g. "/app/resource"
         :param method: HTTP method name
         """
-        endpoint = endpoint.encode("ascii")
+        route = route.encode("ascii")
         method = method.encode("ascii")
 
-        if callback := cls._get_callback(endpoint, method):
-            cls.ENDPOINTS.remove((endpoint, callback, method))
+        if handler := cls._get_handler(route, method):
+            cls.ROUTES.remove((route, handler, method))
 
     @staticmethod
-    def route(endpoint: str, method: str):
+    def route(route: str, method: str):
         """
-        Decorator for registering endpoint callback functions.
-        :param endpoint: URL path to be routed e.g. "/app/resource"
+        Decorator for registering route handlers.
+        :param route: URL path to be routed e.g. "/app/resource"
         :param method: HTTP method name
         """
 
         def decorator(func):
-            HttpEngine.register(endpoint, func, method)
+            HttpEngine.register(route, func, method)
             return func
 
         return decorator
@@ -334,23 +334,23 @@ class HttpEngine:
         return tuple_[idx + 1]
 
     @classmethod
-    def _get_callback(cls, endpoint, method: bytes):
-        for e in cls.ENDPOINTS:
-            if cls._is_matching_url_path(endpoint, e[0]) and method == e[2]:
+    def _get_handler(cls, route, method: bytes):
+        for e in cls.ROUTES:
+            if cls._is_matching_url_path(route, e[0]) and method == e[2]:
                 return e[1]
 
     @classmethod
-    def _has_endpoint(cls, endpoint: bytes):
-        for e in cls.ENDPOINTS:
-            if cls._is_matching_url_path(endpoint, e[0]):
+    def _has_route(cls, route: bytes):
+        for e in cls.ROUTES:
+            if cls._is_matching_url_path(route, e[0]):
                 return True
         return False
 
     @classmethod
-    def _supported_methods(cls, endpoint: bytes):
+    def _supported_methods(cls, route: bytes):
         supported_methods = []
         for method in cls.METHODS:
-            if cls._get_callback(endpoint, method) is not None:
+            if cls._get_handler(route, method) is not None:
                 supported_methods.append(method)
         return supported_methods
 
@@ -550,7 +550,7 @@ class HttpEngine:
             self.version == b"HTTP/1.1" and "close" not in connection_tokens
         )
 
-    def _handle_route_response(self, callback_response: tuple | None):
+    def _handle_route_response(self, handler_response: tuple | None):
         """
         Terminate the state machine based on the return value of a
         user-defined route handler. If the handler does not explicitly
@@ -559,10 +559,10 @@ class HttpEngine:
         """
         self.terminate(self.status_code or 200)
 
-        if callback_response is None:
+        if handler_response is None:
             return
 
-        dtype, data = callback_response
+        dtype, data = handler_response
         if dtype.startswith("multipart/") and callable(data):
             self.set_response_header(b"transfer-encoding", b"chunked")
             self.generate_multipart_response(data, dtype)
@@ -737,15 +737,15 @@ class HttpEngine:
 
     def _route_request_st(self, _):
         """
-        Route requests based on registered endpoints.
-        If no endpoint is registered, fall back to file serving.
+        Route requests based on registered route handlers.
+        If no route is registered, fall back to file serving.
         """
-        if self._has_endpoint(self.url) and (
-            self._get_callback(self.url, self.method) is not None
+        if self._has_route(self.url) and (
+            self._get_handler(self.url, self.method) is not None
             or self.method == self.OPTIONS
             or (
                 self.method == self.HEAD
-                and self._get_callback(self.url, self.GET) is not None
+                and self._get_handler(self.url, self.GET) is not None
             )
         ):
             if self.method == self.OPTIONS:
@@ -770,13 +770,13 @@ class HttpEngine:
                 else:
                     self.state = self._recv_payload_st
             else:
-                self.state = self._app_endpoint_st
+                self.state = self._handle_route_st
             return
 
-        # Request does not have a registered endpoint
+        # Request does not have a registered route
         if (
-            self._has_endpoint(self.url)
-            and self._get_callback(self.method, self.url) is None
+            self._has_route(self.url)
+            and self._get_handler(self.method, self.url) is None
         ):
             supported_methods = self._supported_methods(self.url)
             self.set_response_header(b"allow", b", ".join(supported_methods))
@@ -809,7 +809,7 @@ class HttpEngine:
         if self.recv_chunk_size + 2 <= rx.size():
             if rx.peek(self.recv_chunk_size + 2)[-2:] != b"\r\n":
                 raise InvalidContentLength()
-            self.state = self._app_endpoint_st
+            self.state = self._handle_route_st
 
     def _recv_payload_st(self, rx):
         """
@@ -817,20 +817,20 @@ class HttpEngine:
         """
         if self.headers["content-length"] > rx.size():
             return
-        self.state = self._app_endpoint_st
+        self.state = self._handle_route_st
 
-    def _app_endpoint_st(self, rx):
+    def _handle_route_st(self, rx):
         """
-        Process a request by registered callback functions.
-        HEAD requests are temporarily mapped to GET for routing and callback execution,
+        Process a request by a registered route handler.
+        HEAD requests are temporarily mapped to GET for routing and handler execution,
         but the response body is not sent back.
         """
         method = self.GET if self.method == self.HEAD else self.method
-        callback = self._get_callback(self.url, method)
+        handler = self._get_handler(self.url, method)
         if self.has_payload():
             if self.is_chunked():
                 if self.recv_chunk_size:
-                    callback_response = callback(
+                    handler_response = handler(
                         self, bytes(rx.peek(self.recv_chunk_size))
                     )
                     self._consume_payload(rx, self.recv_chunk_size + 2)
@@ -838,19 +838,19 @@ class HttpEngine:
                         self.state = self._recv_chunk_size_st
                         return
                 else:
-                    # Last chunk, callback with empty body to signal end of request body
-                    callback_response = callback(self, b"")
+                    # Last chunk, pass empty body to signal end of request body
+                    handler_response = handler(self, b"")
                     self._consume_payload(rx, self.recv_chunk_size + 2, last=True)
             else:
-                callback_response = callback(
+                handler_response = handler(
                     self, bytes(rx.peek(self.headers["content-length"]))
                 )
                 self._consume_payload(rx, self.headers["content-length"], last=True)
         else:
-            callback_response = callback(self, b"")
+            handler_response = handler(self, b"")
             self._is_req_complete = True
 
-        self._handle_route_response(callback_response)
+        self._handle_route_response(handler_response)
 
     def _fs_retrieve_st(self, _):
         """

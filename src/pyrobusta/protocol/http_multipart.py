@@ -23,7 +23,7 @@ def generate_multipart_response(self, callback: callable, dtype: str):
     :param dtype: exact multipart content-type (multipart/*)
     """
     if not callable(callback):
-        raise ValueError("Invalid response handler")
+        raise ValueError("Invalid function callback")
 
     boundary = self.MULTIPART_BOUNDARY
     self.set_response_header(
@@ -37,7 +37,7 @@ def generate_multipart_response(self, callback: callable, dtype: str):
 def _multipart_wrapper_factory(callback: callable, boundary: bytes):
     """
     Factory method for creating closures that write multipart responses.
-    The callback function is called without arguments, and it must return bytes-like objects.
+    The function callback is called without arguments, and it must return bytes-like objects.
     :param callback: function for part generation, each call generates a separate part
     :param boundary: boundary value
     :return closure: closure to invoke for response generation
@@ -46,7 +46,7 @@ def _multipart_wrapper_factory(callback: callable, boundary: bytes):
 
     def _multipart_wrapper(tx):
         """
-        Write multipart data generated from a callback's return value.
+        Write multipart data generated from a callback function's return value.
         - if insufficient buffer space is available, the generator yields control so
         the caller can flush or drain the buffer
         :return bool: true if the stream is completed
@@ -119,7 +119,7 @@ def _parse_boundary_st(self, rx):
 def _parse_complete_part_st(self, rx):
     """
     State for processing complete parts in a multipart request.
-    - registered callback is required to process parts
+    - registered route handler is required to process parts
     """
     next_delimiter = rx.find(b"\r\n--" + self.mp_boundary)
     part = rx.peek(next_delimiter)
@@ -130,11 +130,11 @@ def _parse_complete_part_st(self, rx):
     )
 
     part_headers, part_body = http.HttpEngine._parse_body_part(part)
-    callback = http.HttpEngine._get_callback(self.url, self.method)
+    handler = http.HttpEngine._get_handler(self.url, self.method)
 
     # Process complete part
     if not is_final:
-        callback_response = callback(self, (part_headers, part_body))
+        handler_response = handler(self, (part_headers, part_body))
         if rx.peek(len(self.mp_delimiter)) != self.mp_delimiter:
             raise http.MalformedRequest()
         self._consume_payload(rx, len(self.mp_delimiter))
@@ -142,8 +142,8 @@ def _parse_complete_part_st(self, rx):
         if not self.state == self._terminal_st:
             # Proceed to next part if there is no early termination
             self.state = self._parse_boundary_st
-        elif callback_response:
-            self._handle_route_response(callback_response)
+        elif handler_response:
+            self._handle_route_response(handler_response)
         return
 
     # Process last part
@@ -159,9 +159,9 @@ def _parse_complete_part_st(self, rx):
         self._consume_payload(rx, 0, last=True)
 
     self.mp_is_last = True
-    callback_response = callback(self, (part_headers, part_body))
+    handler_response = handler(self, (part_headers, part_body))
 
-    self._handle_route_response(callback_response)
+    self._handle_route_response(handler_response)
 
 
 def apply_patches():

@@ -97,7 +97,7 @@ def delete_path(path):
 
 
 @HttpEngine.route("/test/simple", "GET")
-def simple_callback(http_ctx, _):
+def simple_handler(http_ctx, _):
     if http_ctx.headers["accept"] == "text/plain":
         return "text/plain", "Test response\n"
     elif http_ctx.headers["accept"] == "application/json":
@@ -106,16 +106,16 @@ def simple_callback(http_ctx, _):
 
 
 @HttpEngine.route("/test/busy", "POST")
-def busy_callback(http_ctx, _):
+def busy_handler(http_ctx, _):
     http_ctx.terminate(503)
     return "text/plain", "Unavailable"
 
 
-def create_chunked_app_endpoint(endpoint):
+def create_chunked_route_handler(route):
     recv_chunks = []
 
-    @HttpEngine.route(endpoint, "POST")
-    def chunked_callback(http_ctx, chunk):
+    @HttpEngine.route(route, "POST")
+    def chunked_handler(http_ctx, chunk):
         if not chunk:  # Received terminating chunk
             return "application/json", recv_chunks
         recv_chunks.append(chunk.decode("utf8"))
@@ -205,7 +205,7 @@ async def test_server_busy():
 @garbage_collect
 async def test_chunked_transfer_encoding():
     setup_config()
-    create_chunked_app_endpoint("/test/chunked")
+    create_chunked_route_handler("/test/chunked")
     server, server_task = await start_server()
 
     try:
@@ -390,15 +390,15 @@ def setup_config(tls_enabled=False, served_paths="", files_api_enabled=False):
 
 def test_registration():
     test_assert(
-        "simple endpoint registration",
-        simple_callback,
-        HttpEngine._get_callback(b"/test/simple", b"GET"),
+        "simple route registration",
+        simple_handler,
+        HttpEngine._get_handler(b"/test/simple", b"GET"),
     )
 
     test_assert(
-        "busy endpoint registration",
-        busy_callback,
-        HttpEngine._get_callback(b"/test/busy", b"POST"),
+        "busy route registration",
+        busy_handler,
+        HttpEngine._get_handler(b"/test/busy", b"POST"),
     )
 
 
