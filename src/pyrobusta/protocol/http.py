@@ -925,6 +925,9 @@ class HttpEngine:
         ):
             self.set_response_header(b"content-length", b"0")
 
+        if not self.get_response_header(b"cache-control"):
+            self.set_response_header(b"cache-control", b"no-store")
+
         self.state = None
 
 
