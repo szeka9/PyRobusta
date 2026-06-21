@@ -44,7 +44,7 @@ class TestFileServerRetrieve(TestHttpBase):
         self.engine.state(self.rx)
 
         self.assertEqual(self.engine.status_code, 404)
-        self.assertEqual(self.engine.state, None)
+        self.assertEqual(self.engine.state, self.engine._terminal_st)
 
     @patch_os_stat()
     def test_file_serving_files_endpoint(self, *_):
@@ -60,7 +60,7 @@ class TestFileServerRetrieve(TestHttpBase):
 
         self.assertEqual(self.engine.resp_handler.read(), file_content)
         self.assertEqual(self.engine.status_code, 200)
-        self.assertEqual(self.engine.state, None)
+        self.assertEqual(self.engine.state, self.engine._terminal_st)
 
     @patch_os_stat()
     def test_file_serving_known_content_type(self, *_):
@@ -80,7 +80,7 @@ class TestFileServerRetrieve(TestHttpBase):
             b"application/javascript",
         )
         self.assertEqual(self.engine.status_code, 200)
-        self.assertEqual(self.engine.state, None)
+        self.assertEqual(self.engine.state, self.engine._terminal_st)
 
     @patch_os_stat()
     def test_file_serving_fallback_content_type(self, *_):
@@ -100,7 +100,7 @@ class TestFileServerRetrieve(TestHttpBase):
             b"application/octet-stream",
         )
         self.assertEqual(self.engine.status_code, 200)
-        self.assertEqual(self.engine.state, None)
+        self.assertEqual(self.engine.state, self.engine._terminal_st)
 
     @patch_os_stat()
     def test_file_serving_unserved_content_rejected(self, *_):
@@ -116,7 +116,7 @@ class TestFileServerRetrieve(TestHttpBase):
 
         self.assertNotEqual(self.engine.resp_handler.read(), file_content)
         self.assertEqual(self.engine.status_code, 403)
-        self.assertEqual(self.engine.state, None)
+        self.assertEqual(self.engine.state, self.engine._terminal_st)
 
     @patch_os_stat(stat_is_file=False)
     def test_file_serving_directory_path(self):
@@ -133,7 +133,7 @@ class TestFileServerRetrieve(TestHttpBase):
             b"application/json",
         )
         self.assertEqual(self.engine.status_code, 200)
-        self.assertEqual(self.engine.state, None)
+        self.assertEqual(self.engine.state, self.engine._terminal_st)
 
     @patch_os_stat()
     def test_file_serving_directory_traversal(self):
@@ -179,7 +179,7 @@ class TestFileServerDelete(TestHttpBase):
         self.engine.state(self.rx)
 
         self.assertEqual(self.engine.status_code, 404)
-        self.assertEqual(self.engine.state, None)
+        self.assertEqual(self.engine.state, self.engine._terminal_st)
 
     @patch_os_stat()
     def test_file_serving_non_user_data_rejected(self, *_):
@@ -191,7 +191,7 @@ class TestFileServerDelete(TestHttpBase):
         self.engine.state(self.rx)
 
         self.assertEqual(self.engine.status_code, 403)
-        self.assertEqual(self.engine.state, None)
+        self.assertEqual(self.engine.state, self.engine._terminal_st)
 
     @patch_os_stat()
     def test_file_serving_user_data_deleted(self, *_):
@@ -205,7 +205,7 @@ class TestFileServerDelete(TestHttpBase):
             m.assert_called_once_with("/www/user_data/user_content.json")
 
         self.assertEqual(self.engine.status_code, 204)
-        self.assertEqual(self.engine.state, None)
+        self.assertEqual(self.engine.state, self.engine._terminal_st)
 
     @patch_os_stat(stat_is_file=True)
     def test_file_serving_user_directory_deleted(self, *_):
@@ -219,7 +219,7 @@ class TestFileServerDelete(TestHttpBase):
             m.assert_called_once_with("/www/user_data/user_dir")
 
         self.assertEqual(self.engine.status_code, 204)
-        self.assertEqual(self.engine.state, None)
+        self.assertEqual(self.engine.state, self.engine._terminal_st)
 
 
 class TestFileServerUpload(TestHttpBase):

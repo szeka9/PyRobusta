@@ -57,7 +57,6 @@ class HttpEngine:
         "status_code",
         "resp_headers",
         "resp_handler",
-        "aborted",
         "version",
         "headers",
         "method",
@@ -66,6 +65,7 @@ class HttpEngine:
         "content_len_cnt",
         "recv_chunk_size",
         "is_req_empty",
+        "_is_req_complete",
         "mp_boundary",
         "mp_is_first",
         "mp_is_last",
@@ -151,7 +151,6 @@ class HttpEngine:
         self.status_code = None
         self.resp_headers = []
         self.resp_handler = None
-        self.aborted = False
 
         # [Recived request]
         self.version = None
@@ -162,6 +161,7 @@ class HttpEngine:
         self.content_len_cnt = 0
         self.recv_chunk_size = 0
         self.is_req_empty = True
+        self._is_req_complete = False
 
         # [Multipart state]
         self.mp_boundary = None
@@ -175,7 +175,6 @@ class HttpEngine:
         self.status_code = None
         self.resp_headers.clear()
         self.resp_handler = None
-        self.aborted = False
         self.version = None
         self.headers.clear()
         self.method = None
@@ -184,6 +183,7 @@ class HttpEngine:
         self.content_len_cnt = 0
         self.recv_chunk_size = 0
         self.is_req_empty = True
+        self._is_req_complete = False
         self.mp_boundary = None
 
     # =========================================
@@ -254,6 +254,16 @@ class HttpEngine:
                 out.append(s[i])
                 i += 1
         return "".join(out)
+
+    def path_segment(self, idx: int):
+        """
+        Return the nth path segment of the URL path.
+        The index is shifted by one to ignore the first
+        empty segment before the leading slash ('/').
+        :param idx: index of the segment
+        :return: string path segment
+        """
+        return self.url.split(b"/")[idx + 1].decode("ascii")
 
     def get_query_param(self, key: str, default: str = None) -> str:
         """
@@ -493,8 +503,10 @@ class HttpEngine:
         :param body: body to be sent in the response
         :param content_type: content-type of the body
         """
-        if body is None:
-            return
+        self._unset_response_handler()
+
+        if not body:
+            body_encoded = b""
         if isinstance(body, (bytes, bytearray, memoryview)):
             body_encoded = body
         elif isinstance(body, str):
@@ -503,19 +515,31 @@ class HttpEngine:
             body_encoded = dumps(body).encode()
         else:
             raise ValueError("Unhandled body type")
+
         self.set_response_header(
             b"content-length", str(len(body_encoded)).encode("ascii")
         )
-        self.set_response_header(b"content-type", content_type.encode("ascii"))
-        if self.method != self.HEAD:
-            self.resp_handler = BytesIO(body_encoded)
+
+        if len(body_encoded):
+            self.set_response_header(b"content-type", content_type.encode("ascii"))
+
+            if self.method != self.HEAD:
+                self.resp_handler = BytesIO(body_encoded)
+
+    def _unset_response_handler(self):
+        """
+        Unset the response handler (if set).
+        """
+        if type(self.resp_handler).__name__ in ("FileIO", "BytesIO"):
+            self.resp_handler.close()
+            self.resp_handler = None
 
     def do_keep_alive(self):
         """
         Determine if the connection should be kept alive
         depending on the HTTP version and headers sent in the request.
         """
-        if self.aborted:
+        if self.is_terminated() and not self._is_req_complete:
             return False
 
         connection_tokens = [
@@ -533,8 +557,7 @@ class HttpEngine:
         set a status code, default to HTTP 200. If the handler returns
         a response body and content type, set them accordingly.
         """
-        if not self.is_terminated():
-            self.terminate(200, True)
+        self.terminate(self.status_code or 200)
 
         if callback_response is None:
             return
@@ -547,23 +570,15 @@ class HttpEngine:
 
         self.set_response_body(data, content_type=dtype)
 
-    def terminate(self, status_code: int, request_complete: bool = False):
+    def terminate(self, status_code: int):
         """
         Regular state machine termination with a specific status code.
         :param status_code: HTTP status code
-        :param request_complete: true if the complete request is processed
         """
-        self.state = None
+        self.state = self._terminal_st
+        if not isinstance(status_code, int) or status_code not in self.RESP_HEADERS:
+            raise ValueError("Invalid status")
         self.status_code = status_code
-
-        if self.version == b"HTTP/1.0" and self.do_keep_alive() and request_complete:
-            self.set_response_header(b"connection", b"keep-alive")
-        elif (
-            self.version == b"HTTP/1.1"
-            and not self.do_keep_alive()
-            and not request_complete
-        ):
-            self.set_response_header(b"connection", b"close")
 
     def abort(self, status_code: int):
         """
@@ -571,12 +586,9 @@ class HttpEngine:
         Reset any header or response body set earlier.
         :param status_code: HTTP status code
         """
-        self.aborted = True
         self.resp_headers = []
-        if type(self.resp_handler).__name__ in ("FileIO", "BytesIO"):
-            self.resp_handler.close()
-            self.resp_handler = None
-        self.terminate(status_code, False)
+        self._unset_response_handler()
+        self.terminate(status_code)
 
     def is_request_empty(self):
         """
@@ -588,7 +600,7 @@ class HttpEngine:
         """
         Returns true if the state machine is terminated.
         """
-        return self.state is None and self.status_code
+        return self.state is None
 
     def run(self, rx):
         """
@@ -651,6 +663,7 @@ class HttpEngine:
         of content length when the last flag is set. When the request is chunked,
         the content length should not be set, otherwise it is ignored.
         """
+        assert not self._is_req_complete
         if (
             not self.is_chunked()
             and "content-length" in self.headers
@@ -665,6 +678,7 @@ class HttpEngine:
             raise InvalidContentLength()
         self.content_len_cnt += size
         rx.consume(size)
+        self._is_req_complete = last
 
     # ================================================================================
     # Parser states
@@ -737,7 +751,7 @@ class HttpEngine:
             if self.method == self.OPTIONS:
                 supported_methods = self._supported_methods(self.url)
                 self.set_response_header(b"allow", b", ".join(supported_methods))
-                self.terminate(204, True)
+                self.terminate(204)
                 return
             if self.has_payload():
                 if self.method in (self.GET, self.HEAD):
@@ -820,7 +834,7 @@ class HttpEngine:
                         self, bytes(rx.peek(self.recv_chunk_size))
                     )
                     self._consume_payload(rx, self.recv_chunk_size + 2)
-                    if not self.is_terminated():
+                    if not self.state == self._terminal_st:  # pylint: disable=W0143
                         self.state = self._recv_chunk_size_st
                         return
                 else:
@@ -834,6 +848,7 @@ class HttpEngine:
                 self._consume_payload(rx, self.headers["content-length"], last=True)
         else:
             callback_response = callback(self, b"")
+            self._is_req_complete = True
 
         self._handle_route_response(callback_response)
 
@@ -855,7 +870,7 @@ class HttpEngine:
         try:
             if not is_path_served:
                 stat(norm_path)
-                self.terminate(403, True)
+                self.terminate(403)
                 return
 
             try:
@@ -870,12 +885,12 @@ class HttpEngine:
                 b"content-length", str(stat(norm_path)[6]).encode("ascii")
             )
             self.set_response_header(b"content-type", content_type)
-            self.terminate(200, True)
+            self.terminate(200)
             if self.method != self.HEAD:
                 self.resp_handler = open(norm_path, "rb")  # pylint: disable=R1732
             return
         except OSError:
-            self.terminate(404, True)
+            self.terminate(404)
 
     def _start_multipart_parser_st(self, rx):  # pylint: disable=W0613
         """
@@ -888,6 +903,29 @@ class HttpEngine:
         Generate multipart response depening on the exact content type (placeholder).
         """
         self.abort(503)
+
+    def _terminal_st(self, rx):  # pylint: disable=W0613
+        """
+        Terminal state for finalizing request/response processing.
+        """
+        if (
+            self.version == b"HTTP/1.0"
+            and self.do_keep_alive()
+            and self._is_req_complete
+        ):
+            self.set_response_header(b"connection", b"keep-alive")
+        elif self.version == b"HTTP/1.1" and (
+            not self.do_keep_alive() or not self._is_req_complete
+        ):
+            self.set_response_header(b"connection", b"close")
+
+        if (
+            self.get_response_header(b"transfer-encoding") != b"chunked"
+            and self.get_response_header(b"content-length") is None
+        ):
+            self.set_response_header(b"content-length", b"0")
+
+        self.state = None
 
 
 def enable_optional_features():

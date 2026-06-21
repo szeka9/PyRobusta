@@ -43,14 +43,14 @@ def fs_retrieve(http_ctx, _):
     try:
         if not is_path_served:
             stat(norm_path)
-            http_ctx.terminate(403, True)
+            http_ctx.terminate(403)
             return "text/plain", "Forbidden"
 
         # Retrieve directory structure
         if stat(norm_path)[0] & 0x4000:
             http_ctx.set_response_header(b"content-type", b"application/json")
             http_ctx.set_response_header(b"transfer-encoding", b"chunked")
-            http_ctx.terminate(200, True)
+            http_ctx.terminate(200)
             http_ctx.resp_handler = _traverse_dir_factory(norm_path)
             return
 
@@ -67,11 +67,11 @@ def fs_retrieve(http_ctx, _):
             b"content-length", str(stat(norm_path)[6]).encode("ascii")
         )
         http_ctx.set_response_header(b"content-type", content_type)
-        http_ctx.terminate(200, True)
+        http_ctx.terminate(200)
         if http_ctx.method != http_ctx.HEAD:
             http_ctx.resp_handler = open(norm_path, "rb")  # pylint: disable=R1732
     except OSError:
-        http_ctx.terminate(404, True)
+        http_ctx.terminate(404)
         return "text/plain", "Not found"
 
 
@@ -87,24 +87,24 @@ def delete_file(http_ctx, _):
     try:
         if not fs_path.startswith(_UPLOAD_ROOT):
             stat(fs_path)
-            http_ctx.terminate(403, True)
+            http_ctx.terminate(403)
             return "text/plain", "Forbidden"
 
         # Delete directory structure
         if stat(fs_path)[0] & 0x4000:
             if listdir(fs_path):
-                http_ctx.terminate(400, True)
+                http_ctx.terminate(400)
                 return "text/plain", "Directory not empty"
             rmdir(fs_path)
-            http_ctx.terminate(204, True)
+            http_ctx.terminate(204)
             return "text/plain", "Deleted"
 
         # Delete file
         remove(fs_path)
-        http_ctx.terminate(204, True)
+        http_ctx.terminate(204)
         return "text/plain", "Deleted"
     except OSError:
-        http_ctx.terminate(404, True)
+        http_ctx.terminate(404)
         return "text/plain", "Not found"
 
 
@@ -120,7 +120,7 @@ def upload_file(http_ctx, payload: bytes):
         return "text/plain", "Bad request"
 
     if not normalize_path(target_path).startswith(_UPLOAD_ROOT):
-        http_ctx.terminate(403, True)
+        http_ctx.terminate(403)
         return "text/plain", "Forbidden"
 
     try:
@@ -142,10 +142,10 @@ def upload_file(http_ctx, payload: bytes):
             with open(normalize_path(target_path), "wb") as f:
                 f.write(payload)
 
-        http_ctx.terminate(201, True)
+        http_ctx.terminate(201)
         return "text/plain", "OK"
     except OSError:
-        http_ctx.terminate(404, True)
+        http_ctx.terminate(404)
         return "text/plain", "Not found"
 
 
@@ -191,7 +191,7 @@ def bulk_upload_file(http_ctx, payload: tuple):
             if file.endswith(suffix):
                 rename(_TMP_DIR + "/" + file, _UPLOAD_ROOT + "/" + file[: -len(suffix)])
 
-        http_ctx.terminate(201, True)
+        http_ctx.terminate(201)
         return "text/plain", "OK"
 
 

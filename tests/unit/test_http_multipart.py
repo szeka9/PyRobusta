@@ -150,7 +150,7 @@ class TestMultipartStateMachine(TestHttpBase):
 
         self.engine.state(self.rx)
 
-        self.assertEqual(self.engine.state, None)
+        self.assertEqual(self.engine.state, self.engine._terminal_st)
         self.assertEqual(self.engine.status_code, 200)
         test_callback.assert_called_once_with(
             self.engine,
