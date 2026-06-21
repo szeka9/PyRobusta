@@ -1,5 +1,5 @@
 """
-Module for extended file serving features, registered at the /files endpoint.
+Module for extended file serving features, registered at the /files route.
 """
 
 # pylint: disable=W0212,R0401
@@ -77,7 +77,7 @@ def fs_retrieve(http_ctx, _):
 
 def delete_file(http_ctx, _):
     """
-    Callback function for handling delete operations. The URL path
+    Route handler for delete operations. The URL path
     must point to the exact file or directory path under _UPLOAD_ROOT.
     Only empty directories can be deleted.
     """
@@ -110,7 +110,7 @@ def delete_file(http_ctx, _):
 
 def upload_file(http_ctx, payload: bytes):
     """
-    Callback function for handling single file uploads, supporting chunked transfer encoding.
+    Route handler for single file uploads, supporting chunked transfer encoding.
     Uploads are saved to _UPLOAD_ROOT, with the name determined by the URL path.
     """
     target_path = http_ctx.url.decode("ascii")[6:]
@@ -151,8 +151,8 @@ def upload_file(http_ctx, payload: bytes):
 
 def bulk_upload_file(http_ctx, payload: tuple):
     """
-    Callback function for handling bulk file uploads (Content-Type: multipart/form-data)
-    This callback is invoked on every part. Every file is saved to _UPLOAD_ROOT, with
+    Route handler for bulk file uploads (Content-Type: multipart/form-data)
+    This handler is invoked on every part. Every file is saved to _UPLOAD_ROOT, with
     the name determined by the content disposition header. When two parts specify the
     same file name, the content of the second part is appended to the first part.
     Split files to multiple parts for chunking large files to avoid HTTP 413 errors.

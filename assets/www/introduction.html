@@ -4,76 +4,38 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PyRobusta Home</title>
-    <style>
-        body {
-            font-family: serif;
-            margin: 40px;
-            background: white;
-            color: black;
-        }
-        h1 {
-            border-bottom: 1px solid #999;
-            padding-bottom: 10px;
-        }
-        hr {
-            margin: 20px 0;
-        }
-        a {
-            color: blue;
-            text-decoration: none;
-        }
-        a:hover {
-            text-decoration: underline;
-        }
-        textarea {
-            resize: none;
-            background-color: rgb(37, 37, 37);
-            color: white;
-            box-sizing: border-box;
-            width: 100%;
-            padding-left: 10px;
-        }
-        .footer {
-            font-size: 0.9em;
-            color: #555;
-            margin-top: 30px;
-        }
-    </style>
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
-    <h1>Getting Started</h1>
+    <h1 id="introduction">Introduction</h1>
 
     <a href="index.html">← Back</a>
 
-    <p>This page presents useful examples to configure your server.</p>
+    <p class="description">This page provides practical examples for using your server.</p>
 
     <hr>
 
-    <h2>Server configuration</h2>
-    <textarea readonly="true" rows="8">
-# /pyrobusta.env
+    <h2>Table of Contents</h2>
 
-socket_max_con=2                        # max number of socket connections, reduce it to lower memory usage
-http_multipart=False                    # turn on/off multipart parser, increases memory usage when turned on
-http_mem_cap=0.05                       # memory cap (% × 0.01) of usable heap for stream buffers
-http_served_paths="/www /lib/pyrobusta" # space delimited list of filesystem paths allowed to be served
-tls=False                               # key.der and cert.der needs to be installed at / when set to true
-    </textarea>
-    <p></p>
+    <a href="#introduction">Introduction</a><br>
+    ├── <a href="#demo">Demo Application</a><br>
+    └── <a href="#deployment">Deployment with mpremote</a><br>
 
     <hr>
 
-    <h2>Demo Application</h2>
-    <p>The below application demonstrates common use cases for handling headers, status codes, query parameters, and wilcard URLs.</p>
-    <ol>
-        <li><b>/version</b> returns the version of the application.
-            <br>Optionally, the server version is also included in the response if the 'detailed' query parameter is set to true.
-        </li>
-        <li><b>/app/version</b> or <b>/server/version</b> returns the designated version string, handled by a single endpoint definition with a wildcard URL.
-        </li>
-    </ol>
-    <textarea readonly="true" rows="62">
+    <h2 id="demo">Demo Application</h2>
+    <div class="description">
+        <p>The following application demonstrates common use cases for handling headers, status codes, query parameters, and wildcard routes.</p>
+        <ol>
+            <li><b>/version</b> returns the version of the application.
+                <br>The server version can optionally be included in the response by setting the detailed query parameter to true.
+            </li>
+            <li><b>/app/version</b> or <b>/server/version</b> returns the designated version string, handled by a single route handler with a wildcard URL.
+            </li>
+        </ol>
+    </div>
+    <textarea readonly="true">
 # /app.py
 
 import asyncio
@@ -90,15 +52,15 @@ def version(http_ctx, _):
     include_server_version = False
 
     if http_ctx.query:
-        is_detailed = http_ctx.get_url_encoded_query_param(
-            http_ctx.query, "detailed", default="false"
+        is_detailed = http_ctx.get_query_param(
+            "detailed", default="false"
         ).lower()
 
         if is_detailed not in ("true", "false"):
-            http_ctx.terminate(400, True)
+            http_ctx.terminate(400)
             return "text/plain", "Invalid query"
 
-        include_server_version = is_detailed.lower() == "true"
+        include_server_version = is_detailed == "true"
 
     if http_ctx.headers.get("accept") == "application/json":
         version_dict = {"app_version": APP_VERSION}
@@ -115,10 +77,10 @@ def version(http_ctx, _):
 @HttpEngine.route("/{app_or_server}/version", "GET")
 def version(http_ctx, _):
     include_server_version = False
-    resource = http_ctx.url.split(b"/")[1]
+    resource = http_ctx.path_segment(0)
 
     if resource not in (b"app", b"server"):
-        http_ctx.terminate(404, True)
+        http_ctx.terminate(404)
         return "text/plain", "Not found"
 
     version_string = APP_VERSION if resource == b"app" else PYROBUSTA_VERSION
@@ -136,7 +98,7 @@ async def main():
         await asyncio.sleep(1)
 
     </textarea>
-    <textarea readonly="true" rows="15">
+    <textarea readonly="true">
 # /boot.py
 
 # This file is executed on every boot (including wake-boot from deepsleep)
@@ -150,18 +112,20 @@ if connected and not machine.reset_cause() == machine.SOFT_RESET:
     if "app.py" in listdir():
         import app
 
-        app.main()
+        asyncio.run(app.main())
     </textarea>
 
-    <p>Soft reset the device and upload app.py and boot.py with mpremote.</p>
-    <textarea readonly="true" rows="4">
+    <h2 id="deployment">Deployment with mpremote</h2>
+
+    <p class="description">Perform a soft reset and upload app.py and boot.py using mpremote.</p>
+    <textarea readonly="true">
 $ mpremote a0 soft-reset
 $ mpremote a0 cp app.py :/app.py
 $ mpremote a0 cp boot.py :/boot.py
     </textarea>
 
-    <p>Hard reset the device to start the application and connect over REPL.</p>
-    <textarea readonly="true" rows="12">
+    <p class="description">Perform a hard reset to start the application and connect to the REPL.</p>
+    <textarea readonly="true">
 $ mpremote a0 reset repl
 Connected to MicroPython at /dev/ttyACM0
 ...
@@ -175,8 +139,8 @@ Connected to MicroPython at /dev/ttyACM0
 # Press Ctrl-x to exit
     </textarea>
 
-    <p>Use curl to test your application.</p>
-    <textarea readonly="true" rows="22">
+    <p class="description">Use curl to test the application.</p>
+    <textarea readonly="true">
 $ curl "http://192.168.1.101/version"
 app_version: v0.0.1
 

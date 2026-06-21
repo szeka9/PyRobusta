@@ -39,7 +39,7 @@ class TestFileServerRetrieve(TestHttpBase):
         self.engine.url = b"/files/www/nonexistent.js"
         self.engine.method = b"GET"
         self.engine.version = b"HTTP/1.1"
-        self.engine.state = self.engine._app_endpoint_st
+        self.engine.state = self.engine._handle_route_st
 
         self.engine.state(self.rx)
 
@@ -47,11 +47,11 @@ class TestFileServerRetrieve(TestHttpBase):
         self.assertEqual(self.engine.state, self.engine._terminal_st)
 
     @patch_os_stat()
-    def test_file_serving_files_endpoint(self, *_):
+    def test_file_serving_files_api(self, *_):
         self.engine.url = b"/files/www/scripts.js"
         self.engine.method = b"GET"
         self.engine.version = b"HTTP/1.1"
-        self.engine.state = self.engine._app_endpoint_st
+        self.engine.state = self.engine._handle_route_st
         file_content = "data"
 
         with patch("builtins.open", mock_open(read_data=file_content)) as m:
@@ -67,7 +67,7 @@ class TestFileServerRetrieve(TestHttpBase):
         self.engine.url = b"/files/www/scripts.js"
         self.engine.method = b"GET"
         self.engine.version = b"HTTP/1.1"
-        self.engine.state = self.engine._app_endpoint_st
+        self.engine.state = self.engine._handle_route_st
         file_content = "data"
 
         with patch("builtins.open", mock_open(read_data=file_content)) as m:
@@ -87,7 +87,7 @@ class TestFileServerRetrieve(TestHttpBase):
         self.engine.url = b"/files/www/scripts.unknown"
         self.engine.method = b"GET"
         self.engine.version = b"HTTP/1.1"
-        self.engine.state = self.engine._app_endpoint_st
+        self.engine.state = self.engine._handle_route_st
         file_content = "data"
 
         with patch("builtins.open", mock_open(read_data=file_content)) as m:
@@ -107,7 +107,7 @@ class TestFileServerRetrieve(TestHttpBase):
         self.engine.url = b"/files/unserved/script.js"
         self.engine.method = b"GET"
         self.engine.version = b"HTTP/1.1"
-        self.engine.state = self.engine._app_endpoint_st
+        self.engine.state = self.engine._handle_route_st
         file_content = "data"
 
         with patch("builtins.open", mock_open(read_data=file_content)) as m:
@@ -123,7 +123,7 @@ class TestFileServerRetrieve(TestHttpBase):
         self.engine.url = b"/files/www"
         self.engine.method = b"GET"
         self.engine.version = b"HTTP/1.1"
-        self.engine.state = self.engine._app_endpoint_st
+        self.engine.state = self.engine._handle_route_st
 
         self.engine.state(self.rx)
 
@@ -174,7 +174,7 @@ class TestFileServerDelete(TestHttpBase):
         self.engine.url = b"/files/www/user_data/nonexistent.js"
         self.engine.method = b"DELETE"
         self.engine.version = b"HTTP/1.1"
-        self.engine.state = self.engine._app_endpoint_st
+        self.engine.state = self.engine._handle_route_st
 
         self.engine.state(self.rx)
 
@@ -186,7 +186,7 @@ class TestFileServerDelete(TestHttpBase):
         self.engine.url = b"/files/www/index.html"
         self.engine.method = b"DELETE"
         self.engine.version = b"HTTP/1.1"
-        self.engine.state = self.engine._app_endpoint_st
+        self.engine.state = self.engine._handle_route_st
 
         self.engine.state(self.rx)
 
@@ -198,7 +198,7 @@ class TestFileServerDelete(TestHttpBase):
         self.engine.url = b"/files/www/user_data/user_content.json"
         self.engine.method = b"DELETE"
         self.engine.version = b"HTTP/1.1"
-        self.engine.state = self.engine._app_endpoint_st
+        self.engine.state = self.engine._handle_route_st
 
         with patch("pyrobusta.protocol.http_file_server.remove") as m:
             self.engine.state(self.rx)
@@ -212,7 +212,7 @@ class TestFileServerDelete(TestHttpBase):
         self.engine.url = b"/files/www/user_data/user_dir"
         self.engine.method = b"DELETE"
         self.engine.version = b"HTTP/1.1"
-        self.engine.state = self.engine._app_endpoint_st
+        self.engine.state = self.engine._handle_route_st
 
         with patch("pyrobusta.protocol.http_file_server.remove") as m:
             self.engine.state(self.rx)
@@ -247,7 +247,7 @@ class TestFileServerUpload(TestHttpBase):
         self.engine.headers["content-length"] = 28
         self.engine.headers["content-type"] = "application/octet-stream"
 
-        self.engine.state = self.engine._app_endpoint_st
+        self.engine.state = self.engine._handle_route_st
         body_part = b"File uploaded for testing.\r\n"
         self.rx.write(body_part)
 
@@ -267,7 +267,7 @@ class TestFileServerUpload(TestHttpBase):
         self.engine.headers["content-length"] = 28
         self.engine.headers["content-type"] = "application/octet-stream"
 
-        self.engine.state = self.engine._app_endpoint_st
+        self.engine.state = self.engine._handle_route_st
         body_part = b"File uploaded for testing.\r\n"
         self.rx.write(body_part)
 
@@ -284,7 +284,7 @@ class TestFileServerUpload(TestHttpBase):
         self.engine.headers["content-length"] = 28
         self.engine.headers["content-type"] = "application/octet-stream"
 
-        self.engine.state = self.engine._app_endpoint_st
+        self.engine.state = self.engine._handle_route_st
         body_part = b"File uploaded for testing.\r\n"
         self.rx.write(body_part)
 

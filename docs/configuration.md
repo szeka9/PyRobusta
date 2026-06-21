@@ -9,10 +9,10 @@ to upload it to the root directory of the target device.
 | wifi_password     | Password of the Wi-Fi network. When empty, Wi-Fi is not initalized by the built-in wifi.py module. | None |
 | http_port         | Port number for HTTP. | 80 |
 | https_port        | Port number for HTTPS. | 443 |
-| http_multipart    | Enable multipart HTTP requests/responses. | False |
-| http_mem_cap      | Max memory cap (% × 0.01) of usable heap for HTTP request/response stream buffers. | 0.1 |
-| http_served_paths | Space delimited list of filesystem paths allowed to be served through HTTP. | "/www /lib/pyrobusta" |
+| http_multipart    | Enables or disables multipart request and response processing. Enabling multipart support increases memory usage. | False |
+| http_mem_cap      | Fraction of available heap memory reserved for stream buffers; (0;1] | 0.1 |
+| http_served_paths | Space-separated list of filesystem paths that may be served over HTTP. | "/www /lib/pyrobusta" |
 | http_files_api    | Enables or disables the [file management API](./api.md#file-management-api) endpoint (/files), allowing to upload, download, and list files. | False |
-| socket_max_con    | Max number of socket connections of any enabled application server. | 2 |
-| tls               | Enables or disables TLS. When turned on, cert.der/key.der must be installed at the root. | False |
-| log_level         | Can be one of: warning, info, debug. | "info" |
+| socket_max_con    | Maximum number of simultaneous socket connections. | 2 |
+| tls               | Enables or disables TLS. When enabled, cert.der and key.der must be installed at the server root. | False |
+| log_level         | Logging level. Can be one of: warning, info, debug. | "info" |

@@ -6,7 +6,7 @@ TLS_VERIFY = False
 class DefaultUser(HttpUser):
     """
     Use the /index.html and /examples.html
-    endpoints to test static file serving.
+    routes to test static file serving.
     """
 
     wait_time = constant(0)
@@ -41,7 +41,7 @@ class DefaultUser(HttpUser):
     @task(1)
     def post_chunked(self):
         """
-        Use the /test/stream endpoint to test chunked request handling,
+        Use the /test/stream route to test chunked request handling,
         sending a chunked request with multiple chunks of specified size.
         """
         part_count = 10
@@ -78,7 +78,7 @@ class MultipartUser(HttpUser):
     @task(2)
     def get_multipart(self):
         """
-        Use the /test/multipart endpoint with the x-part-count and x-part-size
+        Use the /test/multipart route with the x-part-count and x-part-size
         headers to test multipart response handling.
         """
         part_count = 10
@@ -98,7 +98,7 @@ class MultipartUser(HttpUser):
     @task(1)
     def post_multipart(self):
         """
-        Use the /test/stream endpoint to test multipart request handling,
+        Use the /test/stream route to test multipart request handling,
         sending multipart requests with multiple parts of specified size.
         """
         part_count = 10
@@ -130,7 +130,7 @@ class MultipartUser(HttpUser):
 
 class FilesApiUser(HttpUser):
     """
-    Use the /files endpoint to test static
+    Use the /files API to test static
     file serving with directory listing.
     """
 

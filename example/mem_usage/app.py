@@ -15,7 +15,8 @@ def mem_usage(http_ctx, _):
     if http_ctx.query:
         value_format = http_ctx.get_query_param("format", "bytes")
         if value_format not in ("%", "bytes"):
-            raise ValueError("invalid format")
+            http_ctx.terminate(400)
+            return "text/plain", "Invalid query"
 
         selector = http_ctx.get_query_param("key", "")
         if selector == "free":
@@ -30,7 +31,9 @@ def mem_usage(http_ctx, _):
             return "text/plain", f"Total  [bytes]: {used + free}\n"
 
         if selector:
-            raise ValueError("invalid key")
+            http_ctx.terminate(400)
+            return "text/plain", "Invalid query"
+
 
     return "text/plain", (
         f"Currently used: {usage_percentage:.2f}%\n"

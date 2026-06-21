@@ -80,8 +80,8 @@ class TestMultipartStateMachine(TestHttpBase):
         self.engine.url = b"/api/test"
         self.engine.method = b"GET"
 
-        test_callback = mock.Mock()
-        self.engine.register("/api/test", test_callback)
+        test_handler = mock.Mock()
+        self.engine.register("/api/test", test_handler)
 
         self.engine.headers["content-length"] = 1000
         self.engine.mp_boundary = b"test-boundary"
@@ -107,7 +107,7 @@ class TestMultipartStateMachine(TestHttpBase):
         self.engine.state(self.rx)
 
         self.assertEqual(self.engine.state, self.engine._parse_boundary_st)
-        test_callback.assert_called_once_with(
+        test_handler.assert_called_once_with(
             self.engine,
             (
                 {
@@ -130,8 +130,8 @@ class TestMultipartStateMachine(TestHttpBase):
         self.engine.mp_delimiter = b"--test-boundary\r\n"
         self.engine.mp_last_delimiter = b"--test-boundary--"
 
-        test_callback = mock.Mock(return_value=("text/plain", "OK"))
-        self.engine.register("/api/test", test_callback)
+        test_handler = mock.Mock(return_value=("text/plain", "OK"))
+        self.engine.register("/api/test", test_handler)
 
         body_part = (
             b'Content-Disposition:form-data;name="file-chunk";filename="upload.txt"\r\n'
@@ -152,7 +152,7 @@ class TestMultipartStateMachine(TestHttpBase):
 
         self.assertEqual(self.engine.state, self.engine._terminal_st)
         self.assertEqual(self.engine.status_code, 200)
-        test_callback.assert_called_once_with(
+        test_handler.assert_called_once_with(
             self.engine,
             (
                 {
@@ -173,8 +173,8 @@ class TestMultipartStateMachine(TestHttpBase):
         self.engine.headers["content-length"] = 148
         self.engine.mp_boundary = b"test-boundary"
 
-        test_callback = mock.Mock(return_value=("text/plain", "OK"))
-        self.engine.register("/api/test", test_callback)
+        test_handler = mock.Mock(return_value=("text/plain", "OK"))
+        self.engine.register("/api/test", test_handler)
 
         body_part = (
             b"--test-boundary\r\n"
@@ -192,7 +192,7 @@ class TestMultipartStateMachine(TestHttpBase):
             self.engine.state(self.rx)
 
         self.assertEqual(self.engine.status_code, 200)
-        test_callback.assert_called_once_with(
+        test_handler.assert_called_once_with(
             self.engine,
             (
                 {
@@ -215,8 +215,8 @@ class TestMultipartStateMachine(TestHttpBase):
         self.engine.headers["content-length"] = 148 - 1
         self.engine.mp_boundary = b"test-boundary"
 
-        test_callback = mock.Mock(return_value=("text/plain", "OK"))
-        self.engine.register("/api/test", test_callback)
+        test_handler = mock.Mock(return_value=("text/plain", "OK"))
+        self.engine.register("/api/test", test_handler)
 
         body_part = (
             b"--test-boundary\r\n"
@@ -246,8 +246,8 @@ class TestMultipartStateMachine(TestHttpBase):
         self.engine.headers["content-length"] = 148 + 1
         self.engine.mp_boundary = b"test-boundary"
 
-        test_callback = mock.Mock(return_value=("text/plain", "OK"))
-        self.engine.register("/api/test", test_callback)
+        test_handler = mock.Mock(return_value=("text/plain", "OK"))
+        self.engine.register("/api/test", test_handler)
 
         body_part = (
             b"--test-boundary\r\n"
@@ -278,8 +278,8 @@ class TestMultipartStateMachine(TestHttpBase):
         self.engine.headers["content-length"] = 148 + 13
         self.engine.mp_boundary = b"test-boundary"
 
-        test_callback = mock.Mock(return_value=("text/plain", "OK"))
-        self.engine.register("/api/test", test_callback)
+        test_handler = mock.Mock(return_value=("text/plain", "OK"))
+        self.engine.register("/api/test", test_handler)
 
         body_part = (
             b"--test-boundary\r\n"
@@ -305,8 +305,8 @@ class TestMultipartStateMachine(TestHttpBase):
         self.engine.headers["content-length"] = 150
         self.engine.mp_boundary = b"test-boundary"
 
-        test_callback = mock.Mock(return_value=("text/plain", "OK"))
-        self.engine.register("/api/test", test_callback)
+        test_handler = mock.Mock(return_value=("text/plain", "OK"))
+        self.engine.register("/api/test", test_handler)
 
         body_part = (
             b"--test-boundary\r\n"
@@ -324,7 +324,7 @@ class TestMultipartStateMachine(TestHttpBase):
             self.engine.state(self.rx)
 
         self.assertEqual(self.engine.status_code, 200)
-        test_callback.assert_called_once_with(
+        test_handler.assert_called_once_with(
             self.engine,
             (
                 {

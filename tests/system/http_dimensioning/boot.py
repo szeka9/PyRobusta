@@ -25,7 +25,7 @@ def time_series(*_):
 
 
 @HttpEngine.route("/test/stream", "POST")
-def chunked_callback(http_ctx, chunk_or_part):
+def chunked_handler(http_ctx, chunk_or_part):
     if (
         http_ctx.headers.get("content-type", "").startswith("multipart/form-data")
         and http_ctx.mp_is_last
@@ -64,12 +64,12 @@ async def main():
 
                 return response_generator
 
-            def multipart_callback(http_ctx, _):
+            def multipart_handler(http_ctx, _):
                 part_count = int(http_ctx.headers.get("x-part-count", 1))
                 part_size = int(http_ctx.headers.get("x-part-size", 1024))
                 return "multipart/form-data", multipart_response(part_count, part_size)
 
-            HttpEngine.register("/test/multipart", multipart_callback, "GET")
+            HttpEngine.register("/test/multipart", multipart_handler, "GET")
 
         asyncio.create_task(server.start_socket_server())
         asyncio.create_task(mem_usage())

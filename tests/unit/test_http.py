@@ -213,8 +213,8 @@ class TestWebStateMachine(TestHttpBase):
         self.engine.method = b"GET"
         self.engine.version = b"HTTP/1.1"
 
-        test_callback = mock.Mock()
-        self.engine.register("/api/test", test_callback, "POST")
+        test_handler = mock.Mock()
+        self.engine.register("/api/test", test_handler, "POST")
 
         self.engine.state(self.rx)
 
@@ -229,10 +229,10 @@ class TestWebStateMachine(TestHttpBase):
         self.engine.method = b"OPTIONS"
         self.engine.version = b"HTTP/1.1"
 
-        test_callback = mock.Mock()
-        self.engine.register("/api/test", test_callback, "GET")
-        self.engine.register("/api/test", test_callback, "POST")
-        self.engine.register("/api/test", test_callback, "PUT")
+        test_handler = mock.Mock()
+        self.engine.register("/api/test", test_handler, "GET")
+        self.engine.register("/api/test", test_handler, "POST")
+        self.engine.register("/api/test", test_handler, "PUT")
 
         self.engine.state(self.rx)
 
@@ -248,9 +248,9 @@ class TestWebStateMachine(TestHttpBase):
         self.engine.version = b"HTTP/1.1"
         test_response = b"[test-response]"
 
-        test_callback = mock.Mock()
-        test_callback.return_value = ("text/plain", test_response)
-        self.engine.register("/api/test", test_callback, "GET")
+        test_handler = mock.Mock()
+        test_handler.return_value = ("text/plain", test_response)
+        self.engine.register("/api/test", test_handler, "GET")
 
         while self.engine.state is not None:
             self.engine.state(self.rx)
@@ -269,9 +269,9 @@ class TestWebStateMachine(TestHttpBase):
         self.engine.version = b"HTTP/1.1"
         test_response = b"[test-response]"
 
-        test_callback = mock.Mock()
-        test_callback.return_value = ("text/plain", test_response)
-        self.engine.register("/api/test", test_callback, "GET")
+        test_handler = mock.Mock()
+        test_handler.return_value = ("text/plain", test_response)
+        self.engine.register("/api/test", test_handler, "GET")
 
         while self.engine.state is not None:
             self.engine.state(self.rx)
@@ -422,8 +422,8 @@ class TestWebStateMachine(TestHttpBase):
         self.engine.headers["transfer-encoding"] = "chunked"
         self.engine.state = self.engine._recv_chunk_size_st
 
-        test_callback = mock.Mock(return_value=("text/plain", "OK"))
-        self.engine.register("/api/test", test_callback, "GET")
+        test_handler = mock.Mock(return_value=("text/plain", "OK"))
+        self.engine.register("/api/test", test_handler, "GET")
 
         for chunk in (
             b"14\r\nchunking\r\ntest\r\ncase\r\n",
@@ -435,12 +435,10 @@ class TestWebStateMachine(TestHttpBase):
                 self.rx.write(chunk[i : i + 1])
                 self.engine.state(self.rx)
 
-            self.assertEqual(self.engine.state, self.engine._app_endpoint_st)
+            self.assertEqual(self.engine.state, self.engine._handle_route_st)
             self.engine.state(self.rx)
             size_delimiter = chunk.find(b"\r\n")
-            test_callback.assert_called_with(
-                self.engine, chunk[size_delimiter + 2 : -2]
-            )
+            test_handler.assert_called_with(self.engine, chunk[size_delimiter + 2 : -2])
 
         self.assertEqual(self.engine.status_code, 200)
         self.assertEqual(self.engine.state, self.engine._terminal_st)
@@ -452,8 +450,8 @@ class TestWebStateMachine(TestHttpBase):
         self.engine.headers["transfer-encoding"] = "chunked"
         self.engine.state = self.engine._recv_chunk_size_st
 
-        test_callback = mock.Mock(return_value=("text/plain", "OK"))
-        self.engine.register("/api/test", test_callback, "GET")
+        test_handler = mock.Mock(return_value=("text/plain", "OK"))
+        self.engine.register("/api/test", test_handler, "GET")
 
         with self.assertRaises(self.http_module.InvalidContentLength):
             chunk = b"2\r\nchunking\r\n"
@@ -468,8 +466,8 @@ class TestWebStateMachine(TestHttpBase):
         self.engine.headers["transfer-encoding"] = "chunked"
         self.engine.state = self.engine._recv_chunk_size_st
 
-        test_callback = mock.Mock(return_value=("text/plain", "OK"))
-        self.engine.register("/api/test", test_callback, "GET")
+        test_handler = mock.Mock(return_value=("text/plain", "OK"))
+        self.engine.register("/api/test", test_handler, "GET")
 
         chunk = b"FF\r\nchunking\r\n"
         for i in range(len(chunk)):
@@ -488,8 +486,8 @@ class TestWebStateMachine(TestHttpBase):
         self.engine.headers["content-length"] = 11
         self.engine.state = self.engine._recv_payload_st
 
-        test_callback = mock.Mock(return_value=("text/plain", "OK"))
-        self.engine.register("/api/test", test_callback, "POST")
+        test_handler = mock.Mock(return_value=("text/plain", "OK"))
+        self.engine.register("/api/test", test_handler, "POST")
 
         payload = b"hello world"
         for i in range(len(payload)):
@@ -500,7 +498,7 @@ class TestWebStateMachine(TestHttpBase):
             self.engine.state(self.rx)
 
         self.assertEqual(self.engine.status_code, 200)
-        test_callback.assert_called_with(self.engine, payload)
+        test_handler.assert_called_with(self.engine, payload)
 
     def test_payload_length_exceeds_content_length(self):
         """
@@ -516,8 +514,8 @@ class TestWebStateMachine(TestHttpBase):
         self.engine.headers["content-length"] = 11
         self.engine.state = self.engine._recv_payload_st
 
-        test_callback = mock.Mock(return_value=("text/plain", "OK"))
-        self.engine.register("/api/test", test_callback, "POST")
+        test_handler = mock.Mock(return_value=("text/plain", "OK"))
+        self.engine.register("/api/test", test_handler, "POST")
 
         payload = b"hello world!"
         for i in range(len(payload)):
@@ -530,7 +528,7 @@ class TestWebStateMachine(TestHttpBase):
             self.engine.state(self.rx)
 
         self.assertEqual(self.engine.status_code, 200)
-        test_callback.assert_called_with(self.engine, b"hello world")
+        test_handler.assert_called_with(self.engine, b"hello world")
         self.assertEqual(
             self.rx.peek(), b"!"
         )  # Remaining data after content-length is ignored
@@ -546,8 +544,8 @@ class TestWebStateMachine(TestHttpBase):
         self.engine.headers["content-length"] = 11
         self.engine.state = self.engine._recv_payload_st
 
-        test_callback = mock.Mock(return_value=("text/plain", "OK"))
-        self.engine.register("/api/test", test_callback, "POST")
+        test_handler = mock.Mock(return_value=("text/plain", "OK"))
+        self.engine.register("/api/test", test_handler, "POST")
 
         payload = b"hello"
         for i in range(len(payload)):
@@ -572,7 +570,7 @@ class TestFileServingStateMachine(TestHttpBase):
         cls.base_config = {
             "http_multipart": "False",
             # Only built-in file serving is tested here,
-            # so disable /files endpoint to avoid conflicts
+            # so disable /files API to avoid conflicts
             "http_files_api": "False",
             "http_served_paths": "/www",
         }

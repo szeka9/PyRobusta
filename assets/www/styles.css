@@ -1,0 +1,50 @@
+body {
+    font-family: serif;
+    margin: 40px;
+    background: white;
+    color: black;
+}
+
+h1 {
+    border-bottom: 1px solid #999;
+    padding-bottom: 10px;
+}
+
+hr {
+    margin: 20px 0;
+}
+
+a {
+    color: blue;
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+.description {
+    width: clamp(300px, 70vw, 800px);
+}
+
+table, th, td {
+  border: 1px solid black;
+  border-collapse: collapse;
+}
+
+textarea {
+    resize: none;
+    background-color: rgb(37, 37, 37);
+    color: white;
+    box-sizing: border-box;
+    width: 100%;
+    padding-left: 10px;
+    field-sizing: content;
+    white-space: pre;
+}
+
+.footer {
+    font-size: 0.9em;
+    color: #555;
+    margin-top: 30px;
+}

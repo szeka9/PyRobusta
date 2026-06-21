@@ -203,9 +203,7 @@ class HttpServer:
         try:
             collect()
             http.enable_optional_features()
-            logging.debug(
-                __name__ + f"registered endpoints: {http.HttpEngine.ENDPOINTS}"
-            )
+            logging.debug(__name__ + f"registered routes: {http.HttpEngine.ROUTES}")
             self._max_clients = get_config(CONF_SOCKET_MAX_CON)
             self._init_pools(self._max_clients)
             ssl_ctx = None

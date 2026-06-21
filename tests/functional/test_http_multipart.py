@@ -111,7 +111,7 @@ def delete_path(path):
 
 
 @HttpEngine.route("/test/multipart", "GET")
-def multipart_callback(http_ctx, _):
+def multipart_handler(http_ctx, _):
     part_count = int(http_ctx.headers["x-part-count"])
     return "multipart/form-data", multipart_response(part_count)
 
@@ -182,9 +182,9 @@ def setup_config(tls_enabled=False, files_api_enabled=False):
 
 def test_registration():
     test_assert(
-        "multipart endpoint registration",
-        multipart_callback,
-        HttpEngine._get_callback(b"/test/multipart", b"GET"),
+        "multipart route registration",
+        multipart_handler,
+        HttpEngine._get_handler(b"/test/multipart", b"GET"),
     )
 
 
