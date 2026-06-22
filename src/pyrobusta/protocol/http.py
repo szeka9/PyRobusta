@@ -93,6 +93,8 @@ class HttpEngine:
         b"408 Request Timeout",
         413,
         b"413 Content Too Large",
+        415,
+        b"415 Unsupported Media Type",
         500,
         b"500 Internal Server Error",
         503,
