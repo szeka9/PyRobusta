@@ -748,6 +748,9 @@ class HttpEngine:
             return
         # Fallback: serve file
         if self.method in (self.GET, self.HEAD):
+            if self.has_payload():
+                raise MalformedRequest()
+            self._is_req_complete = True
             self.state = self._fs_retrieve_st
             return
         self.terminate(404)
