@@ -23,7 +23,7 @@ def generate_multipart_response(self, callback: callable, dtype: str):
     :param dtype: exact multipart content-type (multipart/*)
     """
     if not callable(callback):
-        raise ValueError("Invalid function callback")
+        raise ValueError("Invalid callback")
 
     boundary = self.MULTIPART_BOUNDARY
     self.set_response_header(

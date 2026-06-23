@@ -362,12 +362,12 @@ class HttpEngine:
         for line in header_lines:
             # pylint: disable=W0511
             if any(c > 127 for c in line):
-                raise InvalidHeaders("Non-ASCII character")
+                raise InvalidHeaders()
             if b":" not in line:
                 raise InvalidHeaders()
             name, value = line.split(b":", 1)
             if not name:
-                raise InvalidHeaders("Empty header name")
+                raise InvalidHeaders()
             for c in name:
                 if (
                     48 <= c <= 57  # 0-9
@@ -376,10 +376,10 @@ class HttpEngine:
                     or c in (45, 95)  # -_
                 ):
                     continue
-                raise InvalidHeaders("Invalid header name")
+                raise InvalidHeaders()
             name = name.strip().lower().decode("ascii")
             if any((c < 32 and c != 9) or c == 127 for c in value):
-                raise InvalidHeaders("Invalid header value")
+                raise InvalidHeaders()
             if name == "content-length":
                 value = int(value.strip())
             else:

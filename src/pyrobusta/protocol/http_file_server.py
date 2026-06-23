@@ -97,12 +97,12 @@ def delete_file(http_ctx, _):
                 return "text/plain", "Directory not empty"
             rmdir(fs_path)
             http_ctx.terminate(204)
-            return "text/plain", "Deleted"
+            return "text/plain", "OK"
 
         # Delete file
         remove(fs_path)
         http_ctx.terminate(204)
-        return "text/plain", "Deleted"
+        return "text/plain", "OK"
     except OSError:
         http_ctx.terminate(404)
         return "text/plain", "Not found"
