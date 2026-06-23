@@ -66,11 +66,7 @@ class HttpEngine:
         "recv_chunk_size",
         "is_req_empty",
         "_is_req_complete",
-        "mp_boundary",
-        "mp_is_first",
-        "mp_is_last",
-        "mp_delimiter",
-        "mp_last_delimiter",
+        "_extras",
     )
 
     ROUTES = []  # (route, handler, HTTP method)
@@ -165,8 +161,8 @@ class HttpEngine:
         self.is_req_empty = True
         self._is_req_complete = False
 
-        # [Multipart state]
-        self.mp_boundary = None
+        # [Extras]
+        self._extras = None
 
     def reset(self):
         """
@@ -186,7 +182,7 @@ class HttpEngine:
         self.recv_chunk_size = 0
         self.is_req_empty = True
         self._is_req_complete = False
-        self.mp_boundary = None
+        self._extras = None
 
     # =========================================
     # Methods/decorators for routing
@@ -393,38 +389,6 @@ class HttpEngine:
             elif value:
                 headers[name] += ", " + value  # Combined field value
         return headers
-
-    @staticmethod
-    def _get_mp_boundary(headers: dict) -> str:
-        """
-        Determine from the headers if a request is multipart,
-        and return the boundary value.
-        """
-        content_type = headers.get("content-type")
-        if not content_type or not content_type.lower().startswith("multipart/"):
-            return None
-
-        parts = content_type.split(";")
-        for part in parts[1:]:
-            if "=" not in part:
-                continue
-            key, value = part.strip().split("=", 1)
-
-            if key.strip().lower() != "boundary":
-                continue
-            value = value.strip()
-
-            if value.startswith('"'):
-                if len(value) < 2 or not value.endswith('"'):
-                    raise InvalidHeaders()
-                value = value[1:-1]
-            elif value.endswith('"'):
-                raise InvalidHeaders()
-
-            if not value:
-                raise InvalidHeaders()
-            return value
-        raise InvalidHeaders()
 
     @classmethod
     def _parse_body_part(cls, part: memoryview) -> tuple[dict, bytes]:
@@ -758,9 +722,7 @@ class HttpEngine:
             if self.has_payload():
                 if self.method in (self.GET, self.HEAD):
                     raise MalformedRequest()
-                if mp_boundary := self._get_mp_boundary(self.headers):
-                    # Request body is multipart
-                    self.mp_boundary = mp_boundary.encode("ascii")
+                if self.is_multipart():
                     self.state = self._start_multipart_parser_st
                 elif self.is_chunked():
                     # Request body is chunked
