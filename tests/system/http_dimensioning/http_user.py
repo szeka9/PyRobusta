@@ -14,7 +14,7 @@ class DefaultUser(HttpUser):
     def on_start(self):
         self.client.verify = TLS_VERIFY
 
-    @task(2)
+    @task(4)
     def get_index(self):
         response = self.client.get(
             "/index.html",
@@ -22,18 +22,6 @@ class DefaultUser(HttpUser):
         )
         print(
             self.client.base_url + "/index.html",
-            response.status_code,
-            response.elapsed.total_seconds(),
-        )
-
-    @task(2)
-    def get_docs(self):
-        response = self.client.get(
-            "/examples.html",
-            name="/examples.html",
-        )
-        print(
-            self.client.base_url + "/examples.html",
             response.status_code,
             response.elapsed.total_seconds(),
         )
