@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 This test performs load tests while dimensioning the HTTP server
 with different configurations, measuring the resulting heap usage
@@ -329,6 +330,11 @@ if __name__ == "__main__":
     device_id = sys.argv[1]  # mpremote id e.g. a1 (/dev/ttyACM1)
     device_ip = sys.argv[2]
     device_name = sys.argv[3]
+
+    if not device_id or not device_ip or not device_name:
+        raise ValueError(
+            "Invalid arguments.\nUsage: test.py device_id device_ip device_name"
+        )
 
     validate_device_ip(device_ip)
     apply_mpremote_config(base_config, device_id)
