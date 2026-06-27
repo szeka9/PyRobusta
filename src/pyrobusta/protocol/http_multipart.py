@@ -12,7 +12,7 @@ delimiter.
 # pylint: disable=W0212,R0401
 
 from pyrobusta.protocol import http
-from pyrobusta.utils.helpers import add_method, add_property, patch_extra_property
+from pyrobusta.utils.patch import add_method, add_property, patch_extra_property
 
 
 def generate_multipart_response(self, callback: callable, dtype: str):
@@ -147,6 +147,7 @@ def _parse_boundary_st(self, rx):
         return
 
     if is_last and self.content_len_cnt + rx.size() < self.headers["content-length"]:
+        # Wait for optional trailing newline
         return
 
     self.state = self._parse_complete_part_st
