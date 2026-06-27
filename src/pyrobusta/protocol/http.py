@@ -357,54 +357,54 @@ class HttpEngine:
         """
         Basic parser to extract HTTP/MIME headers.
         """
-        header_lines = bytes(raw_headers).split(b"\r\n")
         headers = {}
-        for line in header_lines:
-            # pylint: disable=W0511
-            if any(c > 127 for c in line):
+        start = 0
+        n = len(raw_headers)
+
+        while start < n:
+            end = start
+            colon = -1
+            while end < n:
+                c = raw_headers[end]
+                if c > 127:
+                    raise InvalidHeaders()
+                if c == 58 and colon == -1:
+                    colon = end
+                if end + 1 < n and c == 13 and raw_headers[end + 1] == 10:
+                    break
+                end += 1
+
+            if colon in (-1, start):
                 raise InvalidHeaders()
-            if b":" not in line:
-                raise InvalidHeaders()
-            name, value = line.split(b":", 1)
-            if not name:
-                raise InvalidHeaders()
-            for c in name:
-                if (
+
+            for i in range(start, colon):
+                c = raw_headers[i]
+                if not (
                     48 <= c <= 57  # 0-9
                     or 65 <= c <= 90  # A-Z
                     or 97 <= c <= 122  # a-z
                     or c in (45, 95)  # -_
                 ):
-                    continue
-                raise InvalidHeaders()
-            name = name.strip().lower().decode("ascii")
-            if any((c < 32 and c != 9) or c == 127 for c in value):
+                    raise InvalidHeaders()
+
+            name = bytes(raw_headers[start:colon]).strip(b" ").lower().decode("ascii")
+            value_bytes = bytes(raw_headers[colon + 1 : end]).strip(b" ")
+
+            if any((c < 32 and c != 9) or c == 127 for c in value_bytes):
                 raise InvalidHeaders()
             if name == "content-length":
-                value = int(value.strip())
+                if not all(48 <= c <= 57 for c in value_bytes):
+                    raise InvalidHeaders()
+                value = int(value_bytes)
             else:
-                value = value.strip().decode("ascii")
+                value = value_bytes.decode("ascii")
             if name not in headers and value:
                 headers[name] = value
             elif value:
                 headers[name] += ", " + value  # Combined field value
-        return headers
 
-    @classmethod
-    def _parse_body_part(cls, part: memoryview) -> tuple[dict, bytes]:
-        """
-        Parse part headers and body and return them as a tuple.
-        """
-        blank_idx = -1
-        for i in range(len(part) - 3):
-            if part[i : i + 4] == b"\r\n\r\n":
-                blank_idx = i
-                break
-        if blank_idx == -1:
-            raise InvalidHeaders()
-        headers = cls._parse_headers(part[:blank_idx])
-        body = part[blank_idx + 4 :]
-        return headers, body
+            start = end + 2
+        return headers
 
     # =========================================
     # Helpers for state machine termination

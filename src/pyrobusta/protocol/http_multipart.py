@@ -165,7 +165,17 @@ def _parse_complete_part_st(self, rx):
         and rx.peek(len(self.mp_last_delimiter)) == self.mp_last_delimiter
     )
 
-    part_headers, part_body = http.HttpEngine._parse_body_part(part)
+    # Parse part headers and part body
+    blank_idx = -1
+    for i in range(len(part) - 3):
+        if part[i : i + 4] == b"\r\n\r\n":
+            blank_idx = i
+            break
+    if blank_idx == -1:
+        raise http.InvalidHeaders()
+    part_headers = http.HttpEngine._parse_headers(part[:blank_idx])
+    part_body = part[blank_idx + 4 :]
+
     handler = http.HttpEngine._get_handler(self.url, self.method)
 
     # Process complete part
