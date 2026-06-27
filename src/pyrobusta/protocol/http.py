@@ -66,11 +66,7 @@ class HttpEngine:
         "recv_chunk_size",
         "is_req_empty",
         "_is_req_complete",
-        "mp_boundary",
-        "mp_is_first",
-        "mp_is_last",
-        "mp_delimiter",
-        "mp_last_delimiter",
+        "_extras",
     )
 
     ROUTES = []  # (route, handler, HTTP method)
@@ -93,6 +89,8 @@ class HttpEngine:
         b"408 Request Timeout",
         413,
         b"413 Content Too Large",
+        415,
+        b"415 Unsupported Media Type",
         500,
         b"500 Internal Server Error",
         503,
@@ -163,8 +161,8 @@ class HttpEngine:
         self.is_req_empty = True
         self._is_req_complete = False
 
-        # [Multipart state]
-        self.mp_boundary = None
+        # [Extras]
+        self._extras = None
 
     def reset(self):
         """
@@ -184,7 +182,7 @@ class HttpEngine:
         self.recv_chunk_size = 0
         self.is_req_empty = True
         self._is_req_complete = False
-        self.mp_boundary = None
+        self._extras = None
 
     # =========================================
     # Methods/decorators for routing
@@ -364,12 +362,12 @@ class HttpEngine:
         for line in header_lines:
             # pylint: disable=W0511
             if any(c > 127 for c in line):
-                raise InvalidHeaders("Non-ASCII character")
+                raise InvalidHeaders()
             if b":" not in line:
                 raise InvalidHeaders()
             name, value = line.split(b":", 1)
             if not name:
-                raise InvalidHeaders("Empty header name")
+                raise InvalidHeaders()
             for c in name:
                 if (
                     48 <= c <= 57  # 0-9
@@ -378,10 +376,10 @@ class HttpEngine:
                     or c in (45, 95)  # -_
                 ):
                     continue
-                raise InvalidHeaders("Invalid header name")
+                raise InvalidHeaders()
             name = name.strip().lower().decode("ascii")
             if any((c < 32 and c != 9) or c == 127 for c in value):
-                raise InvalidHeaders("Invalid header value")
+                raise InvalidHeaders()
             if name == "content-length":
                 value = int(value.strip())
             else:
@@ -391,38 +389,6 @@ class HttpEngine:
             elif value:
                 headers[name] += ", " + value  # Combined field value
         return headers
-
-    @staticmethod
-    def _get_mp_boundary(headers: dict) -> str:
-        """
-        Determine from the headers if a request is multipart,
-        and return the boundary value.
-        """
-        content_type = headers.get("content-type")
-        if not content_type or not content_type.lower().startswith("multipart/"):
-            return None
-
-        parts = content_type.split(";")
-        for part in parts[1:]:
-            if "=" not in part:
-                continue
-            key, value = part.strip().split("=", 1)
-
-            if key.strip().lower() != "boundary":
-                continue
-            value = value.strip()
-
-            if value.startswith('"'):
-                if len(value) < 2 or not value.endswith('"'):
-                    raise InvalidHeaders()
-                value = value[1:-1]
-            elif value.endswith('"'):
-                raise InvalidHeaders()
-
-            if not value:
-                raise InvalidHeaders()
-            return value
-        raise InvalidHeaders()
 
     @classmethod
     def _parse_body_part(cls, part: memoryview) -> tuple[dict, bytes]:
@@ -756,9 +722,7 @@ class HttpEngine:
             if self.has_payload():
                 if self.method in (self.GET, self.HEAD):
                     raise MalformedRequest()
-                if mp_boundary := self._get_mp_boundary(self.headers):
-                    # Request body is multipart
-                    self.mp_boundary = mp_boundary.encode("ascii")
+                if self.is_multipart():
                     self.state = self._start_multipart_parser_st
                 elif self.is_chunked():
                     # Request body is chunked
@@ -784,6 +748,9 @@ class HttpEngine:
             return
         # Fallback: serve file
         if self.method in (self.GET, self.HEAD):
+            if self.has_payload():
+                raise MalformedRequest()
+            self._is_req_complete = True
             self.state = self._fs_retrieve_st
             return
         self.terminate(404)
@@ -924,6 +891,9 @@ class HttpEngine:
             and self.get_response_header(b"content-length") is None
         ):
             self.set_response_header(b"content-length", b"0")
+
+        if not self.get_response_header(b"cache-control"):
+            self.set_response_header(b"cache-control", b"no-store")
 
         self.state = None
 

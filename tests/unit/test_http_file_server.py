@@ -370,11 +370,9 @@ class TestFileServerBulkUpload(TestHttpBase):
         self.engine.version = b"HTTP/1.1"
 
         self.engine.headers["content-length"] = 151
-        self.engine.headers["content-type"] = "multipart/form-data"
-
-        self.engine.mp_boundary = b"test-boundary"
-        self.engine.mp_delimiter = b"--test-boundary\r\n"
-        self.engine.mp_last_delimiter = b"--test-boundary--"
+        self.engine.headers["content-type"] = (
+            'multipart/form-data;boundary="test-boundary"'
+        )
 
         self.engine.state = self.engine._start_multipart_parser_st
         body_part = (
@@ -421,11 +419,9 @@ class TestFileServerBulkUpload(TestHttpBase):
         self.engine.version = b"HTTP/1.1"
 
         self.engine.headers["content-length"] = 287
-        self.engine.headers["content-type"] = "multipart/form-data"
-
-        self.engine.mp_boundary = b"test-boundary"
-        self.engine.mp_delimiter = b"--test-boundary\r\n"
-        self.engine.mp_last_delimiter = b"--test-boundary--"
+        self.engine.headers["content-type"] = (
+            'multipart/form-data;boundary="test-boundary"'
+        )
 
         self.engine.state = self.engine._start_multipart_parser_st
         body_part = (
@@ -488,11 +484,9 @@ class TestFileServerBulkUpload(TestHttpBase):
         self.engine.version = b"HTTP/1.1"
 
         self.engine.headers["content-length"] = 285
-        self.engine.headers["content-type"] = "multipart/form-data"
-
-        self.engine.mp_boundary = b"test-boundary"
-        self.engine.mp_delimiter = b"--test-boundary\r\n"
-        self.engine.mp_last_delimiter = b"--test-boundary--"
+        self.engine.headers["content-type"] = (
+            'multipart/form-data;boundary="test-boundary"'
+        )
 
         self.engine.state = self.engine._start_multipart_parser_st
         body_part = (
@@ -543,11 +537,9 @@ class TestFileServerBulkUpload(TestHttpBase):
         self.engine.method = b"POST"
         self.engine.version = b"HTTP/1.1"
         self.engine.headers["content-length"] = 565
-        self.engine.headers["content-type"] = "multipart/form-data"
-
-        self.engine.mp_boundary = b"test-boundary"
-        self.engine.mp_delimiter = b"--test-boundary\r\n"
-        self.engine.mp_last_delimiter = b"--test-boundary--"
+        self.engine.headers["content-type"] = (
+            'multipart/form-data;boundary="test-boundary"'
+        )
 
         self.engine.state = self.engine._start_multipart_parser_st
         body_part = (
