@@ -227,21 +227,6 @@ def validate_device_ip(device_ip):
         sys.exit(1)
 
 
-def measure_footprint(config, device_ip):
-    proto = "https" if config["tls"] == True else "http"
-    port = 4443 if config["tls"] == True else 8080
-    try:
-        usage = requests.get(
-            f"{proto}://{device_ip}:{port}/mem/current",
-            verify=False,
-            headers={"Connection": "close"},
-        ).text
-        print(f"Measured: {usage}")
-    except:
-        return None
-    return int(usage)
-
-
 # ------------
 # Test methods
 # ------------
@@ -296,6 +281,7 @@ def load_test(config, device_ip):
     }
 
     try:
+        sleep(5)
         usage = requests.get(
             f"{host}/mem/time-series",
             verify=False,
@@ -306,9 +292,17 @@ def load_test(config, device_ip):
         print(f"Measured: {usage}")
     except Exception as e:
         print(f"WARNING - exception: {e}")
-        return [], stats
+        return 0, [], stats
 
-    return usage, stats
+    idle_threshold = usage[0] * 0.01
+    idle_last_idx = 0
+    for i in range(len(usage)):
+        idle_last_idx = i
+        if i > 0 and usage[i] - usage[i - 1] > idle_threshold:
+            break
+    idle = round(sum(usage[:idle_last_idx]) / (idle_last_idx))
+
+    return idle, usage, stats
 
 
 def test_config_delta(device_name, device_ip, base_config, config_delta={}):
@@ -327,8 +321,7 @@ def test_config_delta(device_name, device_ip, base_config, config_delta={}):
         pass
 
     apply_mpremote_config(target_config, device_name)
-    idle = measure_footprint(target_config, device_ip)
-    usage, stats = load_test(target_config, device_ip)
+    idle, usage, stats = load_test(target_config, device_ip)
     return idle, usage, stats
 
 
@@ -360,7 +353,7 @@ if __name__ == "__main__":
             load_idle, load_usage, load_stats = test_config_delta(
                 device_id, device_ip, base_config, delta
             )
-            if load_idle and load_usage and load_stats:
+            if load_usage and load_stats:
                 delta_cnt += 1
                 m = {
                     "id": f"{case}_{delta_cnt:03d}",

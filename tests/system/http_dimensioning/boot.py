@@ -13,12 +13,6 @@ TS_DURATION = 100
 MEM_TIME_SERIES = [0] * TS_DURATION
 
 
-@HttpEngine.route("/mem/current", "GET")
-def current_usage(*_):
-    collect()
-    return "text/plain", str(mem_alloc())
-
-
 @HttpEngine.route("/mem/time-series", "GET")
 def time_series(*_):
     return "application/json", MEM_TIME_SERIES
@@ -40,10 +34,10 @@ async def mem_usage():
     i = 0
     collect()
     while True:
-        i = (i + 1) % TS_DURATION
         collect()
         MEM_TIME_SERIES[i] = mem_alloc()
         await asyncio.sleep(1)
+        i = (i + 1) % TS_DURATION
 
 
 async def main():
