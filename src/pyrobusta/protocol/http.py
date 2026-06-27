@@ -357,54 +357,54 @@ class HttpEngine:
         """
         Basic parser to extract HTTP/MIME headers.
         """
-        header_lines = bytes(raw_headers).split(b"\r\n")
         headers = {}
-        for line in header_lines:
-            # pylint: disable=W0511
-            if any(c > 127 for c in line):
+        start = 0
+        n = len(raw_headers)
+
+        while start < n:
+            end = start
+            colon = -1
+            while end < n:
+                c = raw_headers[end]
+                if c > 127:
+                    raise InvalidHeaders()
+                if c == 58 and colon == -1:
+                    colon = end
+                if end + 1 < n and c == 13 and raw_headers[end + 1] == 10:
+                    break
+                end += 1
+
+            if colon in (-1, start):
                 raise InvalidHeaders()
-            if b":" not in line:
-                raise InvalidHeaders()
-            name, value = line.split(b":", 1)
-            if not name:
-                raise InvalidHeaders()
-            for c in name:
-                if (
+
+            for i in range(start, colon):
+                c = raw_headers[i]
+                if not (
                     48 <= c <= 57  # 0-9
                     or 65 <= c <= 90  # A-Z
                     or 97 <= c <= 122  # a-z
                     or c in (45, 95)  # -_
                 ):
-                    continue
-                raise InvalidHeaders()
-            name = name.strip().lower().decode("ascii")
-            if any((c < 32 and c != 9) or c == 127 for c in value):
+                    raise InvalidHeaders()
+
+            name = bytes(raw_headers[start:colon]).strip(b" ").lower().decode("ascii")
+            value_bytes = bytes(raw_headers[colon + 1 : end]).strip(b" ")
+
+            if any((c < 32 and c != 9) or c == 127 for c in value_bytes):
                 raise InvalidHeaders()
             if name == "content-length":
-                value = int(value.strip())
+                if not all(48 <= c <= 57 for c in value_bytes):
+                    raise InvalidHeaders()
+                value = int(value_bytes)
             else:
-                value = value.strip().decode("ascii")
+                value = value_bytes.decode("ascii")
             if name not in headers and value:
                 headers[name] = value
             elif value:
                 headers[name] += ", " + value  # Combined field value
-        return headers
 
-    @classmethod
-    def _parse_body_part(cls, part: memoryview) -> tuple[dict, bytes]:
-        """
-        Parse part headers and body and return them as a tuple.
-        """
-        blank_idx = -1
-        for i in range(len(part) - 3):
-            if part[i : i + 4] == b"\r\n\r\n":
-                blank_idx = i
-                break
-        if blank_idx == -1:
-            raise InvalidHeaders()
-        headers = cls._parse_headers(part[:blank_idx])
-        body = part[blank_idx + 4 :]
-        return headers, body
+            start = end + 2
+        return headers
 
     # =========================================
     # Helpers for state machine termination
@@ -469,8 +469,6 @@ class HttpEngine:
         :param body: body to be sent in the response
         :param content_type: content-type of the body
         """
-        self._unset_response_handler()
-
         if not body:
             body_encoded = b""
         if isinstance(body, (bytes, bytearray, memoryview)):
@@ -486,19 +484,16 @@ class HttpEngine:
             b"content-length", str(len(body_encoded)).encode("ascii")
         )
 
+        # Unset and clean up existing handler if set
+        if type(self.resp_handler).__name__ in ("FileIO", "BytesIO"):
+            self.resp_handler.close()
+            self.resp_handler = None
+
         if len(body_encoded):
             self.set_response_header(b"content-type", content_type.encode("ascii"))
 
             if self.method != self.HEAD:
                 self.resp_handler = BytesIO(body_encoded)
-
-    def _unset_response_handler(self):
-        """
-        Unset the response handler (if set).
-        """
-        if type(self.resp_handler).__name__ in ("FileIO", "BytesIO"):
-            self.resp_handler.close()
-            self.resp_handler = None
 
     def do_keep_alive(self):
         """
@@ -553,7 +548,7 @@ class HttpEngine:
         :param status_code: HTTP status code
         """
         self.resp_headers = []
-        self._unset_response_handler()
+        self.set_response_body(b"")
         self.terminate(status_code)
 
     def is_request_empty(self):
@@ -572,15 +567,13 @@ class HttpEngine:
         """
         Run the state machine, consuming the content of a request buffer (rx).
         Unlike individual states, this method does not raise an exception.
-        This method yields on every state transition allowing the calling side
+        This method returns on every state transition allowing the calling side
         to flush the response buffer.
         """
         if self.is_terminated():
             return
         try:
-            while not self.is_terminated():
-                self.state(rx)
-                yield
+            self.state(rx)
         except BufferFullError:
             self.abort(500)
             self.set_response_body(b"Buffer full")

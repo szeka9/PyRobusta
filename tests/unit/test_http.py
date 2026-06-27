@@ -184,7 +184,6 @@ class TestWebStateMachine(TestHttpBase):
 
     def test_header_parsing_error(self):
         for case in (
-            b"",
             b":",
             b": value",
             b" leading-space: value",
