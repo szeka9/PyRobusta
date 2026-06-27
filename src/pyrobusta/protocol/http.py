@@ -469,8 +469,6 @@ class HttpEngine:
         :param body: body to be sent in the response
         :param content_type: content-type of the body
         """
-        self._unset_response_handler()
-
         if not body:
             body_encoded = b""
         if isinstance(body, (bytes, bytearray, memoryview)):
@@ -486,19 +484,16 @@ class HttpEngine:
             b"content-length", str(len(body_encoded)).encode("ascii")
         )
 
+        # Unset and clean up existing handler if set
+        if type(self.resp_handler).__name__ in ("FileIO", "BytesIO"):
+            self.resp_handler.close()
+            self.resp_handler = None
+
         if len(body_encoded):
             self.set_response_header(b"content-type", content_type.encode("ascii"))
 
             if self.method != self.HEAD:
                 self.resp_handler = BytesIO(body_encoded)
-
-    def _unset_response_handler(self):
-        """
-        Unset the response handler (if set).
-        """
-        if type(self.resp_handler).__name__ in ("FileIO", "BytesIO"):
-            self.resp_handler.close()
-            self.resp_handler = None
 
     def do_keep_alive(self):
         """
@@ -553,7 +548,7 @@ class HttpEngine:
         :param status_code: HTTP status code
         """
         self.resp_headers = []
-        self._unset_response_handler()
+        self.set_response_body(b"")
         self.terminate(status_code)
 
     def is_request_empty(self):
