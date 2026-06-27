@@ -1,18 +1,23 @@
 # HTTP state machine parser
 
-[http.py](../../src/pyrobusta/protocol/http.py) implements a continuation passing parser using a
-finite state machine (FSM). Each state consumes available sufficient data to make progress or explicitly
-suspend until more data arrives.
+[http.py](../../src/pyrobusta/protocol/http.py) implements a finite state machine (FSM) whose states
+are represented by handler functions. Each state consumes as much available data as necessary
+to make progress, or returns control to the event loop until additional input becomes available.
 
 In general, states are not required to transition to a terminal state if a request is incomplete.
 Instead, states return control to the asyncio event loop, which drives subsequent invocations of the
 state machine based on socket readiness. The state machine may be terminated by the surrounding coroutine in
-the case of a session timeout or transport error. This is a deliberate architectural decision to separate HTTP
-protocol semantics from transport-level I/O scheduling concerns.
+the case of a connection timeout or transport error, separating HTTP protocol semantics from transport-level
+I/O scheduling concerns.
 
-The state machine can be decomposed to four sub-FSMs, depicted by the below diagrams. The state machine applies
-to a single HTTP session with a dedicated request and response stream buffer.
+The state machine can be decomposed into four sub-FSMs with a common terminal state. Each sub-FSM eventually
+transitions to `terminal_st`, which serves as a finalization state responsible for emitting HTTP headers required
+for interoperability, such as connection persistence and cache-control directives. The terminal state can only be reached
+by calling `HttpEngine.terminate()`, which requires a valid HTTP status code. The method may be invoked by the user application, the coroutine responsible for socket handling, or the state machine itself.
 
+The state machine is associated with a single HTTP connection and maintains dedicated request and response stream buffers.
+For persistent connections, the state machine instance is reset and reused for each request received on the connection.
+The `HttpConnection` class is responsible for advancing the state machine, scheduling socket I/O through asyncio's `StreamReader` and `StreamWriter` interfaces, and reusing the state machine across persistent connections.
 
 ## HTTP Request Line and Header Parsing
 ```mermaid
@@ -25,11 +30,11 @@ stateDiagram-v2
 
     parse_request_line_st --> parse_headers_st: valid request line parsed
     parse_request_line_st --> parse_request_line_st: incomplete line
-    parse_request_line_st --> [*]: 405/505 terminate
+    parse_request_line_st --> terminal_st: 405/505 terminate
 
     parse_headers_st --> route_request_st: headers complete
     parse_headers_st --> parse_headers_st: waiting for \r\n\r\n
-    parse_headers_st --> [*]: invalid headers (host missing etc.)
+    parse_headers_st --> terminal_st: invalid headers (host missing etc.)
 ```
 
 ## Routing and Body Strategy Selection
@@ -44,9 +49,9 @@ stateDiagram-v2
 
     route_request_st --> fs_retrieve_st: GET/HEAD fallback file server
 
-    route_request_st --> [*]: 404 no route
-    route_request_st --> [*]: 405 method not allowed
-    route_request_st --> [*]: 204 OPTIONS
+    route_request_st --> terminal_st: 404 no route
+    route_request_st --> terminal_st: 405 method not allowed
+    route_request_st --> terminal_st: 204 OPTIONS
 
     recv_payload_st --> handle_route_st: full body received
     recv_payload_st --> recv_payload_st: waiting for content-length
@@ -62,19 +67,17 @@ stateDiagram-v2
 ```mermaid
 stateDiagram-v2
 
-    handle_route_st --> handle_route_st: execute handler / process request
+    handle_route_st --> handle_route_st: application processing
 
     handle_route_st --> recv_chunk_size_st: more chunked data expected
 
-    handle_route_st --> generate_multipart_response_st: multipart response
+    handle_route_st --> terminal_st: default termination (200 OK)
 
-    handle_route_st --> [*]: 200 OK (default completion)
+    handle_route_st --> terminal_st: 2XX/4XX/5XX (terminated by application)
 
-    fs_retrieve_st --> [*]: 200 file served
-    fs_retrieve_st --> [*]: 403 forbidden
-    fs_retrieve_st --> [*]: 404 file missing
-
-    generate_multipart_response_st --> [*]: 200 headers set + stream ready
+    fs_retrieve_st --> terminal_st: 200 file served
+    fs_retrieve_st --> terminal_st: 403 forbidden
+    fs_retrieve_st --> terminal_st: 404 file missing
 ```
 
 ## Multipart Request Processing
@@ -87,5 +90,26 @@ stateDiagram-v2
     parse_boundary_st --> parse_boundary_st: waiting for boundary
 
     parse_complete_part_st --> parse_boundary_st: more parts remain
-    parse_complete_part_st --> [*]: final part processed (200)
+    parse_complete_part_st --> terminal_st: 200 OK (final part processed - default)
+    parse_complete_part_st --> terminal_st: 2XX/4XX/5XX (terminated by application)
+```
+
+## State Machine Termination
+```mermaid
+stateDiagram-v2
+
+    terminal_st --> [*]: finalize headers (keep-alive connection, cache policy)
+```
+
+## Connection Lifecycle
+```mermaid
+flowchart LR
+
+    HttpConnection --> id1[run parser]
+    id1[run parser] --> id2[terminate state machine]
+    id2[terminate state machine] --> id3[Connection: close]
+    id2[terminate state machine] --> id4[Connection: keep-alive]
+    id3[Connection: close] --> id5[Destroy Parser]
+    id4[Connection: keep-alive] --> id6[Reset Parser]
+    id6[Reset Parser] --> id1[run parser]
 ```
