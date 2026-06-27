@@ -24,6 +24,11 @@ NON_INIT_PY := $(filter-out %__init__.py,$(PY_FILES))
 MPY_TARGETS = $(patsubst $(SRC_DIR)/%.py,$(BUILD_DIR)/%.mpy,$(NON_INIT_PY))
 INIT_TARGETS = $(patsubst $(SRC_DIR)/%.py,$(BUILD_DIR)/%.py,$(filter %__init__.py,$(PY_FILES)))
 
+# Performance testing properties
+DEVICE_IP := # e.g. 192.168.1.100
+DEVICE_NAME := # e.g. ESP32-C3, will be used for report generation
+PT_DIR := tests/system
+
 .PHONY: all
 all: clean toolchain static-checkers unit-test build test-unix deploy deploy-config tls-cert deploy-cert deploy-example
 
@@ -281,6 +286,28 @@ test-device: stage-test #clean-device upload
 		mpremote $(DEVICE) run $$(basename $$test) || exit 1; \
 	done
 	@mpremote $(DEVICE) reset
+
+# ================================================
+# Performance testing
+# ================================================
+
+# -----------------------------
+# Run HTTP dimensioning tests
+# -----------------------------
+.PHONY: perf-test-http-dimensioning
+perf-test-http-dimensioning:
+	@mpremote $(DEVICE) soft-reset
+	mpremote $(DEVICE) cp $(PT_DIR)/http_dimensioning/app_base.py :app_base.py
+	mpremote $(DEVICE) cp $(PT_DIR)/http_dimensioning/app_multipart.py :app_multipart.py
+	mpremote $(DEVICE) cp $(PT_DIR)/http_dimensioning/boot.py :boot.py
+	@mpremote $(DEVICE) reset
+	$(PT_DIR)/http_dimensioning/test.py "$(DEVICE)" "$(DEVICE_IP)" "$(DEVICE_NAME)"
+
+# -----------------------------
+# Run all performance tests
+# -----------------------------
+.PHONY: perf-test-device
+perf-test-device: perf-test-http-dimensioning
 
 # ================================================
 # Utilities for TLS

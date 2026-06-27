@@ -64,6 +64,7 @@ def generate_plot(measurement, device_name):
     plt.xlabel("Time [s]")
     plt.ylabel("Heap usage [bytes]")
     plt.xticks(xticks)
+    plt.ylim(0, max(measurement["usage"][0:last_idx]) * 1.2)
     for i, label in enumerate(ax.xaxis.get_ticklabels()):
         if i % 5 == 0:
             label.set_visible(True)

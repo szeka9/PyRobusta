@@ -14,7 +14,7 @@ class DefaultUser(HttpUser):
     def on_start(self):
         self.client.verify = TLS_VERIFY
 
-    @task(2)
+    @task(4)
     def get_index(self):
         response = self.client.get(
             "/index.html",
@@ -22,18 +22,6 @@ class DefaultUser(HttpUser):
         )
         print(
             self.client.base_url + "/index.html",
-            response.status_code,
-            response.elapsed.total_seconds(),
-        )
-
-    @task(2)
-    def get_docs(self):
-        response = self.client.get(
-            "/examples.html",
-            name="/examples.html",
-        )
-        print(
-            self.client.base_url + "/examples.html",
             response.status_code,
             response.elapsed.total_seconds(),
         )
@@ -98,7 +86,7 @@ class MultipartUser(HttpUser):
     @task(1)
     def post_multipart(self):
         """
-        Use the /test/stream route to test multipart request handling,
+        Use the /test/multipart route to test multipart request handling,
         sending multipart requests with multiple parts of specified size.
         """
         part_count = 10
@@ -115,14 +103,15 @@ class MultipartUser(HttpUser):
         multipart_data += b"--boundary--\r\n"
 
         response = self.client.post(
-            "/test/stream",
+            "/test/multipart",
             data=multipart_data,
             headers={"Content-Type": "multipart/form-data; boundary=boundary"},
-            name="/test/stream",
+            name="/test/multipart",
         )
         print(
             self.client.base_url
-            + "/test/stream (multipart; parts=%d, size=%d)" % (part_count, part_size),
+            + "/test/multipart (multipart; parts=%d, size=%d)"
+            % (part_count, part_size),
             response.status_code,
             response.elapsed.total_seconds(),
         )
