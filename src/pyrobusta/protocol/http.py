@@ -572,15 +572,13 @@ class HttpEngine:
         """
         Run the state machine, consuming the content of a request buffer (rx).
         Unlike individual states, this method does not raise an exception.
-        This method yields on every state transition allowing the calling side
+        This method returns on every state transition allowing the calling side
         to flush the response buffer.
         """
         if self.is_terminated():
             return
         try:
-            while not self.is_terminated():
-                self.state(rx)
-                yield
+            self.state(rx)
         except BufferFullError:
             self.abort(500)
             self.set_response_body(b"Buffer full")

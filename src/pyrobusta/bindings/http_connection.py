@@ -80,7 +80,8 @@ class HttpConnection(BaseConnection):
                 self._engine.set_response_body(b"Read error: " + str(e).encode("ascii"))
 
         # [2] process request by state machine
-        for _ in self._engine.run(self._recv_buf):
+        while True:
+            self._engine.run(self._recv_buf)
             if self._prev_state == self._engine.state:
                 # No state transition occurred, read more data
                 break
