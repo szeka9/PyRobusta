@@ -98,7 +98,7 @@ class MultipartUser(HttpUser):
     @task(1)
     def post_multipart(self):
         """
-        Use the /test/stream route to test multipart request handling,
+        Use the /test/multipart route to test multipart request handling,
         sending multipart requests with multiple parts of specified size.
         """
         part_count = 10
@@ -115,14 +115,15 @@ class MultipartUser(HttpUser):
         multipart_data += b"--boundary--\r\n"
 
         response = self.client.post(
-            "/test/stream",
+            "/test/multipart",
             data=multipart_data,
             headers={"Content-Type": "multipart/form-data; boundary=boundary"},
-            name="/test/stream",
+            name="/test/multipart",
         )
         print(
             self.client.base_url
-            + "/test/stream (multipart; parts=%d, size=%d)" % (part_count, part_size),
+            + "/test/multipart (multipart; parts=%d, size=%d)"
+            % (part_count, part_size),
             response.status_code,
             response.elapsed.total_seconds(),
         )

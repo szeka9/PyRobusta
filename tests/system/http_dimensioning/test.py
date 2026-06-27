@@ -283,7 +283,7 @@ def load_test(config, device_ip):
     try:
         sleep(5)
         usage = requests.get(
-            f"{host}/mem/time-series",
+            f"{host}/heap/time-series",
             verify=False,
             timeout=5,
             headers={"Connection": "close"},
