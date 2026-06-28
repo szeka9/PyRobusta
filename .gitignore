@@ -1,7 +1,8 @@
-venv/**
+venv/
 __pycache__
 pyrobusta.env
 build/
 runtime/
 runtime-test/
 tls/
+tmp/

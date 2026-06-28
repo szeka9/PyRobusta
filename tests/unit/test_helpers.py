@@ -19,7 +19,7 @@ class TestHelpers(unittest.TestCase):
 
     def test_path_normalization_virtual_root(self):
         """
-        Test lexical path normalization in a Unix-port environment
+        Test lexical path normalization in a UNIX-port environment
         with a virtual root. Simulates the situation where the process
         working directory acts as a virtual filesystem root.
         """

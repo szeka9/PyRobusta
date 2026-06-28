@@ -1,41 +1,29 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PyRobusta Home</title>
-    <link rel="stylesheet" href="styles.css">
-</head>
-<body>
+# Introduction
 
-    <h1 id="introduction">Introduction</h1>
+[← Back](index.md)
 
-    <a href="index.html">← Back</a>
+This page provides practical examples for using your server.
 
-    <p class="description">This page provides practical examples for using your server.</p>
+---
 
-    <hr>
+## Table of Contents
 
-    <h2>Table of Contents</h2>
+* [Introduction](#introduction)
+  + [Demo Application](#demo-application)
+  + [Deployment with mpremote](#deployment-with-mpremote)
 
-    <a href="#introduction">Introduction</a><br>
-    ├── <a href="#demo">Demo Application</a><br>
-    └── <a href="#deployment">Deployment with mpremote</a><br>
+---
 
-    <hr>
+## Demo Application
 
-    <h2 id="demo">Demo Application</h2>
-    <div class="description">
-        <p>The following application demonstrates common use cases for handling headers, status codes, query parameters, and wildcard routes.</p>
-        <ol>
-            <li><b>/version</b> returns the version of the application.
-                <br>The server version can optionally be included in the response by setting the detailed query parameter to true.
-            </li>
-            <li><b>/app/version</b> or <b>/server/version</b> returns the designated version string, handled by a single route handler with a wildcard URL.
-            </li>
-        </ol>
-    </div>
-    <textarea readonly="true">
+The following application demonstrates common use cases for handling headers, status codes, query parameters, and wildcard routes.
+
+1. **/version** returns the version of the application.
+
+   The server version can optionally be included in the response by setting the detailed query parameter to true.
+2. **/app/version** or **/server/version** returns the designated version string, handled by a single route handler with a wildcard URL.
+
+```
 # /app.py
 
 import asyncio
@@ -45,7 +33,6 @@ from pyrobusta.protocol.http import HttpEngine
 from pyrobusta.utils.config import PYROBUSTA_VERSION
 
 APP_VERSION = "v0.0.1"
-
 
 @HttpEngine.route("/version", "GET")
 def version(http_ctx, _):
@@ -73,7 +60,6 @@ def version(http_ctx, _):
         version_text += f"server_version: {PYROBUSTA_VERSION}\n"
     return "text/plain", version_text
 
-
 @HttpEngine.route("/{app_or_server}/version", "GET")
 def version(http_ctx, _):
     include_server_version = False
@@ -90,15 +76,14 @@ def version(http_ctx, _):
 
     return "text/plain", f"{version_string}\n"
 
-
 async def main():
     server = http_server.HttpServer()
     asyncio.create_task(server.start_socket_server())
     while True:
         await asyncio.sleep(1)
+```
 
-    </textarea>
-    <textarea readonly="true">
+```
 # /boot.py
 
 # This file is executed on every boot (including wake-boot from deepsleep)
@@ -113,19 +98,21 @@ if connected and not machine.reset_cause() == machine.SOFT_RESET:
         import app
 
         asyncio.run(app.main())
-    </textarea>
+```
 
-    <h2 id="deployment">Deployment with mpremote</h2>
+## Deployment with mpremote
 
-    <p class="description">Perform a soft reset and upload app.py and boot.py using mpremote.</p>
-    <textarea readonly="true">
+Perform a soft reset and upload app.py and boot.py using mpremote.
+
+```
 $ mpremote a0 soft-reset
 $ mpremote a0 cp app.py :/app.py
 $ mpremote a0 cp boot.py :/boot.py
-    </textarea>
+```
 
-    <p class="description">Perform a hard reset to start the application and connect to the REPL.</p>
-    <textarea readonly="true">
+Perform a hard reset to start the application and connect to the REPL.
+
+```
 $ mpremote a0 reset repl
 Connected to MicroPython at /dev/ttyACM0
 ...
@@ -137,10 +124,11 @@ Connected to MicroPython at /dev/ttyACM0
 
 # You can now reach the device at 192.168.1.101 (replace with your IP)
 # Press Ctrl-x to exit
-    </textarea>
+```
 
-    <p class="description">Use curl to test the application.</p>
-    <textarea readonly="true">
+Use curl to test the application.
+
+```
 $ curl "http://192.168.1.101/version"
 app_version: v0.0.1
 
@@ -162,11 +150,8 @@ $ curl -H "Accept: application/json" "http://192.168.1.101/server/version"
 
 $ curl  192.168.1.101/application/version
 Not found
-    </textarea>
+```
 
-    <div class="footer">
-        <hr>
-        <address>PyRobusta v0.7.0 Web Server</address>
-    </div>
-</body>
-</html>
+---
+
+PyRobusta v0.7.0 Web Server
