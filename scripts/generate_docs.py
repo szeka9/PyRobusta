@@ -15,6 +15,11 @@ def clean_output_dir(dst_root: Path):
     """
     Fully remove and recreate the output directory.
     """
+    if not dst_root.is_relative_to(Path.cwd()):
+        raise ValueError("The output must be in the current working directory.")
+    if dst_root == Path("/"):
+        raise ValueError("Invalid path.")
+
     if dst_root.exists():
         shutil.rmtree(dst_root)
     dst_root.mkdir(parents=True, exist_ok=True)
