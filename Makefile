@@ -7,7 +7,7 @@ EXAMPLE_DIR := example/demo_app
 BUILD_DIR := build
 DIST_DIR := dist
 TLS_DIR := tls
-ASSETS_DIR := assets
+DOCS_DIR := docs
 
 PKG := pyrobusta
 
@@ -55,10 +55,7 @@ toolchain:
 .PHONY: build
 build: $(MPY_TARGETS) $(INIT_TARGETS)
 	@mkdir -p $(BUILD_DIR)
-	@if [ -d assets ]; then \
-		echo "Copying assets/ -> $(BUILD_DIR)"; \
-		cp -r assets $(BUILD_DIR)/${PKG}/; \
-	fi
+	$(MAKE) docs
 
 # Compile .py -> .mpy
 $(BUILD_DIR)/%.mpy: $(SRC_DIR)/%.py
@@ -127,22 +124,45 @@ redeploy: clean build clean-device deploy
 # ================================================
 
 # -----------------------------
+# Pre-process documentation
+# -----------------------------
+.PHONY: docs_preprocess
+docs_preprocess:
+	@find docs -type f -name "*.md" -exec \
+		sed -E -i.bak \
+		's/(PyRobusta[[:space:]]).+([[:space:]]Web Server)/\1$(PYROBUSTA_VERSION)\2/' {} \; \
+		&& find docs -name "*.bak" -delete
+
+
+# -----------------------------
+# Build documentation
+# -----------------------------
+.PHONY: docs
+docs: docs_preprocess
+	python3 scripts/generate_docs.py \
+		$(DOCS_DIR)/application_development \
+		$(BUILD_DIR)/$(PKG)/assets/www \
+		--css $(DOCS_DIR)/application_development/styles/style.css
+
+
+# -----------------------------
 # Prepare distribution
 # -----------------------------
 .PHONY: publish
 publish:
 	test -n "$(DIST_DIR)" && rm -rf "$(PWD)/$(DIST_DIR)"
 	mkdir -p "$(PWD)/$(DIST_DIR)"
-	@sed -E -i.bak 's/(PYROBUSTA_VERSION[[:space:]]*=[[:space:]]*)"[^"]*"/\1"$(PYROBUSTA_VERSION)"/' \
+
+	# Bump version in Python source
+	@sed -E -i.bak \
+		's/(PYROBUSTA_VERSION[[:space:]]*=[[:space:]]*)"[^"]*"/\1"$(PYROBUSTA_VERSION)"/' \
 		$(SRC_DIR)/pyrobusta/utils/config.py \
 		&& rm -f $(SRC_DIR)/pyrobusta/utils/config.py.bak
-	@sed -E -i.bak 's/(PyRobusta[[:space:]]).+([[:space:]]Web Server)/\1$(PYROBUSTA_VERSION)\2/' \
-		$(ASSETS_DIR)/www/*.html \
-		&& rm -f $(ASSETS_DIR)/www/*.html.bak
-	$(MAKE) clean
-	$(MAKE) build BUILD_DIR=$(DIST_DIR)
-	scripts/update_package.bash $(DIST_DIR) package.json $(PYROBUSTA_VERSION)
 
+	$(MAKE) clean
+	$(MAKE) build docs BUILD_DIR=$(DIST_DIR)
+
+	scripts/update_package.bash $(DIST_DIR) package.json $(PYROBUSTA_VERSION)
 
 # ================================================
 # Example apps

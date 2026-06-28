@@ -105,8 +105,8 @@ asyncio.run(main())
 # Configuration and Optimization
 
 To fine-tune heap usage and optimize performance, see:
-- [dimensioning guide](./docs/dimensioning/http_dimensioning.md)
-- [configuration settings](./docs/configuration.md)
+- [Dimensioning](./docs/dimensioning/http_dimensioning.md)
+- [Configuration Settings](./docs/application_development/configuration.md)
 
 # Development
 
