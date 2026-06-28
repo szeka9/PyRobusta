@@ -102,6 +102,10 @@ async def main():
 asyncio.run(main())
 ```
 
+Check the [Application Development](./docs/application_development/index.md) guide for
+more details on supported features and practical examples.
+
+
 # Configuration and Optimization
 
 To fine-tune heap usage and optimize performance, see:
@@ -110,5 +114,5 @@ To fine-tune heap usage and optimize performance, see:
 
 # Development
 
-Check the provided development guide to create and deploy custom builds
-to your device: [development guide](./docs/development.md)
+Check the provided [Development](./docs/development.md) guide to create and deploy custom builds
+to your device, as well as running tests and static code checkers.

@@ -3,7 +3,7 @@ DEVICE ?= u0
 
 SRC_DIR := src
 TEST_DIR := tests
-EXAMPLE_DIR := example/demo_app
+APP_DIR := example/demo_app
 BUILD_DIR := build
 DIST_DIR := dist
 TLS_DIR := tls
@@ -30,7 +30,7 @@ DEVICE_NAME := # e.g. ESP32-C3, will be used for report generation
 PT_DIR := tests/system
 
 .PHONY: all
-all: clean toolchain static-checkers unit-test build test-unix deploy deploy-config tls-cert deploy-cert deploy-example
+all: clean toolchain static-checkers unit-test build test-unix deploy deploy-config tls-cert deploy-cert deploy-app
 
 # ================================================
 # Build
@@ -169,11 +169,11 @@ publish:
 # ================================================
 
 # -----------------------------
-# Prepare unix example runtime
+# Prepare UNIX example runtime
 # -----------------------------
-.PHONY: stage-example
-stage-example:
-	@echo "Preparing unix runtime in $(RUNTIME_DIR)"
+.PHONY: stage-app
+stage-app:
+	@echo "Preparing UNIX runtime in $(RUNTIME_DIR)"
 	@rm -rf $(RUNTIME_DIR)
 	@mkdir -p $(RUNTIME_DIR)/lib
 
@@ -181,9 +181,9 @@ stage-example:
 	@cp -r build/pyrobusta $(RUNTIME_DIR)/lib
 	@cp -r build/pyrobusta/assets/www $(RUNTIME_DIR)/
 
-	@echo "Copying example app"
-	@cp $(EXAMPLE_DIR)/app.py $(RUNTIME_DIR)/
-	@cp $(EXAMPLE_DIR)/boot.py $(RUNTIME_DIR)/
+	@echo "Copying app"
+	@cp $(APP_DIR)/app.py $(RUNTIME_DIR)/
+	@cp $(APP_DIR)/boot.py $(RUNTIME_DIR)/
 
 	@echo "Copying TLS certificate"
 	@cp $(TLS_DIR)/cert.der $(RUNTIME_DIR)/
@@ -194,27 +194,27 @@ stage-example:
 	@echo "https_port=4443" >> $(RUNTIME_DIR)/pyrobusta.env
 
 # -----------------------------
-# Run example locally with unix micropython
+# Run app locally with UNIX MicroPython
 # -----------------------------
 .PHONY: run-unix
-run-unix: stage-example
-	@echo "Running example with unix micropython"
+run-unix: stage-app
+	@echo "Running app with UNIX MicroPython"
 	cd $(RUNTIME_DIR) && MICROPYPATH=":.frozen:lib" ../$(MICROPYTHON) app.py
 
 # -----------------------------
-# Deploy example app
+# Deploy application
 # -----------------------------
-.PHONY: deploy-example
-deploy-example:
+.PHONY: deploy-app
+deploy-app:
 	@echo "Uploading boot.py, app.py"
 	@mpremote $(DEVICE) soft-reset
-	mpremote $(DEVICE) cp $(EXAMPLE_DIR)/boot.py :boot.py
-	mpremote $(DEVICE) cp $(EXAMPLE_DIR)/app.py :app.py
+	mpremote $(DEVICE) cp $(APP_DIR)/boot.py :boot.py
+	mpremote $(DEVICE) cp $(APP_DIR)/app.py :app.py
 
 	@echo "Uploading pyrobusta.env"
 	@if [ -f pyrobusta.env ]; then mpremote $(DEVICE) cp pyrobusta.env :pyrobusta.env; fi
 	@mpremote $(DEVICE) reset
-	@echo "\e[32m$(EXAMPLE_DIR) example is successfully deployed, \n"\
+	@echo "\e[32m$(APP_DIR) app is successfully deployed, \n"\
 	"run 'make DEVICE=$(DEVICE) run-device' to restart the device and check the output.\e[0m"
 
 # -----------------------------
@@ -279,7 +279,7 @@ stage-test:
 	@cp tests/functional/*.py $(TEST_RUNTIME)/
 
 # -----------------------------
-# Run functional tests on unix port
+# Run functional tests on UNIX port
 # -----------------------------
 .PHONY: test-unix
 test-unix: TLS_DIR=$(TEST_RUNTIME)
