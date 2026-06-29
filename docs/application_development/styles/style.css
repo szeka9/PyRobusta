@@ -43,9 +43,6 @@ a:hover {
 }
 
 code {
-  background: var(--code-bg);
-  padding: 2px 5px;
-  border-radius: 4px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.9em;
 }
@@ -56,6 +53,16 @@ pre {
   overflow-x: auto;
   border-radius: 6px;
   border: 1px solid var(--border);
+}
+
+:not(pre) > code {
+  background: var(--code-bg);
+  padding: 2px 5px;
+  border-radius: 4px;
+}
+
+pre > code {
+  display: block;
 }
 
 table {

@@ -2,6 +2,8 @@
 
 [← Back](index.md)
 
+This page is work in progress. Refer to the [main page](index.md) for available documentation.
+
 ---
 
 ## Table of Contents
