@@ -2,6 +2,8 @@
 
 [← Back](index.md)
 
+This page is work in progress. Refer to the [main page](index.md) for available documentation.
+
 ---
 
 ## Table of Contents
@@ -11,7 +13,6 @@
   + [Application Initialization](#application-initialization)
   + [Wi-Fi Connectivity](#wi-fi-connectivity)
   + [Keep-alive Connections](#keep-alive-connections)
-  + [Deep Sleep Considerations](#deep-sleep-considerations)
 
 ---
 
@@ -22,8 +23,6 @@
 ## Wi-Fi Connectivity
 
 ## Keep-alive Connections
-
-## Deep Sleep Considerations
 
 ---
 

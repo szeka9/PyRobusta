@@ -2,31 +2,27 @@
 
 [← Back](index.md)
 
+This page is work in progress. Refer to the [main page](index.md) for available documentation.
+
 ---
 
 ## Table of Contents
 
 * [Reference](#reference)
   + [HttpServer](#httpserver)
+  + [HttpConnection](#httpconnection)
   + [HttpEngine](#httpengine)
-  + [HttpContext](#httpcontext)
-  + [Route Decorators](#route-decorators)
-  + [Configuration Options](#configuration-options)
-  + [Environment Variables](#environment-variables)
+  + [Status Codes](#status-codes)
 
 ---
 
 ## HttpServer
 
+## HttpConnection
+
 ## HttpEngine
 
-## HttpContext
-
-## Route Decorators
-
-## Configuration Options
-
-## Environment Variables
+## Status Codes
 
 ---
 

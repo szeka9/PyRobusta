@@ -2,6 +2,8 @@
 
 [← Back](index.md)
 
+This page is work in progress. Refer to the [main page](index.md) for available documentation.
+
 ---
 
 ## Table of Contents
@@ -10,8 +12,6 @@
   + [Memory Configuration](#memory-configuration)
   + [Connection Limits](#connection-limits)
   + [Buffer Sizing](#buffer-sizing)
-  + [Streaming vs Buffered Responses](#streaming-vs-buffered-responses)
-  + [Multipart Memory Usage](#multipart-memory-usage)
 
 ---
 
@@ -20,10 +20,6 @@
 ## Connection Limits
 
 ## Buffer Sizing
-
-## Streaming vs Buffered Responses
-
-## Multipart Memory Usage
 
 ---
 
