@@ -9,7 +9,7 @@ Then continue with the remaining guides in the order listed below.
 
 ## Available Resources
 
-* [Introduction](introduction.md)
+* [Getting Started](introduction.md)
 * [Concepts](concepts.md)
 * [Configuration](configuration.md)
 * [Routing](routing.md)

@@ -3,7 +3,7 @@
 [← Back](index.md)
 
 This chapter introduces the architectural concepts and design principles that underpin PyRobusta.
-Detailed information about configuration, routing, and request handling is covered in the correspondingchapters.
+Detailed information about configuration, routing, and request handling is covered in the corresponding chapters.
 
 ---
 
@@ -28,7 +28,7 @@ long-term reliability on devices with limited RAM.
 ## System Overview
 
 PyRobusta is organized into a small number of runtime components, each with well-defined responsibilities.
-`HttpServer` admits new connections and provisions stream buffers from a shared resource pool.
+`HttpServer` accepts new connections and provisions stream buffers from a shared resource pool.
 `HttpConnection` manages the lifetime of a client connection, including request and response streams and socket I/O.
 `HttpEngine` dispatches requests and ensures protocol correctness with incremental request
 parsing.
@@ -38,7 +38,7 @@ Together, these components isolate networking, protocol processing, and applicat
 flowchart LR
     server["HttpServer<br>(Connection Admission)"] --> con["HttpConnection<br>(Connection Management)<br>"]
     con --> parser["HttpEngine<br>(Request Processing)"]
-    parser --> app["Application Handler"]
+    parser --> app["Route Handler"]
 ```
 
 ### Components
@@ -47,7 +47,7 @@ flowchart LR
 | HttpServer | Connection management, stream buffer provisioning |
 | HttpConnection | Socket I/O, connection lifecycle (keep-alive, timeout) |
 | HttpEngine | Incremental stream parsing, HTTP protocol validation, request routing |
-| Application Handler | Application-specific processing, response generation |
+| Route Handler | Application-specific processing, response generation |
 
 ## Execution Model
 
@@ -56,7 +56,7 @@ PyRobusta is based on the uasyncio I/O scheduler implemented in MicroPython.
 and associates each connection with a `StreamReader` and `StreamWriter` pair for network I/O.
 
 Each client connection executes as an independent asynchronous task, allowing multiple connections
-to make progress concurrently. `HttpServer` maintains the set of active connections and admits
+to make progress concurrently. `HttpServer` maintains the set of active connections and accepts
 new connections until the configured maximum number of concurrent connections is reached. `HttpServer`
 closes idle connections after the configured timeout to reclaim resources. Because each connection is
 processed independently, slow clients do not block unrelated connections. However, requests within
@@ -97,7 +97,7 @@ sequenceDiagram
 PyRobusta ensures bounded memory usage by allocating a fixed number of per-connection stream buffer pairs from
 a shared buffer pool. The maximum number of concurrent connections determines the size of this pool.
 **Because stream buffers have a fixed size, memory usage per connection is bounded. Memory required
-for normal request processing is reserved when a connection is admitted, rather than during request handling.**
+for normal request processing is reserved when a connection is accepted, rather than during request handling.**
 
 For each new connection, the server reserves a request and response stream buffer from the shared buffer pool.
 When all stream buffers are reserved, new connections are blocked until a buffer pair becomes available
@@ -111,8 +111,8 @@ fragmentation, improving memory stability and reducing the risk of runtime alloc
 Memoryviews share the same underlying bytearray with stream buffers used for socket I/O, allowing application code
 to access request bodies without copying the underlying data.
 
-Incremental request parsing requires buffers that support incremental consumption of parsed data while new bytes
-continue to arrive. PyRobusta therefore uses stream buffers designed for incremental processing rather than
+Incremental request parsing requires stream buffers that allow consumed data to be discarded while additional
+bytes continue to arrive. PyRobusta therefore uses stream buffers designed for incremental processing rather than
 fixed byte buffers without consumption semantics.
 
 Request processing is constrained by the size of the per-connection stream buffer. While request lines and header
@@ -130,13 +130,17 @@ processed without buffering the complete request body in memory.**
 ### Ownership
 * Every request is processed by exactly one `HttpConnection`.
 * Every request is dispatched through `HttpEngine`.
-* Connections are admitted only when the required stream buffers are available.
+* Connections are accepted only when the required stream buffers are available.
 * Each active connection owns a dedicated request and response stream buffer.
 
 ### Processing
 * For streaming request bodies, protocol parsing and application callbacks may be interleaved, allowing data to be processed incrementally.
 * Application callbacks are invoked only after the corresponding protocol state has been successfully validated.
 * All protocol errors are converted into HTTP error responses.
+
+### Resource Usage
+* Stream buffers are allocated during server initialization.
+* Memory usage remains bounded by the configured number and size of stream buffers.
 
 Together, these architectural decisions enable PyRobusta to handle HTTP requests with predictable resource usage,
 incremental request processing, and deterministic behavior suitable for resource-constrained embedded systems.
