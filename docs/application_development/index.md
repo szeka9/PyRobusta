@@ -10,6 +10,7 @@ Then continue with the remaining guides in the order listed below.
 ## Available Resources
 
 * [Introduction](introduction.md)
+* [Concepts](concepts.md)
 * [Configuration](configuration.md)
 * [Routing](routing.md)
 * [Request Processing](request.md)

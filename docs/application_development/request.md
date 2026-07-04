@@ -44,13 +44,15 @@ def query_param_handler(http_ctx, _):
     is_detailed = False
 
     if http_ctx.query:
-        is_detailed = http_ctx.get_query_param(
+        param = http_ctx.get_query_param(
             "detailed", default="false"
         ).lower()
 
-        if is_detailed not in ("true", "false"):
+        if param not in ("true", "false"):
             http_ctx.terminate(400)
             return "text/plain", "Invalid query"
+
+        is_detailed = param == "true"
 
     resource = "resource content\n"
     if is_detailed:
@@ -77,7 +79,7 @@ from pyrobusta.protocol.http import HttpEngine
 
 @HttpEngine.route("/app", "GET")
 def app(http_ctx, _):
-    if http_ctx.headers.get("accept", "*/*") == "text/plain":
+    if http_ctx.headers.get("accept", "*/*") in ("text/plain", "*/*"):
         return "text/plain", "App response\n"
     elif http_ctx.headers["accept"] == "application/json":
         return "application/json", {"response": "App response"}

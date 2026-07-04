@@ -5,10 +5,17 @@ from pathlib import Path
 import markdown
 import re
 import shutil
+import subprocess
+import tempfile
+import os
 
 MD_LINK_RE = re.compile(r"\[([^\]]+)\]\(([^)]+\.md(?:#[^)]+)?)\)")
 BUILD_NOTE_RE = re.compile(r"<!--\s*build:note\s+(.*?)\s*-->")
 BUILD_IGNORE_RE = re.compile(r"<!--\s*build:ignore\s*-->")
+MERMAID_RE = re.compile(
+    r"```mermaid\s*\n(.*?)```",
+    re.DOTALL | re.IGNORECASE,
+)
 
 
 def clean_output_dir(dst_root: Path):
@@ -93,6 +100,68 @@ def copy_stylesheet(css_src: Path, dst_root: Path):
     dst_file.write_text(css_src.read_text(encoding="utf-8"), encoding="utf-8")
 
 
+def render_mermaid_svg(source: str) -> str:
+    """
+    Render Mermaid diagram to SVG using official mermaid-cli Docker image.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+
+        in_file = tmp / "diagram.mmd"
+        svg_file = tmp / "diagram.svg"
+        out_file = tmp / "diagram.min.svg"
+
+        svgo_config=tmp / "svgo.config.js"
+        svgo_config.write_text("""
+export default {
+
+  plugins: [
+    "preset-default",
+    "removeMetadata",
+    "removeDesc",
+    "removeTitle"
+  ]
+};
+""")
+        in_file.write_text(source, encoding="utf-8")
+
+        # 1) Render Mermaid → SVG
+        subprocess.run([
+            "docker", "run", "--rm",
+            "-u", f"{os.getuid()}:{os.getgid()}",
+            "-v", f"{tmp}:/data",
+            "minlag/mermaid-cli",
+            "-i", "/data/diagram.mmd",
+            "-o", "/data/diagram.svg",
+        ], check=True)
+
+        # 2) Optimize SVG → minified SVG
+        subprocess.run([
+            "docker", "run", "--rm",
+            "-u", f"{os.getuid()}:{os.getgid()}",
+            "-v", f"{tmp}:/data",
+            "node:22-bookworm",
+            "sh",
+            "-c",
+            """
+            npx -y svgo /data/diagram.svg \
+                -o /data/diagram.min.svg \
+                --multipass --precision=1 \
+                --config=/data/svgo.config.js
+            """
+        ], check=True)
+
+        return out_file.read_text(encoding="utf-8")
+
+def render_mermaid_blocks(md_text: str) -> str:
+
+    def repl(match):
+        diagram = match.group(1)
+        return render_mermaid_svg(diagram)
+
+    return MERMAID_RE.sub(repl, md_text)
+
+
 def convert_file(src_path, src_root, dst_root, stylesheet_name):
     rel_path = src_path.relative_to(src_root)
     out_path = (dst_root / rel_path).with_suffix(".html")
@@ -106,7 +175,10 @@ def convert_file(src_path, src_root, dst_root, stylesheet_name):
     # 2. Rewrite links
     md_text = rewrite_md_links(md_text)
 
-    # 3. Render HTML
+    # 3. Render Mermaid
+    md_text = render_mermaid_blocks(md_text)
+
+    # 4. Render HTML
     html = build_html(md_text, stylesheet_name)
 
     out_path.write_text(html, encoding="utf-8")

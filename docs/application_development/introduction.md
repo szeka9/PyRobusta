@@ -62,14 +62,13 @@ def version(http_ctx, _):
 
 @HttpEngine.route("/{app_or_server}/version", "GET")
 def version(http_ctx, _):
-    include_server_version = False
     resource = http_ctx.path_segment(0)
 
-    if resource not in (b"app", b"server"):
+    if resource not in ("app", "server"):
         http_ctx.terminate(404)
         return "text/plain", "Not found"
 
-    version_string = APP_VERSION if resource == b"app" else PYROBUSTA_VERSION
+    version_string = APP_VERSION if resource == "app" else PYROBUSTA_VERSION
 
     if http_ctx.headers.get("accept") == "application/json":
         return "application/json", {"version": version_string}
