@@ -1,5 +1,5 @@
 {
-  "version": "v0.7.0",
+  "version": "v0.8.0",
   "urls": [
     [
       "pyrobusta/connectivity/wifi.mpy",
@@ -18,12 +18,44 @@
       "github:szeka9/PyRobusta/dist/pyrobusta/transport/connection.mpy"
     ],
     [
+      "pyrobusta/assets/www/style.css",
+      "github:szeka9/PyRobusta/dist/pyrobusta/assets/www/style.css"
+    ],
+    [
+      "pyrobusta/assets/www/request.html",
+      "github:szeka9/PyRobusta/dist/pyrobusta/assets/www/request.html"
+    ],
+    [
       "pyrobusta/assets/www/index.html",
       "github:szeka9/PyRobusta/dist/pyrobusta/assets/www/index.html"
     ],
     [
-      "pyrobusta/assets/www/examples.html",
-      "github:szeka9/PyRobusta/dist/pyrobusta/assets/www/examples.html"
+      "pyrobusta/assets/www/configuration.html",
+      "github:szeka9/PyRobusta/dist/pyrobusta/assets/www/configuration.html"
+    ],
+    [
+      "pyrobusta/assets/www/file_server.html",
+      "github:szeka9/PyRobusta/dist/pyrobusta/assets/www/file_server.html"
+    ],
+    [
+      "pyrobusta/assets/www/introduction.html",
+      "github:szeka9/PyRobusta/dist/pyrobusta/assets/www/introduction.html"
+    ],
+    [
+      "pyrobusta/assets/www/routing.html",
+      "github:szeka9/PyRobusta/dist/pyrobusta/assets/www/routing.html"
+    ],
+    [
+      "pyrobusta/assets/www/concepts.html",
+      "github:szeka9/PyRobusta/dist/pyrobusta/assets/www/concepts.html"
+    ],
+    [
+      "pyrobusta/assets/www/static_content.html",
+      "github:szeka9/PyRobusta/dist/pyrobusta/assets/www/static_content.html"
+    ],
+    [
+      "pyrobusta/assets/www/response.html",
+      "github:szeka9/PyRobusta/dist/pyrobusta/assets/www/response.html"
     ],
     [
       "pyrobusta/utils/helpers.mpy",
@@ -40,6 +72,10 @@
     [
       "pyrobusta/utils/logging.mpy",
       "github:szeka9/PyRobusta/dist/pyrobusta/utils/logging.mpy"
+    ],
+    [
+      "pyrobusta/utils/patch.mpy",
+      "github:szeka9/PyRobusta/dist/pyrobusta/utils/patch.mpy"
     ],
     [
       "pyrobusta/utils/assets.mpy",

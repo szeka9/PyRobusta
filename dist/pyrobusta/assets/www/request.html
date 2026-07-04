@@ -1,0 +1,189 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<h1 id="request-processing">Request Processing</h1>
+<p><a href="index.html">← Back</a></p>
+<p>This page describes how route handlers receive and process incoming HTTP requests.</p>
+<hr />
+<h2 id="table-of-contents">Table of Contents</h2>
+<ul>
+<li><a href="#request-processing">Request Processing</a></li>
+<li><a href="#query-parameters">Query Parameters</a></li>
+<li><a href="#request-headers">Request Headers</a></li>
+<li><a href="#request-bodies">Request Bodies</a></li>
+<li><a href="#streamed-requests">Streamed Requests</a></li>
+<li><a href="#multipart-requests">Multipart Requests</a></li>
+</ul>
+<hr />
+<h2 id="query-parameters">Query Parameters</h2>
+<p>Handler functions take an HTTP context and payload as arguments.
+While handler functions cannot define additional arguments, extra input can be provided
+through query parameters. Query parameters appear after the path component of a URL and
+are introduced by a question mark (?), for example:</p>
+<p><code>http://192.168.1.101/path/to/resource?param-key=param-value</code></p>
+<p>Query parameters use the same encoding rules as the <code>application/x-www-form-urlencoded</code> format.
+Multiple query parameters are separated by the ampersand (&amp;). Percent-encoded characters
+(for example, %2F representing /) are decoded automatically by the server.</p>
+<p>Query parameters can be retrieved using the <code>get_query_param()</code> function, which accepts two
+arguments: the name of the key and an optional default value. The function returns a string
+that can be further processed by the application.</p>
+<pre><code>from pyrobusta.protocol.http import HttpEngine
+
+@HttpEngine.route(&quot;/app/resource&quot;, &quot;GET&quot;)
+def query_param_handler(http_ctx, _):
+    # Handler for /app/resource?detailed=true/false
+
+    is_detailed = False
+
+    param = http_ctx.get_query_param(
+        &quot;detailed&quot;, default=&quot;false&quot;
+    ).lower()
+
+    if param not in (&quot;true&quot;, &quot;false&quot;):
+        http_ctx.terminate(400)
+        return &quot;text/plain&quot;, &quot;Invalid query&quot;
+
+    is_detailed = param == &quot;true&quot;
+
+    resource = &quot;resource content\n&quot;
+    if is_detailed:
+        resource = &quot;detailed &quot; + resource
+
+    return &quot;text/plain&quot;, resource
+</code></pre>
+<h2 id="request-headers">Request Headers</h2>
+<p>Headers received in a request are available in the <code>headers</code> attribute of the HTTP context.
+The <code>headers</code> attribute is a dictionary of key-value pairs. Header names and values are exposed as strings.
+As a convenience, the <code>Content-Length</code> header is automatically converted to an integer because it is frequently used for
+payload size calculations. Headers are normalized to lower case, so the key <code>"Content-Length"</code> is equivalent to the key
+<code>"content-length"</code>.</p>
+<p>Request headers must contain only a subset of US-ASCII characters:</p>
+<ul>
+<li>header names are restricted to letters, digits, hyphens, and underscores</li>
+<li>header values are limited to US-ASCII characters, excluding control characters</li>
+</ul>
+<pre><code>from pyrobusta.protocol.http import HttpEngine
+
+@HttpEngine.route(&quot;/app&quot;, &quot;GET&quot;)
+def app(http_ctx, _):
+    if http_ctx.headers.get(&quot;accept&quot;, &quot;*/*&quot;) in (&quot;text/plain&quot;, &quot;*/*&quot;):
+        return &quot;text/plain&quot;, &quot;App response\n&quot;
+    elif http_ctx.headers[&quot;accept&quot;] == &quot;application/json&quot;:
+        return &quot;application/json&quot;, {&quot;response&quot;: &quot;App response&quot;}
+    raise ValueError(&quot;Unsupported accept header&quot;)
+</code></pre>
+<h2 id="request-bodies">Request Bodies</h2>
+<p>A request payload is passed as the second positional argument of the
+route handler. Unless the request uses streaming or multipart encoding, the payload
+is provided as a memoryview to avoid unnecessary memory allocations. Deserialization must be done
+by the user application.</p>
+<pre><code>import json
+
+from pyrobusta.protocol.http import HttpEngine
+
+@HttpEngine.route(&quot;/app&quot;, &quot;GET&quot;)
+def app(http_ctx, _):
+    return &quot;text/plain&quot;, &quot;GET request without payload&quot;
+
+@HttpEngine.route(&quot;/app&quot;, &quot;POST&quot;)
+def app(http_ctx, payload):
+    data = json.loads(bytes(payload))
+    return &quot;text/plain&quot;, &quot;POST request with payload&quot;
+</code></pre>
+<h2 id="streamed-requests">Streamed Requests</h2>
+<p>PyRobusta supports streaming requests by processing individual
+chunks of the request body as they are received. To enforce bounded memory usage,
+request chunks are processed individually by calling registered route handlers
+for each chunk received. As a result, the application must process the request body
+incrementally rather than assuming the full payload is available at once.</p>
+<pre><code>import pyrobusta.server.http_server as http_server
+from pyrobusta.protocol.http import HttpEngine
+from pyrobusta.utils.helpers import normalize_path
+
+@HttpEngine.route(&quot;/app/chunks&quot;, &quot;POST&quot;)
+def upload_chunks(http_ctx, payload: bytes):
+    &quot;&quot;&quot;
+    Route handler for demonstrating chunked transfer encoding.
+    &quot;&quot;&quot;
+    if not http_ctx.is_chunked():
+        http_ctx.terminate(400)
+        return &quot;text/plain&quot;, &quot;Bad request&quot;
+
+    if payload:
+        # Wait for more chunks before setting response status
+        with open(normalize_path(&quot;/tmp/chunks.txt&quot;), &quot;ab&quot;) as f:
+            f.write(payload)
+        return
+
+    # Last (empty) chunk received
+    http_ctx.terminate(201)
+    return &quot;text/plain&quot;, &quot;OK&quot;
+
+async def main():
+    server = http_server.HttpServer()
+    await server.start_socket_server()
+    while True:
+        await asyncio.sleep(1)
+</code></pre>
+<h2 id="multipart-requests">Multipart Requests</h2>
+<p>Multipart requests allow clients to send multiple data parts within a single HTTP request.
+Multipart requests are delivered to the application one part at a time.
+The same route handler instance is invoked for each multipart segment of the same request.
+Unlike regular request bodies, multipart parts are parsed by the server before being passed
+to the application. Preprocessed parts consist of headers (dictionary) and the raw part body
+(bytes), passed as a tuple.</p>
+<p><strong>Multipart state tracking</strong>
+The HTTP context exposes the boolean attributes
+<code>mp_is_first</code> and
+<code>mp_is_last</code>
+to identify the first and final part of a multipart request. This allows the handler to maintain per-request
+state across multiple parts of the same multipart request.</p>
+<pre><code>&quot;&quot;&quot;
+This example demonstrates end-to-end processing of a multipart
+upload using request-scoped temporary file buffering.
+&quot;&quot;&quot;
+
+import asyncio
+from os import listdir, remove, rename, mkdir
+
+import pyrobusta.server.http_server as http_server
+from pyrobusta.protocol.http import HttpEngine
+from pyrobusta.utils.helpers import normalize_path
+
+@HttpEngine.route(&quot;/app/parts&quot;, &quot;POST&quot;)
+def handle_parts(http_ctx, payload: tuple):
+    if not http_ctx.is_multipart():
+        http_ctx.terminate(400)
+        return &quot;text/plain&quot;, &quot;Multipart request required&quot;
+
+    _part_headers, part_body = payload
+
+    tmp_path = normalize_path(f&quot;/tmp/parts.{http_ctx.id}.txt&quot;)
+    target_path = normalize_path(f&quot;/www/user_data/parts.{http_ctx.id}.txt&quot;)
+
+    with open(tmp_path, &quot;ab&quot;) as f:
+        f.write(part_body)
+
+    # Finalize uploads
+    if http_ctx.mp_is_last:
+        rename(tmp_path, target_path)
+        http_ctx.terminate(201)
+        return &quot;text/plain&quot;, &quot;OK&quot;
+
+async def main():
+    mkdir(normalize_path(&quot;/tmp&quot;))
+    server = http_server.HttpServer()
+    await server.start_socket_server()
+    while True:
+        await asyncio.sleep(1)
+</code></pre>
+<hr />
+<p>PyRobusta v0.8.0 Web Server</p>
+
+</body>
+</html>

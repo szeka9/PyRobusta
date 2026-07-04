@@ -23,4 +23,4 @@ This page is work in progress. Refer to the [main page](index.md) for available 
 
 ---
 
-PyRobusta v0.7.0 Web Server
+PyRobusta v0.8.0 Web Server

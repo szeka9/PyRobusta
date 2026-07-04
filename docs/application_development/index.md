@@ -2,7 +2,7 @@
 <!-- build:note <div class="build-note">The server is running correctly and is ready to serve content.</div> -->
 
 This page collects user guides for configuring the server and developing applications with it.
-If you're new to the project, start with the Introduction, which provides a hands-on application example.
+If you're new to the project, start with the introduction, which provides a hands-on application example.
 Then continue with the remaining guides in the order listed below.
 
 ---
@@ -21,4 +21,4 @@ Then continue with the remaining guides in the order listed below.
 
 ---
 
-PyRobusta v0.7.0 Web Server
+PyRobusta v0.8.0 Web Server

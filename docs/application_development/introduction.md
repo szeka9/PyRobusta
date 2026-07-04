@@ -39,7 +39,7 @@ def version(http_ctx, _):
 
 async def main():
     server = http_server.HttpServer()
-    server.start_socket_server()
+    await server.start_socket_server()
 
     while True:
         await asyncio.sleep(1)
@@ -103,4 +103,4 @@ $ curl -H "Accept: application/json" "http://192.168.1.101/version"
 
 ---
 
-PyRobusta v0.7.0 Web Server
+PyRobusta v0.8.0 Web Server

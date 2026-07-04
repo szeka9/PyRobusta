@@ -14,7 +14,7 @@ except ImportError:
 
 from .helpers import normalize_path
 
-PYROBUSTA_VERSION = "v0.7.0"
+PYROBUSTA_VERSION = "v0.8.0"
 CONFIG_LOCATION = "pyrobusta.env"
 
 # -------------------------------------------
