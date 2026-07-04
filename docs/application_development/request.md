@@ -142,7 +142,7 @@ def upload_chunks(http_ctx, payload: bytes):
 
 async def main():
     server = http_server.HttpServer()
-    asyncio.create_task(server.start_socket_server())
+    await server.start_socket_server()
     while True:
         await asyncio.sleep(1)
 ```
@@ -203,7 +203,7 @@ def handle_parts(http_ctx, payload: tuple):
 
 async def main():
     server = http_server.HttpServer()
-    asyncio.create_task(server.start_socket_server())
+    await server.start_socket_server()
     while True:
         await asyncio.sleep(1)
 ```

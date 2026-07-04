@@ -41,7 +41,7 @@ async def main():
 
             app_multipart.load()
 
-        asyncio.create_task(server.start_socket_server())
+        await server.start_socket_server()
         asyncio.create_task(mem_usage())
 
         while True:

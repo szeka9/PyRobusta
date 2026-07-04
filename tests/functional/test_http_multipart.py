@@ -121,15 +121,15 @@ async def start_server():
     Start an HTTP server as a background task.
     """
     server = http_server.HttpServer()
-    server_task = asyncio.create_task(server.start_socket_server())
+    await server.start_socket_server()
     await asyncio.sleep_ms(100)
-    return server, server_task
+    return server
 
 
 @garbage_collect
 async def test_multipart_response(tls_enabled):
     setup_config(tls_enabled=tls_enabled)
-    server, server_task = await start_server()
+    server = await start_server()
 
     # Test: 1 part
     plain_response = await send_request(
@@ -160,7 +160,6 @@ async def test_multipart_response(tls_enabled):
         [True] * 10,
     )
 
-    server_task.cancel()
     await server.terminate()
 
 
