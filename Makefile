@@ -55,7 +55,6 @@ toolchain:
 .PHONY: build
 build: $(MPY_TARGETS) $(INIT_TARGETS)
 	@mkdir -p $(BUILD_DIR)
-	$(MAKE) docs
 
 # Compile .py -> .mpy
 $(BUILD_DIR)/%.mpy: $(SRC_DIR)/%.py

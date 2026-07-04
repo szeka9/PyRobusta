@@ -53,7 +53,7 @@ def version(http_ctx, _):
 
 async def main():
     server = http_server.HttpServer()
-    asyncio.create_task(server.start_socket_server())
+    await server.start_socket_server()
     while True:
         await asyncio.sleep(1)
 

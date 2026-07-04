@@ -26,29 +26,27 @@ Route handlers may optionally set the status code of the HTTP response.
 If unspecified, the server defaults to HTTP 200. The status code can be overridden
 through the `terminate()` method of the HTTP context.
 
-The `terminate()` method updates the response status code and marks the
-request as complete, but does not interrupt execution. Route handlers should still return
-an appropriate response body.
+The `terminate()` method sets the HTTP status code and transitions the request into a
+terminal state. Execution of the handler continues, but the response is considered
+finalized. Route handlers can still return a response body.
 
 ```
 from pyrobusta.protocol.http import HttpEngine
 
 @HttpEngine.route("/app/{resource}", "GET")
-def inventory_manager(http_ctx, _):
+def handler(http_ctx, _):
     resource = http_ctx.path_segment(1)
 
     if resource == "items":
         # Default HTTP 200
-        return "application/json", ["item-1", "item-2", "item-3"]
+        return "application/json", ["item-1", "item-2"]
 
-    elif resource == "version":
+    if resource == "version":
         # Default HTTP 200
         return "text/plain", "v0.1.0"
 
-    else:
-        # Set 404 status code explicitly
-        http_ctx.terminate(404)
-        return "text/plain", "Not found"
+    http_ctx.terminate(404)
+    return "text/plain", "Resource not found"
 ```
 
 ## Response Headers
@@ -58,44 +56,19 @@ Response headers and response bodies can be configured through methods exposed b
 Alternatively, route handlers may return a `(content_type, body)` tuple.
 
 ```
-import json
-
 from pyrobusta.protocol.http import HttpEngine
 
-config = {"max-items": 5}
-items = set(["apple", "orange", "grapes"])
+@HttpEngine.route("/app", "POST")
+def handler(http_ctx, payload):
+    if not payload:
+        http_ctx.set_response_header(b"x-error", b"empty-payload")
+        http_ctx.terminate(400)
+        return "text/plain", "Missing payload"
 
-@HttpEngine.route("/inventory/{resource}", "POST")
-def inventory_manager(http_ctx, payload):
-    resource = http_ctx.path_segment(1)
+    # Set a custom response header
+    http_ctx.set_response_header(b"x-app-version", b"1.0")
 
-    if resource == "items":
-        if http_ctx.headers.get("content-type") != "text/plain":
-            http_ctx.set_response_header(b"accept-post", b"text/plain")
-            http_ctx.terminate(415)
-            return "text/plain", "Unsupported type"
-        if len(items) >= config["max-items"]:
-            http_ctx.terminate(400)
-            return "text/plain", "Inventory full"
-        items.add(payload.decode())
-        return "text/plain", ", ".join(items)
-
-    elif resource == "config":
-        if http_ctx.headers.get("content-type") != "application/json":
-            http_ctx.set_response_header(b"accept-post", b"application/json")
-            http_ctx.terminate(415)
-            return "text/plain", "Unsupported type"
-        payload_json = json.loads(payload)
-        if any([key not in config for key in payload_json]) or \
-            any([type(value) != type(config[key]) for key, value in payload_json.items()]):
-                http_ctx.terminate(400)
-                return "text/plain", "Invalid config"
-        config.update(payload_json)
-        return "application/json", config
-
-    else:
-        http_ctx.terminate(404)
-        return "text/plain", "Not found"
+    return "text/plain", "Request processed"
 ```
 
 ## Cache Control
@@ -152,7 +125,7 @@ from pyrobusta.server import http_server
 from pyrobusta.protocol.http import HttpEngine
 
 @HttpEngine.route("/stream", "GET")
-def stream(http_ctx, _):
+def stream_handler(http_ctx, _):
 
     def generate_chunks(tx):
         for i in range(10):
@@ -174,7 +147,7 @@ def stream(http_ctx, _):
 
 async def main():
     server = http_server.HttpServer()
-    asyncio.create_task(server.start_socket_server())
+    await server.start_socket_server()
     while True:
         await asyncio.sleep(1)
 ```
@@ -232,7 +205,7 @@ def multipart_handler(http_ctx, _):
 
 async def main():
     server = http_server.HttpServer()
-    asyncio.create_task(server.start_socket_server())
+    await server.start_socket_server()
     while True:
         await asyncio.sleep(1)
 ```

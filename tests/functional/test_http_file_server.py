@@ -119,15 +119,15 @@ async def start_server():
     Start an HTTP server as a background task.
     """
     server = http_server.HttpServer()
-    server_task = asyncio.create_task(server.start_socket_server())
+    await server.start_socket_server()
     await asyncio.sleep_ms(100)
-    return server, server_task
+    return server
 
 
 @garbage_collect
 async def test_fs_path_traversal():
     setup_config(served_paths="/test")
-    server, server_task = await start_server()
+    server = await start_server()
     test_root = normalize_path("/test")
     styles_dir = normalize_path("/test/style")
     fmkdir(test_root)
@@ -182,14 +182,13 @@ async def test_fs_path_traversal():
         )
     finally:
         delete_path(test_root)
-        server_task.cancel()
         await server.terminate()
 
 
 @garbage_collect
 async def test_fs_access_control():
     setup_config(served_paths="/test/allowed")
-    server, server_task = await start_server()
+    server = await start_server()
 
     test_root = normalize_path("/test")
     fmkdir(test_root)
@@ -237,14 +236,13 @@ async def test_fs_access_control():
         )
     finally:
         delete_path(test_root)
-        server_task.cancel()
         await server.terminate()
 
 
 @garbage_collect
 async def test_bulk_file_upload():
     setup_config(http_multipart_enabled=True)
-    server, server_task = await start_server()
+    server = await start_server()
 
     user_data = normalize_path("/www/user_data")
     tmp_dir = normalize_path("/tmp")
@@ -295,14 +293,13 @@ async def test_bulk_file_upload():
     finally:
         delete_path(user_data)
         delete_path(tmp_dir)
-        server_task.cancel()
         await server.terminate()
 
 
 @garbage_collect
 async def test_chunked_file_upload():
     setup_config()
-    server, server_task = await start_server()
+    server = await start_server()
 
     user_data = normalize_path("/www/user_data")
     tmp_dir = normalize_path("/tmp")
@@ -341,7 +338,6 @@ async def test_chunked_file_upload():
     finally:
         delete_path(user_data)
         delete_path(tmp_dir)
-        server_task.cancel()
         await server.terminate()
 
 

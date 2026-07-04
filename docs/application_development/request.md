@@ -43,16 +43,15 @@ def query_param_handler(http_ctx, _):
 
     is_detailed = False
 
-    if http_ctx.query:
-        param = http_ctx.get_query_param(
-            "detailed", default="false"
-        ).lower()
+    param = http_ctx.get_query_param(
+        "detailed", default="false"
+    ).lower()
 
-        if param not in ("true", "false"):
-            http_ctx.terminate(400)
-            return "text/plain", "Invalid query"
+    if param not in ("true", "false"):
+        http_ctx.terminate(400)
+        return "text/plain", "Invalid query"
 
-        is_detailed = param == "true"
+    is_detailed = param == "true"
 
     resource = "resource content\n"
     if is_detailed:
@@ -142,28 +141,34 @@ def upload_chunks(http_ctx, payload: bytes):
 
 async def main():
     server = http_server.HttpServer()
-    asyncio.create_task(server.start_socket_server())
+    await server.start_socket_server()
     while True:
         await asyncio.sleep(1)
 ```
 
 ## Multipart Requests
 
-Multipart requests allow clients to send composite payloads with
-the option of varying content metadata or multiple resources in a single request.
-Similar to streamed requests, multipart requests are processed one part at a time.
-The route handler is invoked once for each part. Unlike regular request bodies, multipart
-parts are parsed by the server before being passed to the application. Peprocessed parts
-consist of headers (dictionary) and the raw part body (bytes), passed as a tuple.
+Multipart requests allow clients to send multiple data parts within a single HTTP request.
+Multipart requests are delivered to the application one part at a time.
+The same route handler instance is invoked for each multipart segment of the same request.
+Unlike regular request bodies, multipart parts are parsed by the server before being passed
+to the application. Preprocessed parts consist of headers (dictionary) and the raw part body
+(bytes), passed as a tuple.
 
 **Multipart state tracking**
 The HTTP context exposes the boolean attributes
 `mp_is_first` and
 `mp_is_last`
-to identify the first and final part of a multipart request. This allows stateful processing
-of multiple parts belonging to the same request.
+to identify the first and final part of a multipart request. This allows the handler to maintain per-request
+state across multiple parts of the same multipart request.
 
 ```
+"""
+This example demonstrates end-to-end processing of a multipart
+upload using request-scoped temporary file buffering.
+"""
+
+import asyncio
 from os import listdir, remove, rename, mkdir
 
 import pyrobusta.server.http_server as http_server
@@ -172,25 +177,14 @@ from pyrobusta.utils.helpers import normalize_path
 
 @HttpEngine.route("/app/parts", "POST")
 def handle_parts(http_ctx, payload: tuple):
-    """
-    Route handler for demonstrating multipart processing.
-    """
     if not http_ctx.is_multipart():
         http_ctx.terminate(400)
-        return "text/plain", "Bad request"
+        return "text/plain", "Multipart request required"
 
-    part_headers, part_body = payload
+    _part_headers, part_body = payload
 
-    tmp_dir = normalize_path("/tmp")
-    tmp_path = normalize_path("/tmp/parts.txt")
-    target_path = normalize_path("/www/user_data/parts.txt")
-
-    # Clean stale partial uploads
-    if http_ctx.mp_is_first:
-        if not "tmp" in listdir(normalize_path("/")):
-            mkdir(tmp_dir)
-        if "parts.txt" in listdir(tmp_dir):
-            remove(tmp_path)
+    tmp_path = normalize_path(f"/tmp/parts.{http_ctx.id}.txt")
+    target_path = normalize_path(f"/www/user_data/parts.{http_ctx.id}.txt")
 
     with open(tmp_path, "ab") as f:
         f.write(part_body)
@@ -202,8 +196,9 @@ def handle_parts(http_ctx, payload: tuple):
         return "text/plain", "OK"
 
 async def main():
+    mkdir(normalize_path("/tmp"))
     server = http_server.HttpServer()
-    asyncio.create_task(server.start_socket_server())
+    await server.start_socket_server()
     while True:
         await asyncio.sleep(1)
 ```

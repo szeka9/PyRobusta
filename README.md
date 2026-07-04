@@ -54,7 +54,7 @@ from pyrobusta.server.http_server import HttpServer
 
 async def main():
     server = HttpServer()
-    asyncio.create_task(server.start_socket_server())
+    server.start_socket_server()
     while True:
         await asyncio.sleep(1)
 
@@ -95,7 +95,7 @@ def mem_usage(http_ctx, _):
 
 async def main():
     server = http_server.HttpServer()
-    asyncio.create_task(server.start_socket_server())
+    server.start_socket_server()
     while True:
         await asyncio.sleep(1)
 

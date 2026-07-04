@@ -3,7 +3,7 @@ import ssl
 import json
 import gc
 
-from os import mkdir, remove, rmdir, stat, listdir
+from os import mkdir, remove, rmdir, listdir
 
 from pyrobusta.server import http_server
 from pyrobusta.protocol.http import HttpEngine
@@ -126,15 +126,15 @@ async def start_server():
     Start an HTTP server as a background task
     """
     server = http_server.HttpServer()
-    server_task = asyncio.create_task(server.start_socket_server())
+    await server.start_socket_server()
     await asyncio.sleep_ms(100)
-    return server, server_task
+    return server
 
 
 @garbage_collect
 async def test_simple_response(tls_enabled):
     setup_config(tls_enabled=tls_enabled)
-    server, server_task = await start_server()
+    server = await start_server()
 
     try:
         # Test: text/plain
@@ -177,14 +177,13 @@ async def test_simple_response(tls_enabled):
             True,
         )
     finally:
-        server_task.cancel()
         await server.terminate()
 
 
 @garbage_collect
 async def test_server_busy():
     setup_config()
-    server, server_task = await start_server()
+    server = await start_server()
 
     try:
         plain_response = await send_request(
@@ -198,7 +197,6 @@ async def test_server_busy():
             True,
         )
     finally:
-        server_task.cancel()
         await server.terminate()
 
 
@@ -206,7 +204,7 @@ async def test_server_busy():
 async def test_chunked_transfer_encoding():
     setup_config()
     create_chunked_route_handler("/test/chunked")
-    server, server_task = await start_server()
+    server = await start_server()
 
     try:
         json_response = await send_request(
@@ -226,14 +224,13 @@ async def test_chunked_transfer_encoding():
             ["chunking\r\ntest\r\ncase", "chunking\r\ntest", "chunking"],
         )
     finally:
-        server_task.cancel()
         await server.terminate()
 
 
 @garbage_collect
 async def test_fs_access_control():
     setup_config(served_paths="/www/test/allowed")
-    server, server_task = await start_server()
+    server = await start_server()
     www_root = normalize_path("/www")
     test_root = normalize_path("/www/test")
     fmkdir(www_root)
@@ -282,14 +279,13 @@ async def test_fs_access_control():
         )
     finally:
         delete_path(test_root)
-        server_task.cancel()
         await server.terminate()
 
 
 @garbage_collect
 async def test_keepalive():
     setup_config()
-    server, server_task = await start_server()
+    server = await start_server()
 
     try:
         # ----------------------------------
@@ -367,7 +363,6 @@ async def test_keepalive():
             1,
         )
     finally:
-        server_task.cancel()
         await server.terminate()
 
 
