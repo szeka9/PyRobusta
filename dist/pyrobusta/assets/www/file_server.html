@@ -1,0 +1,145 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<h1 id="file-server-api">File Server API</h1>
+<p><a href="index.html">← Back</a></p>
+<p>This API provides file management capabilities, allowing clients to upload,
+retrieve, and manage files through various HTTP methods.
+<code>http_files_api</code> must be set to <code>True</code> in
+<code>pyrobusta.env</code> to enable this API.</p>
+<hr />
+<h2 id="table-of-contents">Table of Contents</h2>
+<ul>
+<li><a href="#file-server-api">File Server API</a></li>
+<li><a href="#summary">Summary</a></li>
+<li><a href="#file-retrieval-listing">File Retrieval</a></li>
+<li><a href="#file-upload-overwrite">File Upload / Overwrite</a></li>
+<li><a href="#bulk-file-upload">Bulk File Upload</a></li>
+<li><a href="#file-delete">File Delete</a></li>
+</ul>
+<hr />
+<h2 id="summary">Summary</h2>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET</code></td>
+<td><code>/files/{path}</code></td>
+<td>Lists or retrieves metadata about files.</td>
+</tr>
+<tr>
+<td><code>PUT</code></td>
+<td><code>/files/{file path}</code></td>
+<td>Uploads or overwrites a file at the specified path.</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/files</code></td>
+<td>Uploads multiple files in multipart/form-data.</td>
+</tr>
+<tr>
+<td><code>DELETE</code></td>
+<td><code>/files/{file path}</code></td>
+<td>Deletes a file at the specified path.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="file-retrieval-listing">File Retrieval / Listing</h2>
+<p><strong>Endpoint:</strong> <code>GET /files/{path}</code></p>
+<p>This method allows general file system interaction, enabling operations
+such as listing directory contents, retrieving metadata, and downloading
+files.</p>
+<ul>
+<li><strong>Method:</strong> <code>GET</code></li>
+<li><strong>Path:</strong> <code>/files/{path}</code></li>
+<li><strong>Success Response:</strong> <code>200 OK</code></li>
+</ul>
+<h3 id="example-request">Example Request</h3>
+<pre><code>$ curl 192.168.1.100/files/www
+[
+    {&quot;path&quot;: &quot;/www/examples.html&quot;, &quot;created&quot;: &quot;90&quot;, &quot;size&quot;: &quot;4507&quot;},
+    {&quot;path&quot;: &quot;/www/index.html&quot;, &quot;created&quot;: &quot;91&quot;, &quot;size&quot;: &quot;1198&quot;}
+]
+</code></pre>
+<h2 id="file-upload-overwrite">File Upload / Overwrite</h2>
+<p><strong>Endpoint:</strong> <code>PUT /files/{file path}</code></p>
+<p>This method uploads a file or overwrites an existing file at a specific
+path. The upload path is restricted to
+<code>/www/user_data</code>.</p>
+<ul>
+<li><strong>Method:</strong> <code>PUT</code></li>
+<li><strong>Path:</strong> <code>/files/{file path}</code></li>
+<li><strong>Body:</strong> Raw file content (binary or text).</li>
+<li><strong>Success Response:</strong> <code>201 Created</code></li>
+<li><strong>Notes:</strong>
+  <code>transfer-encoding: chunked</code> is supported.</li>
+</ul>
+<h3 id="example-request_1">Example Request</h3>
+<pre><code>$ curl -X PUT --data 'This is a test.' \
+http://192.168.1.100/files/www/user_data/test.txt
+OK
+
+$ curl 192.168.1.100/files/www/user_data/test.txt
+This is a test.
+</code></pre>
+<h2 id="bulk-file-upload">Bulk File Upload</h2>
+<p><strong>Endpoint:</strong> <code>POST /files</code></p>
+<p>This method handles general file uploads, designed for uploading multiple
+files with per-file chunking supported. Only
+<code>multipart/form-data</code> is accepted.</p>
+<p>Uploads are restricted to <code>/www/user_data</code>. The
+<code>Content-Disposition</code> header only needs to specify the file
+name; the upload directory is prepended automatically.</p>
+<p><code>http_multipart</code> must be set to <code>True</code> in the
+configuration to use this method.</p>
+<ul>
+<li><strong>Method:</strong> <code>POST</code></li>
+<li><strong>Path:</strong> <code>/files</code></li>
+<li><strong>Body:</strong>
+  File content encapsulated in multipart/form-data.</li>
+<li><strong>Success Response:</strong> <code>201 Created</code></li>
+</ul>
+<h3 id="example-request_2">Example Request</h3>
+<pre><code>$ echo &quot;File 1 content&quot; &gt; /tmp/upload-1.txt
+$ echo &quot;File 2 content&quot; &gt; /tmp/upload-2.txt
+
+$ curl -X POST \
+    --form file1='@/tmp/upload-1.txt' \
+    --form file2='@/tmp/upload-2.txt' \
+    http://192.168.1.100/files
+
+$ curl 192.168.1.100/files/www/user_data
+[
+    {&quot;path&quot;: &quot;/www/user_data/upload-1.txt&quot;, &quot;created&quot;: &quot;418&quot;, &quot;size&quot;: &quot;15&quot;},
+    {&quot;path&quot;: &quot;/www/user_data/upload-2.txt&quot;, &quot;created&quot;: &quot;418&quot;, &quot;size&quot;: &quot;15&quot;}
+]
+</code></pre>
+<h2 id="file-delete">File Delete</h2>
+<p><strong>Endpoint:</strong> <code>DELETE /files/{file path}</code></p>
+<p>This method deletes a file at a specific path. The path is restricted to
+<code>/www/user_data</code>.</p>
+<ul>
+<li><strong>Method:</strong> <code>DELETE</code></li>
+<li><strong>Path:</strong> <code>/files/{file path}</code></li>
+<li><strong>Success Response:</strong> <code>204 No Content</code></li>
+</ul>
+<h3 id="example-request_3">Example Request</h3>
+<pre><code>$ curl -X DELETE \
+192.168.1.100/files/www/user_data/test.txt
+</code></pre>
+<hr />
+<p>PyRobusta v0.8.0 Web Server</p>
+
+</body>
+</html>

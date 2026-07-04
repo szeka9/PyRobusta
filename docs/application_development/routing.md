@@ -148,4 +148,4 @@ def enable_sensor(http_ctx, enabled):
 
 ---
 
-PyRobusta v0.7.0 Web Server
+PyRobusta v0.8.0 Web Server

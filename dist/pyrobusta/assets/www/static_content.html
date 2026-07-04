@@ -1,0 +1,112 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<h1 id="static-content">Static Content</h1>
+<p><a href="index.html">← Back</a></p>
+<p>PyRobusta serves static content directly from the filesystem. This page
+describes the directory structure, file resolution rules, and MIME type
+handling used by the server.</p>
+<hr />
+<h2 id="table-of-contents">Table of Contents</h2>
+<ul>
+<li><a href="#static-content">Static Content</a></li>
+<li><a href="#static-file-serving">Static File Serving</a></li>
+<li><a href="#directory-structure">Directory Structure</a></li>
+<li><a href="#mime-type-handling">MIME Type Handling</a></li>
+</ul>
+<hr />
+<h2 id="static-file-serving">Static File Serving</h2>
+<p>Files stored under <code>/www</code> are served as static content.
+Requests to the server root (<code>/</code>) return the default landing page (<code>index.html</code>).
+For static content requests, the server automatically prepends <code>/www</code> to the requested path before
+resolving the corresponding file on the filesystem.</p>
+<p>When the file management API is enabled (<code>http_files_api=True</code>),
+additional filesystem locations can be exposed through the <code>http_served_paths</code>
+configuration option. See the <a href="configuration.html">Server Configuration</a>
+and <a href="file_server.html">File Server API</a> guide for additional details.</p>
+<h2 id="directory-structure">Directory Structure</h2>
+<pre><code>root/
+├── www                     document root for static content
+│   ├── index.html
+│   ├── introduction.html
+│   ├── ...
+│   └── user_data           root for user uploads
+│       └── ...
+├── lib                     root for installed MIP packages
+│   ├── pyrobusta
+│   │   ├── bindings
+│   │   ├── connectivity
+│   │   └── ...
+│   └── &lt;other packages&gt;
+├── cert.der                TLS certificate
+└── key.der                 TLS key
+</code></pre>
+<h2 id="mime-type-handling">MIME Type Handling</h2>
+<p>PyRobusta automatically determines the <code>Content-Type</code> header for
+static files based on their filename extension. The selected content type depends on the file extension.
+Unknown extensions are mapped to <code>application/octet-stream</code>.
+The following mapping between extensions and content types is maintained by the server:</p>
+<table>
+<thead>
+<tr>
+<th>Extension</th>
+<th>Content-Type header</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>.html</td>
+<td>text/html</td>
+</tr>
+<tr>
+<td>.css</td>
+<td>text/css</td>
+</tr>
+<tr>
+<td>.js</td>
+<td>application/javascript</td>
+</tr>
+<tr>
+<td>.json</td>
+<td>application/json</td>
+</tr>
+<tr>
+<td>.ico</td>
+<td>image/x-icon</td>
+</tr>
+<tr>
+<td>.jpeg</td>
+<td>image/jpeg</td>
+</tr>
+<tr>
+<td>.jpg</td>
+<td>image/jpeg</td>
+</tr>
+<tr>
+<td>.png</td>
+<td>image/png</td>
+</tr>
+<tr>
+<td>.txt</td>
+<td>text/plain</td>
+</tr>
+<tr>
+<td>.gif</td>
+<td>image/gif</td>
+</tr>
+<tr>
+<td>.raw, unknown extensions</td>
+<td>application/octet-stream</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<p>PyRobusta v0.8.0 Web Server</p>
+
+</body>
+</html>

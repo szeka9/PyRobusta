@@ -1,0 +1,94 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<h1 id="getting-started">Getting Started</h1>
+<p><a href="index.html">← Back</a></p>
+<p>This page provides practical examples for using your server.</p>
+<hr />
+<h2 id="table-of-contents">Table of Contents</h2>
+<ul>
+<li><a href="#getting-started">Getting Started</a></li>
+<li><a href="#demo-application">Demo Application</a></li>
+<li><a href="#deployment-with-mpremote">Deployment with mpremote</a></li>
+</ul>
+<hr />
+<h2 id="demo-application">Demo Application</h2>
+<p>The following application demonstrates the basic structure of a PyRobusta application, including route registration,
+response generation, and server initialization. The application implements a simple HTTP API that returns the application version.
+The example includes boot.py, which starts the application, and app.py, which registers routes and starts the HTTP server.</p>
+<pre><code>import asyncio
+
+from pyrobusta.server import http_server
+from pyrobusta.protocol.http import HttpEngine
+
+APP_VERSION = &quot;v0.1.0&quot;
+
+@HttpEngine.route(&quot;/version&quot;, &quot;GET&quot;)
+def version(http_ctx, _):
+    if http_ctx.headers.get(&quot;accept&quot;) == &quot;application/json&quot;:
+        return &quot;application/json&quot;, {
+            &quot;version&quot;: APP_VERSION
+        }
+
+    return &quot;text/plain&quot;, f&quot;{APP_VERSION}\n&quot;
+
+async def main():
+    server = http_server.HttpServer()
+    await server.start_socket_server()
+
+    while True:
+        await asyncio.sleep(1)
+</code></pre>
+<pre><code># /boot.py
+# This file is executed on every boot
+
+import machine
+from os import listdir
+
+from pyrobusta.connectivity import wifi
+
+connected = wifi.initialize()
+if connected and not machine.reset_cause() == machine.SOFT_RESET:
+    if &quot;app.py&quot; in listdir():
+        import app
+
+        asyncio.run(app.main())
+</code></pre>
+<p>In the example, <code>boot.py</code> conditionally starts the server when no REPL session is active.
+This allows <code>mpremote</code> to connect after a soft reset and upload files during development.</p>
+<h2 id="deployment-with-mpremote">Deployment with mpremote</h2>
+<p>Perform a soft reset and upload app.py and boot.py using <code>mpremote</code>.</p>
+<pre><code>$ mpremote a0 soft-reset
+$ mpremote a0 cp app.py :/app.py
+$ mpremote a0 cp boot.py :/boot.py
+</code></pre>
+<p>Perform a hard reset to start the application and connect to the REPL.</p>
+<pre><code>$ mpremote a0 reset repl
+Connected to MicroPython at /dev/ttyACM0
+...
+[INFO] pyrobusta.con.wifi: network b'Home-Wi-Fi' found!
+[INFO] pyrobusta.con.wifi: connected, available at 192.168.1.101
+[WARN] pyrobusta.server.http_server.init_pools: low-memory mode with reduced buffer size
+[INFO] pyrobusta.server.http_server.init_pools: 2 connection(s) allowed
+[INFO] pyrobusta.server.http_server: started
+
+# You can now reach the device at 192.168.1.101 (replace with your IP)
+# Press Ctrl-x to exit
+</code></pre>
+<p>Use curl to test the application.</p>
+<pre><code>$ curl &quot;http://192.168.1.101/version&quot;
+v0.1.0
+
+$ curl -H &quot;Accept: application/json&quot; &quot;http://192.168.1.101/version&quot;
+{&quot;version&quot;: &quot;v0.1.0&quot;}
+</code></pre>
+<hr />
+<p>PyRobusta v0.8.0 Web Server</p>
+
+</body>
+</html>

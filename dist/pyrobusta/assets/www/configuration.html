@@ -1,0 +1,131 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<h1 id="configuration">Configuration</h1>
+<p><a href="index.html">← Back</a></p>
+<p>This page documents PyRobusta configuration options,
+configuration deployment using <code>mpremote</code>,
+and runtime access to configuration values through the
+configuration API.</p>
+<hr />
+<h2 id="table-of-contents">Table of Contents</h2>
+<ul>
+<li><a href="#configuration">Configuration</a></li>
+<li><a href="#configuration-format-deployment">Configuration Format &amp; Deployment</a></li>
+<li><a href="#parameter-description">Parameter Description</a></li>
+<li><a href="#configuration-api">Configuration API</a></li>
+</ul>
+<hr />
+<h2 id="configuration-format-deployment">Configuration Format &amp; Deployment</h2>
+<p>Configuration overrides can be provided through <code>pyrobusta.env</code>, using standard <code>.env</code> syntax.
+<code>pyrobusta.env</code> must be stored in the server root. Inline comments are supported using <code>#</code>.</p>
+<pre><code># /pyrobusta.env - Example configuration
+
+socket_max_con=2        # allow two simultaneous socket connections
+http_multipart=False    # turn off multipart parser to lower heap usage
+http_mem_cap=0.05       # limit heap usage of stream buffers to 5% of the total heap
+tls=False               # turn off TLS
+</code></pre>
+<p>Perform a soft reset and upload <code>pyrobusta.env</code> using mpremote.</p>
+<pre><code>$ mpremote a0 soft-reset
+$ mpremote a0 cp pyrobusta.env :/pyrobusta.env
+</code></pre>
+<h2 id="parameter-description">Parameter Description</h2>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>wifi_ssid</code></td>
+<td>Name of the Wi-Fi network. When empty, Wi-Fi is not initialized by the built-in <code>wifi.py</code> module.</td>
+<td>None</td>
+</tr>
+<tr>
+<td><code>wifi_password</code></td>
+<td>Password of the Wi-Fi network. When empty, Wi-Fi is not initialized by the built-in <code>wifi.py</code> module.</td>
+<td>None</td>
+</tr>
+<tr>
+<td><code>http_port</code></td>
+<td>Port number for HTTP.</td>
+<td>80</td>
+</tr>
+<tr>
+<td><code>https_port</code></td>
+<td>Port number for HTTPS.</td>
+<td>443</td>
+</tr>
+<tr>
+<td><code>http_multipart</code></td>
+<td>Enables or disables multipart request and response processing. Enabling multipart support increases memory usage.</td>
+<td>False</td>
+</tr>
+<tr>
+<td><code>http_mem_cap</code></td>
+<td>Fraction of available heap memory reserved for stream buffers. Valid range: (0, 1].</td>
+<td>0.1</td>
+</tr>
+<tr>
+<td><code>http_served_paths</code></td>
+<td>Space-separated list of filesystem paths that may be served over HTTP.</td>
+<td><code>/www /lib/pyrobusta</code></td>
+</tr>
+<tr>
+<td><code>http_files_api</code></td>
+<td>Enables or disables the file management API endpoint (<code>/files</code>), allowing upload, download, and listing of files.</td>
+<td>False</td>
+</tr>
+<tr>
+<td><code>socket_max_con</code></td>
+<td>Maximum number of simultaneous socket connections.</td>
+<td>2</td>
+</tr>
+<tr>
+<td><code>tls</code></td>
+<td>Enables or disables TLS. When enabled, <code>cert.der</code> and <code>key.der</code> must be installed at the server root.</td>
+<td>False</td>
+</tr>
+<tr>
+<td><code>log_level</code></td>
+<td>Logging level. Can be one of: <code>warning</code>, <code>info</code>, <code>debug</code>.</td>
+<td>info</td>
+</tr>
+</tbody>
+</table>
+<h2 id="configuration-api">Configuration API</h2>
+<p>Configuration values can be accessed through the
+<code>pyrobusta.utils.config</code> module.
+Values are loaded from <code>pyrobusta.env</code> during server initialization.
+Configuration values can be retrieved using
+<code>get_config()</code> together with one of the
+predefined <code>CONF_*</code> constants.</p>
+<p>After initialization, configuration values are retrieved from an internal cache.
+The cached values are normalized to their expected runtime types to avoid repeated
+parsing of environment strings.</p>
+<p>Configuration values are treated as immutable during runtime.
+Changes are applied only when the configuration cache is reloaded.
+The configuration cache can be reloaded by calling
+<code>read_config()</code>, which re-reads <code>pyrobusta.env</code>
+and rebuilds the internal normalized cache.</p>
+<pre><code>from pyrobusta.utils.config import get_config, CONF_TLS
+
+@HttpEngine.route(&quot;/tls&quot;, &quot;GET&quot;)
+def tls_status(http_ctx, _):
+    enabled = get_config(CONF_TLS)
+    return &quot;text/plain&quot;, f&quot;TLS enabled: {enabled}&quot;
+</code></pre>
+<hr />
+<p>PyRobusta v0.8.0 Web Server</p>
+
+</body>
+</html>

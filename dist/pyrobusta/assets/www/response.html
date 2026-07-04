@@ -1,0 +1,213 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<h1 id="response-processing">Response Processing</h1>
+<p><a href="index.html">← Back</a></p>
+<p>Response processing controls how route handlers construct HTTP responses.
+This includes setting status codes, configuring response headers, serializing response bodies,
+and generating streamed or multipart responses.</p>
+<hr />
+<h2 id="table-of-contents">Table of Contents</h2>
+<ul>
+<li><a href="#response-processing">Response Processing</a></li>
+<li><a href="#status-codes">Status Codes</a></li>
+<li><a href="#response-headers">Response Headers</a></li>
+<li><a href="#cache-control">Cache Control</a></li>
+<li><a href="#content-types-serialization">Content Types &amp; Serialization</a></li>
+<li><a href="#streamed-responses">Streamed Responses</a></li>
+<li><a href="#streamed-multipart-responses">Streamed Multipart Responses</a></li>
+</ul>
+<hr />
+<h2 id="status-codes">Status Codes</h2>
+<p>Route handlers may optionally set the status code of the HTTP response.
+If unspecified, the server defaults to HTTP 200. The status code can be overridden
+through the <code>terminate()</code> method of the HTTP context.</p>
+<p>The <code>terminate()</code> method sets the HTTP status code and transitions the request into a
+terminal state. Execution of the handler continues, but the response is considered
+finalized. Route handlers can still return a response body.</p>
+<pre><code>from pyrobusta.protocol.http import HttpEngine
+
+@HttpEngine.route(&quot;/app/{resource}&quot;, &quot;GET&quot;)
+def handler(http_ctx, _):
+    resource = http_ctx.path_segment(1)
+
+    if resource == &quot;items&quot;:
+        # Default HTTP 200
+        return &quot;application/json&quot;, [&quot;item-1&quot;, &quot;item-2&quot;]
+
+    if resource == &quot;version&quot;:
+        # Default HTTP 200
+        return &quot;text/plain&quot;, &quot;v0.1.0&quot;
+
+    http_ctx.terminate(404)
+    return &quot;text/plain&quot;, &quot;Resource not found&quot;
+</code></pre>
+<h2 id="response-headers">Response Headers</h2>
+<p>Response headers and response bodies can be configured through methods exposed by the HTTP context
+(<code>set_response_header()</code>, <code>set_response_body()</code>).
+Alternatively, route handlers may return a <code>(content_type, body)</code> tuple.</p>
+<pre><code>from pyrobusta.protocol.http import HttpEngine
+
+@HttpEngine.route(&quot;/app&quot;, &quot;POST&quot;)
+def handler(http_ctx, payload):
+    if not payload:
+        http_ctx.set_response_header(b&quot;x-error&quot;, b&quot;empty-payload&quot;)
+        http_ctx.terminate(400)
+        return &quot;text/plain&quot;, &quot;Missing payload&quot;
+
+    # Set a custom response header
+    http_ctx.set_response_header(b&quot;x-app-version&quot;, b&quot;1.0&quot;)
+
+    return &quot;text/plain&quot;, &quot;Request processed&quot;
+</code></pre>
+<h2 id="cache-control">Cache Control</h2>
+<p>PyRobusta implements a simple caching policy.
+Unless overridden by the application, all HTTP responses include the
+header <code>Cache-Control: no-store</code>.
+Conditional requests and cache validation mechanisms are not supported.
+This includes <code>ETag</code>, <code>Last-Modified</code>,
+<code>If-None-Match</code>, and <code>If-Modified-Since</code>.
+This design reduces implementation complexity and avoids additional
+filesystem metadata lookups on resource-constrained devices.</p>
+<h2 id="content-types-serialization">Content Types &amp; Serialization</h2>
+<p>PyRobusta can automatically serialize a limited set of built-in types and data structures.
+Unsupported types must be serialized by the application before being returned as either a string or a bytes-like
+object. The following response body types are currently supported:</p>
+<ul>
+<li><code>str</code></li>
+<li>bytes-like: <code>bytes</code>, <code>bytearray</code>, <code>memoryview</code></li>
+<li>data structures: <code>dict</code>, <code>tuple</code>, <code>list</code></li>
+</ul>
+<p>For non-streamed responses, the entire response body must exist in memory before it is
+transmitted. As a result, the maximum response size is limited by the available heap. In the meantime, a
+response buffer has a fixed size depending on the configuration. Internally, response bodies are wrapped
+in a <code>BytesIO</code> object so that both fixed-size and streamed responses can be written through the same
+buffer-oriented interface. Each response body returned by a route handler has a known size, allowing the
+content-length header to be filled by the server.</p>
+<h2 id="streamed-responses">Streamed Responses</h2>
+<p>Responses can be streamed in chunks when the application cannot determine the size of the response body in advance.
+Such responses must use chunked transfer encoding, indicated by the <code>Transfer-Encoding</code> header. With chunked encoding,
+the <code>Content-Length</code> header must be omitted; instead the size of each chunk must be indicated as the chunks are sent.
+The server automatically generates the required chunk metadata.</p>
+<p>When chunked transfer encoding is enabled, the server automatically generates the required encoding format.
+The application must assign a generator function to <code>http_ctx.resp_handler</code>. The server then invokes the generator
+when data is ready to be transmitted. The generator may be resumed multiple times until the stream is complete.
+The following requirements must be fulfilled by the generator:</p>
+<ol>
+<li>the generator function must accept a single response buffer argument (<code>tx</code>) used to write response data</li>
+<li>the generator yields <code>False</code> after producing a chunk while additional data remains</li>
+<li>the generator yields <code>True</code> exactly once to indicate that the stream is complete</li>
+<li>the generator verifies the writable capacity of the buffer and
+   writes at most that much data to the buffer before yielding</li>
+</ol>
+<pre><code># /app.py
+import asyncio
+
+from pyrobusta.server import http_server
+from pyrobusta.protocol.http import HttpEngine
+
+@HttpEngine.route(&quot;/stream&quot;, &quot;GET&quot;)
+def stream_handler(http_ctx, _):
+
+    def generate_chunks(tx):
+        for i in range(10):
+            data = b&quot;data: chunk %d\n\n&quot; % i
+            written = 0
+            while written &lt; len(data):
+                to_write = tx.capacity - tx.size()
+                # Defensive check; buffer should never be full here
+                if not to_write:
+                    raise BufferError()
+                tx.write(data[written : written + to_write])
+                written += to_write
+                yield False
+        yield True
+
+    http_ctx.set_response_header(b&quot;transfer-encoding&quot;, b&quot;chunked&quot;)
+    http_ctx.set_response_header(b&quot;content-type&quot;, b&quot;text/event-stream&quot;)
+    http_ctx.resp_handler = generate_chunks
+
+async def main():
+    server = http_server.HttpServer()
+    await server.start_socket_server()
+    while True:
+        await asyncio.sleep(1)
+</code></pre>
+<pre><code>$ curl 192.168.1.101/stream
+data: chunk 0
+
+data: chunk 1
+
+data: chunk 2
+
+...
+
+data: chunk 9
+</code></pre>
+<h2 id="streamed-multipart-responses">Streamed Multipart Responses</h2>
+<p>Multipart responses allow a single HTTP response to contain multiple independently typed payloads,
+each with its own headers and body. Similar to streamed responses, PyRobusta uses response producer
+functions to generate multipart response parts on demand. Because the total response size is not known
+in advance, the server automatically uses chunked transfer encoding for multipart responses. It is
+explicitly enabled in the example below for completeness.</p>
+<p>Routes producing streamed multipart responses must satisfy the following requirements:</p>
+<ol>
+<li>the route must return a tuple containing the multipart content type and a callable response producer</li>
+<li>the response producer must return a tuple containing the content type and payload of each part</li>
+<li>after producing the final part, the response producer must return None</li>
+</ol>
+<pre><code># /app.py
+import asyncio
+
+from pyrobusta.server import http_server
+from pyrobusta.protocol.http import HttpEngine
+
+def multipart_response(num_responses, part_size):
+    i = 0
+    def response_producer():
+        nonlocal i
+        i += 1
+        if i &gt; num_responses:
+            return None
+        return &quot;text/plain&quot;, b&quot;X&quot; * part_size
+    return response_producer
+
+@HttpEngine.route(&quot;/multipart&quot;, &quot;GET&quot;)
+def multipart_handler(http_ctx, _):
+    http_ctx.set_response_header(b&quot;transfer-encoding&quot;, b&quot;chunked&quot;)
+    part_count = int(http_ctx.headers.get(&quot;x-part-count&quot;, 1))
+    part_size = int(http_ctx.headers.get(&quot;x-part-size&quot;, 1024))
+    return &quot;multipart/form-data&quot;, multipart_response(part_count, part_size)
+
+async def main():
+    server = http_server.HttpServer()
+    await server.start_socket_server()
+    while True:
+        await asyncio.sleep(1)
+</code></pre>
+<p>Try the <code>X-Part-Count</code> and <code>X-Part-Size</code> headers to arbitrarily configure the response size.</p>
+<pre><code>$ curl -H &quot;X-Part-Count: 3&quot; -H &quot;X-Part-Size: 10&quot; 192.168.1.101/multipart
+--pyrobusta-boundary
+content-type:text/plain
+
+XXXXXXXXXX
+--pyrobusta-boundary
+content-type:text/plain
+
+XXXXXXXXXX
+--pyrobusta-boundary
+content-type:text/plain
+
+XXXXXXXXXX
+--pyrobusta-boundary--
+</code></pre>
+<hr />
+<p>PyRobusta v0.8.0 Web Server</p>
+
+</body>
+</html>
