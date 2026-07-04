@@ -144,7 +144,7 @@ export default {
             "sh",
             "-c",
             """
-            npx -y svgo /data/diagram.svg \
+            npx --silent -y svgo /data/diagram.svg \
                 -o /data/diagram.min.svg \
                 --multipass --precision=1 \
                 --config=/data/svgo.config.js
