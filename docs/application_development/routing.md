@@ -120,46 +120,28 @@ remove functionality at runtime.
 ```
 from pyrobusta.protocol.http import HttpEngine
 
-sensor_values = {
-    "dht22": {
-        "temperature_c": 22,
-        "rel_hum": 45
-    },
-    "ldr": {
-        "illuminance_lx": 50
-    }
+sensor_value = {
+    "temperature_c": 22,
+    "rel_hum": 45
 }
 
-def dht22_handler(http_ctx, _):
-    return "application/json",  sensor_values["dht22"]
+def sensor_handler(http_ctx, _):
+    return "application/json",  sensor_value
 
-def ldr_handler(http_ctx, _):
-    return "application/json", sensor_values["ldr"]
-
-@HttpEngine.route("/sensor/{name}/enabled", "PUT")
+@HttpEngine.route("/sensor/enabled", "PUT")
 def enable_sensor(http_ctx, enabled):
-    sensor_name = http_ctx.path_segment(1)
+    enabled = enabled.decode().lower()
 
-    if sensor_name not in sensor_values:
-        http_ctx.terminate(404)
-        return "text/plain", "Not found"
-
-    if enabled.decode().lower() not in ("true", "false"):
+    if enabled not in ("true", "false"):
         http_ctx.terminate(400)
         return "text/plain", "Invalid value"
 
-    is_enabled = enabled.decode().lower() == "true"
-
-    if sensor_name == "dht22":
-        route_handler = dht22_handler
-
-    elif sensor_name == "ldr":
-        route_handler = ldr_handler
+    is_enabled = enabled == "true"
 
     if is_enabled:
-        HttpEngine.register(f"/sensor/{sensor_name}/value", route_handler, "GET")
+        HttpEngine.register(f"/sensor/value", sensor_handler, "GET")
     else:
-        HttpEngine.deregister(f"/sensor/{sensor_name}/value", "GET")
+        HttpEngine.deregister(f"/sensor/value", "GET")
 
     return "text/plain", "OK"
 ```
