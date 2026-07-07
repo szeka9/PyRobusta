@@ -78,7 +78,8 @@ class BaseConnection:
         Close the connection, update the internal state accordingly.
         """
         if not self.connected:
-            return OSError(f"{self.id} already closed")
+            logging.warning(f"{self.id} already closed")
+            return
 
         self.connected = False
         logging.debug(__name__ + f": close connection: {self.id}")

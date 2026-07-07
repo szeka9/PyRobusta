@@ -17,9 +17,9 @@ class HttpConnection(BaseConnection):
     buffer management and state machine parser.
     """
 
-    MTU_SIZE = 1460
-    STATE_MACHINE_SLEEP_MS = 2
-    RECV_TIMEOUT_SECONDS = 10
+    MTU_SIZE = 1460  # Maximum Transmission Unit size for TCP packets, in bytes
+    STATE_MACHINE_SLEEP_MS = 2  # Duration of sleep between state machine iterations
+    RECV_TIMEOUT_SECONDS = 3  # Timeout for reading request data from socket, in seconds
 
     __slots__ = ("_engine", "_prev_state", "_recv_buf", "_send_buf")
 
