@@ -57,8 +57,9 @@ and associates each connection with a `StreamReader` and `StreamWriter` pair for
 
 Each client connection executes as an independent asynchronous task, allowing multiple connections
 to make progress concurrently. `HttpServer` maintains the set of active connections and accepts
-new connections until the configured maximum number of concurrent connections is reached. `HttpServer`
-closes idle connections after the configured timeout to reclaim resources. Because each connection is
+new connections until the configured maximum number of concurrent connections is reached. When the
+server is at capacity, new connections wait for resources to become available until a configurable
+timeout expires. If the timeout is reached, the connection is rejected. Because each connection is
 processed independently, slow clients do not block unrelated connections. However, requests within
 the same connection are always processed sequentially.
 
@@ -101,7 +102,8 @@ for normal request processing is reserved when a connection is accepted, rather 
 
 For each new connection, the server reserves a request and response stream buffer from the shared buffer pool.
 When all stream buffers are reserved, new connections are blocked until a buffer pair becomes available
-(either through connection closure or timeout). `HttpServer` automatically closes connections that remain inactive for too long.
+(either through connection closure or timeout). Connections that remain inactive for too long will
+automatically time out, enforced by `HttpConnection`.
 
 Stream buffers are preallocated during server initialization based on the configured memory limits.
 Their size and number remain fixed throughout the lifetime of the server. **Preallocating stream buffers reduces heap

@@ -94,17 +94,6 @@ class HttpServer:
         cls.RECV_POOL = MemoryPool(recv_size, con_limit, wrapper=SlidingBuffer)
         cls.SEND_POOL = MemoryPool(send_size, con_limit, wrapper=SlidingBuffer)
 
-    @classmethod
-    async def _drop_client(cls, client):
-        """
-        Remove client from the list of active clients.
-        """
-        if client not in cls.ACTIVE_CLIENTS:
-            return
-        logging.debug(__name__ + f": {client.id} dropped")
-        await client.close()
-        cls.ACTIVE_CLIENTS.remove(client)
-
     # ----------------
     # Instance methods
     # ----------------
@@ -119,30 +108,6 @@ class HttpServer:
         self._server = None
         self._max_clients = 0
 
-    async def can_handle_new_client(self):
-        """
-        Decide if the new socket can be handled.
-        Evict closed/inactive sockets if needed.
-        :return is_acceptable: true/false
-        """
-        con_timestamp = ticks_ms()
-        while ticks_diff(ticks_ms(), con_timestamp) < self.CON_ACCEPT_TIMEOUT_MS:
-            if len(self.ACTIVE_CLIENTS) < self._max_clients:
-                return True
-            # Attempt to evict inactive clients
-            for client in self.ACTIVE_CLIENTS:
-                client_inactive = int(ticks_diff(ticks_ms(), client.last_event) * 0.001)
-                if not client.connected or client_inactive > self.CON_TIMEOUT_S:
-                    logging.debug(
-                        (
-                            __name__ + f": evicted {client.id} "
-                            f"timeout: {self.CON_TIMEOUT_S - client_inactive}s"
-                        )
-                    )
-                    await self._drop_client(client)
-            await sleep_ms(self.CON_ACCEPT_SLEEP_MS)
-        return False
-
     async def _reserve_buffers(self):
         """
         Reserve and return request and response buffers.
@@ -152,8 +117,9 @@ class HttpServer:
 
         recv_buf = None
         send_buf = None
+        deadline = ticks_ms() + self.CON_ACCEPT_TIMEOUT_MS
 
-        while not recv_buf or not send_buf:
+        while (not recv_buf or not send_buf) and ticks_diff(ticks_ms(), deadline) < 0:
             if not recv_buf:
                 recv_buf = self.RECV_POOL.reserve()
             if not send_buf:
@@ -169,15 +135,21 @@ class HttpServer:
         :param reader: asyncio StreamReader
         :param reader: asyncio StreamWriter
         """
-        if not await self.can_handle_new_client():
-            logging.debug(__name__ + ": cannot accept new client")
-            writer.close()
-            await writer.wait_closed()
-            return
-
         client = None
         try:
             recv_buf, send_buf = await self._reserve_buffers()
+
+            if recv_buf is None or send_buf is None:
+                logging.debug(
+                    __name__
+                    + ": connection from "
+                    + writer.get_extra_info("peername")[0]
+                    + " rejected (server at capacity)"
+                )
+                writer.close()
+                await writer.wait_closed()
+                return
+
             client = HttpConnection(reader, writer, recv_buf, send_buf)
             logging.debug(__name__ + f": accept {client.id}")
             self.ACTIVE_CLIENTS.append(client)
@@ -186,14 +158,14 @@ class HttpServer:
         except Exception as e:  # pylint: disable=W0718
             logging.warning(__name__ + f": error in run(): {e}")
         finally:
-            if client:
-                self.ACTIVE_CLIENTS.remove(client)
             if send_buf:
                 send_buf.consume()
                 self.SEND_POOL.release(send_buf)
             if recv_buf:
                 recv_buf.consume()
                 self.RECV_POOL.release(recv_buf)
+            if client and client in self.ACTIVE_CLIENTS:
+                self.ACTIVE_CLIENTS.remove(client)
             collect()
 
     async def start_socket_server(self):
@@ -234,7 +206,10 @@ class HttpServer:
         """
         logging.info(__name__ + ": terminated")
         while self.ACTIVE_CLIENTS:
-            await self._drop_client(self.ACTIVE_CLIENTS[0])
+            client = self.ACTIVE_CLIENTS[0]
+            logging.debug(__name__ + f": {client.id} dropped")
+            self.ACTIVE_CLIENTS.remove(client)
+            await client.close()
         if self._server:
             self._server.close()
             await self._server.wait_closed()
