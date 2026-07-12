@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """
-This test performs load tests while dimensioning the HTTP server
-with different configurations, measuring the resulting heap usage
-and performance. The test is designed to run against a device
-running the boot.py
+This test performs soak tests while measuring the heap usage
+and other performance metrics with different configurations.
+The test is designed to run against a device running the boot.py
 
 Tests are performed with the Locust load testing framework, simulating
 multiple concurrent users accessing the device's HTTP server with
@@ -12,11 +11,11 @@ different request patterns.
 The test workflow includes:
 1. Applying a configuration to the device using mpremote.
 
-2. Performing a load test with Locust, simulating concurrent
+2. Performing a soak test with Locust, simulating concurrent
    users making requests to the device.
 
-3. Measuring the heap usage of the device before and after
-   the load test using a dedicated endpoint.
+3. Measuring the heap usage of the device during the soak test
+   using a dedicated endpoint.
 
 4. Collecting performance metrics such as response times and
    request rates from Locust.
@@ -27,19 +26,21 @@ The test workflow includes:
 
 import sys
 import math
+
+from http_user import DefaultUser, FilesApiUser, MultipartUser
 from load_test import run_test
 from device import Device
 
 # ---------------------------
 # Test configuration settings
 # ---------------------------
-TEST_DURATION_MINUTES = 5
+TEST_DURATION_MINUTES = 60
 
 base_config = {
-    "socket_max_con": 1,
+    "socket_max_con": 4,
     "http_mem_cap": 0.05,
-    "http_multipart": False,
-    "http_files_api": False,
+    "http_multipart": True,
+    "http_files_api": True,
     "tls": False,
     "http_port": 8080,
     "https_port": 4443,
@@ -48,8 +49,8 @@ base_config = {
 }
 
 
-def get_test_config(sram_bytes: int, buffer_small: int, buffer_large: int):
-    socket_counts = (1, 2, 4)
+def get_test_config(sram_bytes: int, _, buffer_large: int):
+    socket_counts = (4,)
 
     def round_up_sig(x, sig=3):
         """
@@ -63,39 +64,9 @@ def get_test_config(sram_bytes: int, buffer_small: int, buffer_large: int):
         return math.ceil(x * factor) / factor
 
     test_config = {
-        "low_mem_cap": [
-            {
-                "http_mem_cap": round_up_sig((buffer_small / sram_bytes) * max_con, 3),
-                "socket_max_con": max_con,
-            }
-            for max_con in socket_counts
-        ],
-        "high_mem_cap": [
-            {
-                "http_mem_cap": round_up_sig((buffer_large / sram_bytes) * max_con, 3),
-                "socket_max_con": max_con,
-            }
-            for max_con in socket_counts
-        ],
-        "multipart": [
-            {
-                "http_mem_cap": round_up_sig((buffer_small / sram_bytes) * max_con, 3),
-                "http_multipart": True,
-                "socket_max_con": max_con,
-            }
-            for max_con in socket_counts
-        ],
-        "files_api": [
-            {
-                "http_mem_cap": round_up_sig((buffer_small / sram_bytes) * max_con, 3),
-                "http_files_api": True,
-                "socket_max_con": max_con,
-            }
-            for max_con in socket_counts
-        ],
         "tls": [
             {
-                "http_mem_cap": round_up_sig((buffer_small / sram_bytes) * max_con, 3),
+                "http_mem_cap": round_up_sig((buffer_large / sram_bytes) * max_con, 3),
                 "tls": True,
                 "socket_max_con": max_con,
             }
@@ -123,7 +94,7 @@ def main():
         output_path,
         dev,
         get_test_config,
-        None,
+        [DefaultUser, FilesApiUser, MultipartUser],
         TEST_DURATION_MINUTES,
     )
 

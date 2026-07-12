@@ -2,8 +2,8 @@ import json
 
 from unittest.mock import patch, mock_open, call
 
-from .utils import stat_factory
-from .http_base import TestHttpBase
+from utils import stat_factory
+from http_base import TestHttpBase
 
 
 def patch_os_stat(stat_is_file=True):

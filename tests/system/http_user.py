@@ -35,7 +35,7 @@ class DefaultUser(HttpUser):
         part_count = 10
         part_size = 256
         chunked_data = b""
-        for i in range(part_count):
+        for _ in range(part_count):
             chunked_data += b"%X\r\n" % part_size
             chunked_data += b"X" * part_size + b"\r\n"
         chunked_data += b"0\r\n\r\n"
@@ -51,7 +51,7 @@ class DefaultUser(HttpUser):
         )
         print(
             self.client.base_url
-            + "/test/stream (chunked; parts=%d, size=%d)" % (part_count, part_size),
+            + f"/test/stream (chunked; parts={part_count}, size={part_size})",
             response.status_code,
             response.elapsed.total_seconds(),
         )
@@ -78,7 +78,7 @@ class MultipartUser(HttpUser):
         )
         print(
             self.client.base_url
-            + "/test/multipart (parts=%d, size=%d)" % (part_count, part_size),
+            + f"/test/multipart (parts={part_count}, size={part_size})",
             response.status_code,
             response.elapsed.total_seconds(),
         )
@@ -110,8 +110,7 @@ class MultipartUser(HttpUser):
         )
         print(
             self.client.base_url
-            + "/test/multipart (multipart; parts=%d, size=%d)"
-            % (part_count, part_size),
+            + f"/test/multipart (multipart; parts={part_count}, size={part_size})",
             response.status_code,
             response.elapsed.total_seconds(),
         )
