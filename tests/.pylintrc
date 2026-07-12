@@ -6,3 +6,5 @@ disable=W0212,
         R0904,
         R0902,
         R0801
+
+init-hook='import os, sys; tests = os.path.join(os.getcwd(), "tests"); [sys.path.append(d) for d, _, _ in os.walk(tests)];'

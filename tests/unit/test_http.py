@@ -4,8 +4,8 @@ import unittest
 from unittest import mock
 from unittest.mock import patch, mock_open
 
-from .utils import stat_factory
-from .http_base import TestHttpBase
+from utils import stat_factory
+from http_base import TestHttpBase
 
 
 class TestWebStateMachineHelpers(TestHttpBase):

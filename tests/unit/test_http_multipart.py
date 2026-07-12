@@ -3,7 +3,7 @@ import unittest
 
 from unittest import mock
 
-from .http_base import TestHttpBase
+from http_base import TestHttpBase
 
 
 class TestMultipartStateMachine(TestHttpBase):

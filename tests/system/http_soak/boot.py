@@ -14,8 +14,8 @@ from pyrobusta.utils.config import get_config, CONF_HTTP_MULTIPART
 
 LOG_FILE = "heap_usage.csv"
 
-SAMPLE_PERIOD = 5  # seconds
-FLUSH_PERIOD = 12  # Flush every minute
+SAMPLE_PERIOD = 10  # seconds
+FLUSH_PERIOD = 6  # Flush every minute
 
 
 @HttpEngine.route("/heap/time-series", "GET")

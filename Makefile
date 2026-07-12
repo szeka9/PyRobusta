@@ -11,6 +11,7 @@ DOCS_DIR := docs
 
 PKG := pyrobusta
 
+PROJECT_ROOT := $(shell pwd)
 MICROPY_ROOT := external/micropython
 MPY_CROSS := $(MICROPY_ROOT)/mpy-cross/build/mpy-cross
 MICROPYTHON := $(MICROPY_ROOT)/ports/unix/build-standard/micropython
@@ -253,7 +254,7 @@ black:
 .PHONY: unit-test
 unit-test:
 	@echo "Running unit tests"
-	@python3 -m unittest -v
+	@python3 -m unittest discover -s tests/unit -v
 
 # -----------------------------
 # Run all static checkers
@@ -311,22 +312,48 @@ test-device: stage-test #clean-device upload
 # ================================================
 
 # -----------------------------
+# Run HTTP soak tests
+# -----------------------------
+.PHONY: perf-test-http-soak
+perf-test-http-soak:
+	@mpremote $(DEVICE) soft-reset
+	mpremote $(DEVICE) cp $(PT_DIR)/app_base.py :app_base.py
+	mpremote $(DEVICE) cp $(PT_DIR)/app_multipart.py :app_multipart.py
+	mpremote $(DEVICE) cp $(PT_DIR)/http_soak/boot.py :boot.py
+	cd $(PT_DIR) && python -m http_soak.test \
+		"$(DEVICE)" "$(DEVICE_IP)" "$(DEVICE_NAME)" \
+		"$(PROJECT_ROOT)/$(DOCS_DIR)/soak"
+
+# -----------------------------
 # Run HTTP dimensioning tests
 # -----------------------------
 .PHONY: perf-test-http-dimensioning
 perf-test-http-dimensioning:
 	@mpremote $(DEVICE) soft-reset
-	mpremote $(DEVICE) cp $(PT_DIR)/http_dimensioning/app_base.py :app_base.py
-	mpremote $(DEVICE) cp $(PT_DIR)/http_dimensioning/app_multipart.py :app_multipart.py
+	mpremote $(DEVICE) cp $(PT_DIR)/app_base.py :app_base.py
+	mpremote $(DEVICE) cp $(PT_DIR)/app_multipart.py :app_multipart.py
 	mpremote $(DEVICE) cp $(PT_DIR)/http_dimensioning/boot.py :boot.py
-	@mpremote $(DEVICE) reset
-	$(PT_DIR)/http_dimensioning/test.py "$(DEVICE)" "$(DEVICE_IP)" "$(DEVICE_NAME)"
+	cd $(PT_DIR) && python -m http_dimensioning.test \
+		"$(DEVICE)" "$(DEVICE_IP)" "$(DEVICE_NAME)" \
+		"$(PROJECT_ROOT)/$(DOCS_DIR)/dimensioning"
 
 # -----------------------------
 # Run all performance tests
 # -----------------------------
 .PHONY: perf-test-device
-perf-test-device: perf-test-http-dimensioning
+perf-test-device: perf-test-http-dimensioning perf-test-http-soak
+
+# -----------------------------
+# Regenerate plots
+# -----------------------------
+.PHONY: perf-test-regenerate-plots
+perf-test-regenerate-plots:
+	@for type in dimensioning soak; do \
+		[ -d docs/$$type/esp32_c3 ] && \
+			python3 tests/system/summary.py ESP32-C3 docs/$$type; \
+		[ -d docs/$$type/esp32_s3 ] && \
+			python3 tests/system/summary.py ESP32-S3 docs/$$type; \
+	done
 
 # ================================================
 # Utilities for TLS

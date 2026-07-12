@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import patch
 from os import getcwd
 
-from .utils import load_module
+from utils import load_module
 
 
 class TestHelpers(unittest.TestCase):

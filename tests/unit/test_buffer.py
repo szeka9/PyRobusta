@@ -1,6 +1,6 @@
 import unittest
 
-from .utils import load_module
+from utils import load_module
 
 
 class BufferTestBase(unittest.TestCase):
