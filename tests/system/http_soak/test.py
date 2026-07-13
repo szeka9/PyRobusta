@@ -38,7 +38,7 @@ TEST_DURATION_MINUTES = 60
 
 base_config = {
     "socket_max_con": 4,
-    "http_mem_cap": 0.05,
+    "http_mem_cap": 1.0,
     "http_multipart": True,
     "http_files_api": True,
     "tls": False,
@@ -49,32 +49,21 @@ base_config = {
 }
 
 
-def get_test_config(sram_bytes: int, _, buffer_large: int):
-    socket_counts = (4,)
+def test_config_factory(max_con):
+    def get_test_config(*args, **kwargs):
+        test_config = {
+            "tls": [
+                {
+                    "http_mem_cap": 1.0,
+                    "tls": True,
+                    "socket_max_con": max_con,
+                }
+            ],
+        }
+        print(test_config)
+        return test_config
 
-    def round_up_sig(x, sig=3):
-        """
-        Round up with significant digits.
-        round_up_sig(0.0012345, 2) == 0.0013
-        round_up_sig(0.0012345, 3) == 0.00124
-        """
-        if x == 0:
-            return 0
-        factor = 10 ** (sig - int(math.floor(math.log10(abs(x)))) - 1)
-        return math.ceil(x * factor) / factor
-
-    test_config = {
-        "tls": [
-            {
-                "http_mem_cap": round_up_sig((buffer_large / sram_bytes) * max_con, 3),
-                "tls": True,
-                "socket_max_con": max_con,
-            }
-            for max_con in socket_counts
-        ],
-    }
-    print(test_config)
-    return test_config
+    return get_test_config
 
 
 def main():
@@ -89,12 +78,19 @@ def main():
             "Invalid arguments.\nUsage: test.py device_id device_ip device_name output_path"
         )
 
+
+    if device_name == "ESP32-C3":
+        max_con = 1
+        base_config["socket_max_con"] = 2
+    else:
+        max_con = 4
+
     dev = Device(device_id, device_ip, device_name, base_config)
 
     run_test(
         output_path,
         dev,
-        get_test_config,
+        test_config_factory(max_con),
         [DefaultUser, FilesApiUser, MultipartUser],
         TEST_DURATION_MINUTES,
         testcase_id,
