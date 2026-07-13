@@ -111,6 +111,7 @@ def main():
     device_ip = sys.argv[2]
     device_name = sys.argv[3]
     output_path = sys.argv[4]
+    testcase_id = sys.argv[5]
 
     if not device_id or not device_ip or not device_name or not output_path:
         raise ValueError(
@@ -125,6 +126,7 @@ def main():
         get_test_config,
         None,
         TEST_DURATION_MINUTES,
+        testcase_id
     )
 
 

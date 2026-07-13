@@ -184,29 +184,32 @@ def run_test(
     config_getter: callable,
     user_classes: list = None,
     duration_minutes: int = 5,
+    testcase_selector: str = ""
 ):
     # --------------------------------------------
     # Test base configuration
     # --------------------------------------------
+    measurements = []
 
-    device.apply_base_config()
+    if not testcase_selector or testcase_selector == "base":
+        device.apply_base_config()
 
-    idle, usage, stats = test_config_delta(
-        device,
-        {},
-        duration_minutes=duration_minutes,
-        user_classes=user_classes,
-    )
+        idle, usage, stats = test_config_delta(
+            device,
+            {},
+            duration_minutes=duration_minutes,
+            user_classes=user_classes,
+        )
 
-    base_measurement = {
-        "id": "base",
-        "idle": idle,
-        "usage": usage,
-        "stats": stats,
-        "config": device.base_config,
-    }
-    measurements = [base_measurement]
-    generate_plot(base_measurement, device.device_name, output_path)
+        base_measurement = {
+            "id": "base",
+            "idle": idle,
+            "usage": usage,
+            "stats": stats,
+            "config": device.base_config,
+        }
+        measurements.append(base_measurement)
+        generate_plot(base_measurement, device.device_name, output_path)
 
     # --------------------------------------------
     # Test configuration delta
@@ -217,6 +220,12 @@ def run_test(
     for case_id, case in test_config.items():
         delta_cnt = 0
         for _, delta in enumerate(case):
+            delta_cnt += 1
+            testcase_id = f"{case_id}_{delta_cnt:03d}"
+
+            if testcase_selector and testcase_selector != testcase_id:
+                continue
+
             load_idle, load_usage, load_stats = test_config_delta(
                 device,
                 delta,
@@ -224,9 +233,8 @@ def run_test(
                 user_classes=user_classes,
             )
             if load_usage and load_stats:
-                delta_cnt += 1
                 m = {
-                    "id": f"{case_id}_{delta_cnt:03d}",
+                    "id": testcase_id,
                     "idle": load_idle,
                     "usage": load_usage,
                     "stats": load_stats,
@@ -242,10 +250,30 @@ def run_test(
     if target_dir not in os.listdir(output_path):
         os.mkdir(f"{output_path}/{target_dir}")
 
-    with open(
-        f"{output_path}/{target_dir}/measurements.json", "w", encoding="utf-8"
-    ) as f:
-        json.dump(measurements, f, indent=4)
+    file_path = f"{output_path}/{target_dir}/measurements.json"
+    existing_measurements = []
+
+    if os.path.exists(file_path):
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                existing_measurements = json.load(f)
+
+                if not isinstance(existing_measurements, list):
+                    existing_measurements = []
+        except (json.JSONDecodeError, OSError):
+            existing_measurements = []
+
+    # Merge by id, preserving existing entries unless overridden
+    merged_measurements = {
+        measurement["id"]: measurement
+        for measurement in existing_measurements
+    }
+
+    for measurement in measurements:
+        merged_measurements[measurement["id"]] = measurement
+
+    with open(file_path, "w", encoding="utf-8") as f:
+        json.dump(list(merged_measurements.values()), f, indent=4)
 
     print(
         generate_measurement_table(
