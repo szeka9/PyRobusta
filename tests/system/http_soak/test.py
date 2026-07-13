@@ -25,7 +25,6 @@ The test workflow includes:
 """
 
 import sys
-import math
 
 from http_user import DefaultUser, FilesApiUser, MultipartUser
 from load_test import run_test
@@ -50,7 +49,7 @@ base_config = {
 
 
 def test_config_factory(max_con):
-    def get_test_config(*args, **kwargs):
+    def get_test_config(**_):
         test_config = {
             "tls": [
                 {
@@ -77,7 +76,6 @@ def main():
         raise ValueError(
             "Invalid arguments.\nUsage: test.py device_id device_ip device_name output_path"
         )
-
 
     if device_name == "ESP32-C3":
         max_con = 1

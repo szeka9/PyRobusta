@@ -7,7 +7,6 @@ from gc import mem_alloc, collect
 import machine
 
 from pyrobusta.server import http_server
-from pyrobusta.protocol.http import HttpEngine
 from pyrobusta.connectivity import wifi
 
 from pyrobusta.utils.config import get_config, CONF_HTTP_MULTIPART

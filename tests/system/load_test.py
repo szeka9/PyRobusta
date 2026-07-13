@@ -8,7 +8,6 @@ import os
 import json
 from time import monotonic
 
-import requests
 from locust.env import Environment
 
 from device import Device
@@ -167,14 +166,14 @@ def test_config_delta(
     return idle, usage, stats
 
 
-# pylint: disable=R0914
+# pylint: disable=R0914,R0913,R0917
 def run_test(
     output_path: str,
     device: Device,
     config_getter: callable,
     user_classes: list = None,
     duration_minutes: int = 5,
-    testcase_selector: str = ""
+    testcase_selector: str = "",
 ):
     # --------------------------------------------
     # Test base configuration
@@ -255,8 +254,7 @@ def run_test(
 
     # Merge by id, preserving existing entries unless overridden
     merged_measurements = {
-        measurement["id"]: measurement
-        for measurement in existing_measurements
+        measurement["id"]: measurement for measurement in existing_measurements
     }
 
     for measurement in measurements:

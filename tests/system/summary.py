@@ -129,19 +129,20 @@ def generate_stats_annotation(gs: GridSpec, fig: Figure, measurement: dict):
     load_stats = measurement.get("stats", {})
     concurrency = measurement["config"].get("socket_max_con", "n/a")
 
-    annotation_text = "\n".join(
-        [
-            f"HTTP - 200 OK     {load_stats['ok']}",
+    lines = [
+        (f"HTTP - 200 OK     {load_stats['ok']}", "black"),
+        (
             f"HTTP errors       {load_stats['errors']}",
-            f"Avg latency       {load_stats['avg_ms']:.0f} ms",
-            f"Min latency       {load_stats['min_ms']:.0f} ms",
-            f"Max latency       {load_stats['max_ms']:.0f} ms",
-            f"RPS               {load_stats['rps']:.2f}",
-            f"P95               {load_stats['p95_ms']:.0f} ms",
-            f"P99               {load_stats['p99_ms']:.0f} ms",
-            f"Concurrency       {concurrency}",
-        ]
-    )
+            "red" if load_stats["errors"] > 0 else "black",
+        ),
+        (f"Avg latency       {load_stats['avg_ms']:.0f} ms", "black"),
+        (f"Min latency       {load_stats['min_ms']:.0f} ms", "black"),
+        (f"Max latency       {load_stats['max_ms']:.0f} ms", "black"),
+        (f"RPS               {load_stats['rps']:.2f}", "black"),
+        (f"P95               {load_stats['p95_ms']:.0f} ms", "black"),
+        (f"P99               {load_stats['p99_ms']:.0f} ms", "black"),
+        (f"Concurrency       {concurrency}", "black"),
+    ]
 
     stats_ax.text(
         0.03,
@@ -154,22 +155,20 @@ def generate_stats_annotation(gs: GridSpec, fig: Figure, measurement: dict):
         transform=stats_ax.transAxes,
     )
 
-    stats_ax.text(
-        0.03,
-        0.88,
-        annotation_text,
-        fontsize=8,
-        family="monospace",
-        ha="left",
-        va="top",
-        transform=stats_ax.transAxes,
-        bbox={
-            "boxstyle": "round,pad=0.45",
-            "facecolor": "#fafafa",
-            "edgecolor": "0.75",
-            "linewidth": 0.8,
-        },
-    )
+    line_height = 0.105
+
+    for i, (text, color) in enumerate(lines):
+        stats_ax.text(
+            0.03,
+            0.88 - i * line_height,
+            text,
+            fontsize=8,
+            family="monospace",
+            color=color,
+            ha="left",
+            va="top",
+            transform=stats_ax.transAxes,
+        )
 
 
 def generate_heap_dist_plot(gs: GridSpec, fig: Figure, measurement: dict):

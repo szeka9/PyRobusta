@@ -121,12 +121,7 @@ def main():
     dev = Device(device_id, device_ip, device_name, base_config)
 
     run_test(
-        output_path,
-        dev,
-        get_test_config,
-        None,
-        TEST_DURATION_MINUTES,
-        testcase_id
+        output_path, dev, get_test_config, None, TEST_DURATION_MINUTES, testcase_id
     )
 
 
