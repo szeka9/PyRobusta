@@ -18,17 +18,6 @@ SAMPLE_PERIOD = 10  # seconds
 FLUSH_PERIOD = 6  # Flush every minute
 
 
-@HttpEngine.route("/heap/time-series", "GET")
-def time_series(http_ctx: HttpEngine, _):
-    http_ctx.set_response_header(
-        b"content-length", str(os.stat(LOG_FILE)[6]).encode("ascii")
-    )
-    http_ctx.set_response_header(b"content-type", b"text/csv")
-    http_ctx.terminate(200)
-    # pylint: disable=R1732
-    http_ctx.resp_handler = open(LOG_FILE, "rb", encoding="utf-8")
-
-
 async def mem_usage():
     flush_counter = 0
     try:

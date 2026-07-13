@@ -121,23 +121,13 @@ def load_test(config: dict, device: Device, user_classes: list, duration_minutes
     }
 
     try:
-        usage_ts = requests.get(
-            f"{host}/heap/time-series",
-            verify=False,
-            timeout=5,
-            headers={"Connection": "close"},
+        usage_ts = device.read_file("heap_usage.csv")
+        usage = interpolate_time_series(
+            [
+                (int(u.split(",", 1)[0]), int(u.split(",", 1)[1]))
+                for u in usage_ts.splitlines()
+            ]
         )
-        if usage_ts.headers.get("Content-Type", "").startswith("text/csv"):
-            usage = interpolate_time_series(
-                [
-                    (int(u.split(",", 1)[0]), int(u.split(",", 1)[1]))
-                    for u in usage_ts.text.splitlines()
-                ]
-            )
-        else:
-            raise ValueError(
-                f"Unexpected Content-Type: {usage_ts.headers.get('Content-Type')}"
-            )
 
         print(f"Measured: {usage}")
     except Exception as e:  # pylint: disable=W0718

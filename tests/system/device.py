@@ -125,3 +125,11 @@ class Device:
         proto = "https" if self.current_config["tls"] else "http"
         port = 4443 if self.current_config["tls"] else 8080
         return f"{proto}://{self.device_ip}:{port}"
+
+    def read_file(self, filename):
+        return subprocess.run(
+            ["mpremote", self.device_id, "cat", f":/{filename}"],
+            check=True,
+            stdout=subprocess.PIPE,
+            text=True,
+        ).stdout
