@@ -29,6 +29,7 @@ INIT_TARGETS = $(patsubst $(SRC_DIR)/%.py,$(BUILD_DIR)/%.py,$(filter %__init__.p
 DEVICE_IP := # e.g. 192.168.1.100
 DEVICE_NAME := # e.g. ESP32-C3, will be used for report generation
 PT_DIR := tests/system
+PT_TEST_ID := # ID of the test case to run
 
 .PHONY: all
 all: clean toolchain static-checkers unit-test build test-unix deploy deploy-config tls-cert deploy-cert deploy-app
@@ -322,7 +323,7 @@ perf-test-http-soak:
 	mpremote $(DEVICE) cp $(PT_DIR)/http_soak/boot.py :boot.py
 	cd $(PT_DIR) && python -m http_soak.test \
 		"$(DEVICE)" "$(DEVICE_IP)" "$(DEVICE_NAME)" \
-		"$(PROJECT_ROOT)/$(DOCS_DIR)/soak"
+		"$(PROJECT_ROOT)/$(DOCS_DIR)/soak" "$(PT_TEST_ID)"
 
 # -----------------------------
 # Run HTTP dimensioning tests
@@ -335,7 +336,7 @@ perf-test-http-dimensioning:
 	mpremote $(DEVICE) cp $(PT_DIR)/http_dimensioning/boot.py :boot.py
 	cd $(PT_DIR) && python -m http_dimensioning.test \
 		"$(DEVICE)" "$(DEVICE_IP)" "$(DEVICE_NAME)" \
-		"$(PROJECT_ROOT)/$(DOCS_DIR)/dimensioning"
+		"$(PROJECT_ROOT)/$(DOCS_DIR)/dimensioning" "$(PT_TEST_ID)"
 
 # -----------------------------
 # Run all performance tests

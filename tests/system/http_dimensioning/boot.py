@@ -7,7 +7,6 @@ from gc import mem_alloc, collect
 import machine
 
 from pyrobusta.server import http_server
-from pyrobusta.protocol.http import HttpEngine
 from pyrobusta.connectivity import wifi
 
 from pyrobusta.utils.config import get_config, CONF_HTTP_MULTIPART
@@ -16,17 +15,6 @@ LOG_FILE = "heap_usage.csv"
 
 SAMPLE_PERIOD = 5  # seconds
 FLUSH_PERIOD = 12  # Flush every minute
-
-
-@HttpEngine.route("/heap/time-series", "GET")
-def time_series(http_ctx: HttpEngine, _):
-    http_ctx.set_response_header(
-        b"content-length", str(os.stat(LOG_FILE)[6]).encode("ascii")
-    )
-    http_ctx.set_response_header(b"content-type", b"text/csv")
-    http_ctx.terminate(200)
-    # pylint: disable=R1732
-    http_ctx.resp_handler = open(LOG_FILE, "rb", encoding="utf-8")
 
 
 async def mem_usage():
