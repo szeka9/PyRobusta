@@ -121,6 +121,10 @@ def generate_main_plot(gs: GridSpec, fig: Figure, measurement: dict, device_name
     ax.axhline(min(usage), linestyle=":", linewidth=1)
     ax.axhline(max(usage), linestyle=":", linewidth=1)
 
+    ax.fill_between(
+        range(total_time), min(usage), max(usage), facecolor="gray", alpha=0.15
+    )
+
 
 def generate_stats_annotation(gs: GridSpec, fig: Figure, measurement: dict):
     stats_ax = fig.add_subplot(gs[0, 1])

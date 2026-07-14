@@ -49,7 +49,7 @@ base_config = {
 
 
 def test_config_factory(max_con):
-    def get_test_config(**_):
+    def get_test_config(*_, **__):
         test_config = {
             "tls": [
                 {

@@ -105,6 +105,10 @@ asyncio.run(main())
 Check the [Application Development](./docs/application_development/index.md) guide for
 more details on supported features and practical examples.
 
+# Development
+
+Check the provided [Development](./docs/development.md) guide to create and deploy custom builds
+to your device, as well as running tests and static code checkers.
 
 # Configuration and Optimization
 
@@ -112,7 +116,21 @@ To fine-tune heap usage and optimize performance, see:
 - [Dimensioning](./docs/dimensioning/http_dimensioning.md)
 - [Configuration Settings](./docs/application_development/configuration.md)
 
-# Development
+# Performance & Stability
 
-Check the provided [Development](./docs/development.md) guide to create and deploy custom builds
-to your device, as well as running tests and static code checkers.
+PyRobusta has been benchmarked on ESP32-class hardware under sustained load.
+Detailed benchmark results, scalability measurements, and soak tests are
+available in the [Dimensioning](./docs/dimensioning) and
+[Soak testing](./docs/soak) documentation.
+
+During a 5-minute performance test, the server handled **922 HTTP requests with
+zero errors** while heap usage remained stable throughout the test with no
+observable memory growth.
+
+The benchmark exercises both response generation and request-body processing
+using repeated GET requests for the default index page and chunked POST uploads
+consisting of 10 × 256-byte chunks.
+
+![esp32_c3_base](./docs/dimensioning/esp32_c3/base.png)
+
+**Test platform:** ESP32-C3 @ 160 MHz, MicroPython, Wi-Fi STA mode, single connection.
