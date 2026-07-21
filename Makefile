@@ -100,7 +100,10 @@ deploy-config:
 	@echo "Uploading pyrobusta.env"
 	@mpremote $(DEVICE) soft-reset
 	@if [ -f pyrobusta.env ]; then mpremote $(DEVICE) cp pyrobusta.env :pyrobusta.env; fi
+	@if [ -f pyrobusta.roles ]; then mpremote $(DEVICE) cp pyrobusta.roles :pyrobusta.roles; fi
+	@if [ -f pyrobusta.passwd ]; then mpremote $(DEVICE) cp pyrobusta.passwd :pyrobusta.passwd; fi
 	@mpremote $(DEVICE) reset
+	@sleep 5
 
 
 # -----------------------------
@@ -191,6 +194,8 @@ stage-app:
 	@cp $(TLS_DIR)/key.der $(RUNTIME_DIR)/
 
 	@if [ -f pyrobusta.env ]; then cp pyrobusta.env $(RUNTIME_DIR)/; fi
+	@if [ -f pyrobusta.roles ]; then cp pyrobusta.roles $(RUNTIME_DIR)/; fi
+	@if [ -f pyrobusta.passwd ]; then cp pyrobusta.passwd $(RUNTIME_DIR)/; fi
 	@echo "http_port=8080" >> $(RUNTIME_DIR)/pyrobusta.env
 	@echo "https_port=4443" >> $(RUNTIME_DIR)/pyrobusta.env
 
@@ -212,9 +217,7 @@ deploy-app:
 	mpremote $(DEVICE) cp $(APP_DIR)/boot.py :boot.py
 	mpremote $(DEVICE) cp $(APP_DIR)/app.py :app.py
 
-	@echo "Uploading pyrobusta.env"
-	@if [ -f pyrobusta.env ]; then mpremote $(DEVICE) cp pyrobusta.env :pyrobusta.env; fi
-	@mpremote $(DEVICE) reset
+	$(MAKE) deploy-config
 	@echo "\e[32m$(APP_DIR) app is successfully deployed, \n"\
 	"run 'make DEVICE=$(DEVICE) run-device' to restart the device and check the output.\e[0m"
 

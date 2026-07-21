@@ -29,9 +29,10 @@ CONF_HTTP_MULTIPART = const(4)
 CONF_HTTP_MEM_CAP = const(5)
 CONF_HTTP_SERVED_PATHS = const(6)
 CONF_HTTP_FILES_API = const(7)
-CONF_SOCKET_MAX_CON = const(8)
-CONF_TLS = const(9)
-CONF_LOG_LEVEL = const(10)
+CONF_HTTP_AUTH = const(8)
+CONF_SOCKET_MAX_CON = const(9)
+CONF_TLS = const(10)
+CONF_LOG_LEVEL = const(11)
 
 # -------------------
 # Configuration state
@@ -54,6 +55,8 @@ _CONFIG_CACHE = [
     ["/www", "/lib/pyrobusta"],
     CONF_HTTP_FILES_API,
     False,
+    CONF_HTTP_AUTH,
+    None,
     CONF_SOCKET_MAX_CON,
     2,
     CONF_TLS,
@@ -78,7 +81,7 @@ def parse_config(key, value):
         return float(value)
     if key == CONF_HTTP_SERVED_PATHS:
         return [normalize_path(p) for p in value.split()]
-    if key not in (CONF_WIFI_SSID, CONF_WIFI_PASSWORD):
+    if key not in (CONF_WIFI_SSID, CONF_WIFI_PASSWORD, CONF_HTTP_AUTH):
         return value.lower()
     return value
 

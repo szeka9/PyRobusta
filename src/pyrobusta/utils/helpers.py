@@ -77,3 +77,22 @@ def is_path_segment_valid(filename: str):
     ):
         return False
     return True
+
+
+def iterate_segments(data: str, delimiter: str):
+    """
+    Generator for iterating over each segment of a string,
+    separated by an arbitrary delimiter. The generator
+    does not ignore empty segments (including leading and
+    trailing segments).
+    """
+    start = 0
+    end = 0
+    while start < len(data):
+        end = data.find(delimiter, start)
+        if end == -1:
+            end = len(data)
+        yield data[start:end].strip()
+        start = end + 1
+    if data.endswith(delimiter):
+        yield ""
