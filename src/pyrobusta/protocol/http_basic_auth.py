@@ -193,7 +193,7 @@ def _load_roles(config=_ROLES_LOCATION):
         attributes = {}
         for line in roles:
             comment_idx = line.find("#")
-            line = line[:comment_idx] if comment_idx != -1 else line
+            line = line[:comment_idx].strip() if comment_idx != -1 else line.strip()
 
             # Parse URL path
             if line.startswith("/"):
@@ -206,7 +206,7 @@ def _load_roles(config=_ROLES_LOCATION):
                     paths.append(line)
 
             # Parse attributes
-            elif line.strip():
+            elif line:
                 if not paths:
                     raise ValueError()
                 sep = line.find(":")

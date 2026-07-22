@@ -57,6 +57,7 @@ class TestHttpBase(unittest.TestCase):
         self.http_module = load_module("pyrobusta/protocol/http.py")
         self.fs_module = load_module("pyrobusta/protocol/http_file_server.py")
         self.multipart_module = load_module("pyrobusta/protocol/http_multipart.py")
+        self.basic_auth_module = load_module("pyrobusta/protocol/http_basic_auth.py")
 
         self.fs_patcher = patch.object(self.fs_module, "setup_directories")
         self.fs_patcher.start()
