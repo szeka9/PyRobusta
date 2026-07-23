@@ -1,5 +1,6 @@
 [MAIN]
-disable=W0212,
+disable=W0201,
+        W0212,
         C0114,
         C0115,
         C0116,
@@ -8,3 +9,7 @@ disable=W0212,
         R0801
 
 init-hook='import os, sys; tests = os.path.join(os.getcwd(), "tests"); [sys.path.append(d) for d, _, _ in os.walk(tests)];'
+
+[DESIGN]
+max-args=7
+max-positional-arguments=7

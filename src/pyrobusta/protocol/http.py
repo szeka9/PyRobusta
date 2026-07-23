@@ -12,6 +12,7 @@ from ..utils.config import (
     CONF_HTTP_MULTIPART,
     CONF_HTTP_FILES_API,
     CONF_HTTP_SERVED_PATHS,
+    CONF_HTTP_AUTH,
 )
 from ..utils import logging, helpers
 from ..stream.buffer import BufferFullError
@@ -49,6 +50,7 @@ class HttpEngine:
     - http_files_api: serve files at the /files API, with support for uploads,
       removal and directory listing
     - http_multipart: support for multipart requests/responses
+    - http_auth: authenticate and authorize users
     """
 
     __slots__ = (
@@ -79,6 +81,8 @@ class HttpEngine:
         b"204 No Content",
         400,
         b"400 Bad Request",
+        401,
+        b"401 Unauthorized",
         403,
         b"403 Forbidden",
         404,
@@ -692,6 +696,11 @@ class HttpEngine:
         if self.version == b"HTTP/1.1" and "host" not in self.headers:
             raise InvalidHeaders()
         rx.consume(blank_idx + 4)
+        self.state = self._handle_auth_st
+
+    def _handle_auth_st(self, _):
+        # This a placeholder for authentication & authorization
+        # purposes to be overridden by extensions.
         self.state = self._route_request_st
 
     def _route_request_st(self, _):
@@ -904,3 +913,8 @@ def enable_optional_features():
         from pyrobusta.protocol import http_file_server
 
         http_file_server.apply_patches()
+
+    if get_config(CONF_HTTP_AUTH) == "basic":
+        from pyrobusta.protocol import http_basic_auth
+
+        http_basic_auth.apply_patches()

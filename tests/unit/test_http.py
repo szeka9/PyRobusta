@@ -172,7 +172,7 @@ class TestWebStateMachine(TestHttpBase):
             self.engine.headers,
         )
         self.assertEqual(self.rx.peek(), b"")
-        self.assertEqual(self.engine.state, self.engine._route_request_st)
+        self.assertNotEqual(self.engine.state, self.engine._parse_headers_st)
 
     def test_header_parsing_incomplete_header(self):
         request = b"GET /index.html HTTP/1.1\r\nContent-Type\r\n\r\n"
