@@ -1,132 +1,24 @@
 import asyncio
 import json
-import json
-import ssl
-import gc
 
-from os import mkdir, listdir, remove, rmdir, stat
+from os import stat
 
-from pyrobusta.server import http_server
-from pyrobusta.protocol.http import (
-    CONF_HTTP_SERVED_PATHS,
-    enable_optional_features,
-    stat,
-)
-from pyrobusta.utils.config import (
-    CONF_TLS,
-    CONF_LOG_LEVEL,
-    CONF_HTTP_MULTIPART,
-    CONF_HTTP_FILES_API,
-    _CONFIG_CACHE,
-    normalize_path,
-    parse_config,
+from env_utils import (
+    garbage_collect,
+    test_assert,
+    send_request,
+    setup_config,
+    start_server,
+    fmkdir,
+    delete_path,
 )
 
-#################################################
-# Test helpers
-#################################################
-
-
-def garbage_collect(coroutine):
-    async def decorated(*args, **kwargs):
-        gc.collect()
-        await coroutine(*args, **kwargs)
-        gc.collect()
-
-    return decorated
-
-
-def test_assert(name, actual, expected):
-    print(f"Test {name}: ", end="")
-    if actual == expected:
-        print("OK")
-    else:
-        print("Fail")
-        raise AssertionError(f"{actual} != {expected}")
-
-
-async def send_request(request, tls=False):
-    port = (
-        http_server.HttpServer.LISTEN_PORT_HTTPS
-        if tls
-        else http_server.HttpServer.LISTEN_PORT_HTTP
-    )
-
-    ctx = None
-    if tls:
-        # Disable certificate verification due to self-signed cert
-        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-        ctx.verify_mode = ssl.CERT_NONE
-
-    reader, writer = await asyncio.open_connection("127.0.0.1", port, ssl=ctx)
-    writer.write(request)
-    await writer.drain()
-
-    to_read = True
-    response = b""
-    while to_read:
-        response_part = await reader.read(1024)
-        response += response_part
-        to_read = len(response_part)
-    writer.close()
-    return response
-
-
-def multipart_response(num_responses):
-    i = 0
-
-    def response_generator():
-        nonlocal i
-        i += 1
-        if i > num_responses:
-            return None
-        return "text/plain", b"Response %s" % i
-
-    return response_generator
-
-
-def fmkdir(path: str):
-    try:
-        mkdir(path)
-    except OSError:
-        pass
-
-
-def delete_path(path):
-    for name in listdir(path):
-        if path == "/":
-            full = "/" + name
-        else:
-            full = path + "/" + name
-
-        try:
-            remove(full)
-        except OSError:
-            delete_path(full)
-            try:
-                rmdir(full)
-            except OSError:
-                pass
-
-
-#################################################
-# Test driver
-#################################################
-
-
-async def start_server():
-    """
-    Start an HTTP server as a background task.
-    """
-    server = http_server.HttpServer()
-    await server.start_socket_server()
-    await asyncio.sleep_ms(100)
-    return server
+from pyrobusta.utils.config import normalize_path
 
 
 @garbage_collect
 async def test_fs_path_traversal():
-    setup_config(served_paths="/test")
+    setup_config(files_api_enabled=True, served_paths="/test")
     server = await start_server()
     test_root = normalize_path("/test")
     styles_dir = normalize_path("/test/style")
@@ -145,6 +37,7 @@ async def test_fs_path_traversal():
         # Test case
         response = await send_request(
             b"GET /files/test HTTP/1.1\r\n"
+            b"Content-Length: 0\r\n"
             b"Connection: close\r\n"
             b"Host: localhost\r\n\r\n"
         )
@@ -187,7 +80,7 @@ async def test_fs_path_traversal():
 
 @garbage_collect
 async def test_fs_access_control():
-    setup_config(served_paths="/test/allowed")
+    setup_config(files_api_enabled=True, served_paths="/test/allowed")
     server = await start_server()
 
     test_root = normalize_path("/test")
@@ -211,6 +104,7 @@ async def test_fs_access_control():
         # Case #1: /test/allowed/index.html
         response = await send_request(
             b"GET /files/test/allowed/index.html HTTP/1.1\r\n"
+            b"Content-Length: 0\r\n"
             b"Connection: close\r\n"
             b"Host: localhost\r\n\r\n"
         )
@@ -225,6 +119,7 @@ async def test_fs_access_control():
         # Case #2: /test/rejected/index.html
         response = await send_request(
             b"GET /files/test/rejected/index.html HTTP/1.1\r\n"
+            b"Content-Length: 0\r\n"
             b"Connection: close\r\n"
             b"Host: localhost\r\n\r\n"
         )
@@ -241,7 +136,7 @@ async def test_fs_access_control():
 
 @garbage_collect
 async def test_bulk_file_upload():
-    setup_config(http_multipart_enabled=True)
+    setup_config(files_api_enabled=True, http_multipart_enabled=True)
     server = await start_server()
 
     user_data = normalize_path("/www/user_data")
@@ -298,7 +193,7 @@ async def test_bulk_file_upload():
 
 @garbage_collect
 async def test_chunked_file_upload():
-    setup_config()
+    setup_config(files_api_enabled=True)
     server = await start_server()
 
     user_data = normalize_path("/www/user_data")
@@ -341,30 +236,11 @@ async def test_chunked_file_upload():
         await server.terminate()
 
 
-#################################################
-# Test methods
-#################################################
+async def test_main():
+    await test_fs_path_traversal()
+    await test_fs_access_control()
+    await test_bulk_file_upload()
+    await test_chunked_file_upload()
 
 
-def setup_config(tls_enabled=False, http_multipart_enabled=False, served_paths=""):
-    http_server.HttpServer.LISTEN_PORT_HTTP = 8080
-    http_server.HttpServer.LISTEN_PORT_HTTPS = 4443
-
-    _CONFIG_CACHE[2 * CONF_LOG_LEVEL + 1] = "warning"
-    _CONFIG_CACHE[2 * CONF_TLS + 1] = tls_enabled
-    _CONFIG_CACHE[2 * CONF_HTTP_SERVED_PATHS + 1] = parse_config(
-        CONF_HTTP_SERVED_PATHS, served_paths
-    )
-    _CONFIG_CACHE[2 * CONF_HTTP_MULTIPART + 1] = http_multipart_enabled
-    _CONFIG_CACHE[2 * CONF_HTTP_FILES_API + 1] = True
-    enable_optional_features()
-
-
-def test_main():
-    asyncio.run(test_fs_path_traversal())
-    asyncio.run(test_fs_access_control())
-    asyncio.run(test_bulk_file_upload())
-    asyncio.run(test_chunked_file_upload())
-
-
-test_main()
+asyncio.run(test_main())

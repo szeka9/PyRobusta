@@ -302,6 +302,7 @@ test-unix: stage-test tls-cert
 .PHONY: test-device
 test-device: stage-test #clean-device upload
 	@mpremote $(DEVICE) soft-reset
+	@mpremote $(DEVICE) cp $(TEST_RUNTIME)/env_utils.py :/env_utils.py
 	@cd $(TEST_RUNTIME); \
 	for test in test_*.py; do \
 		echo "\n==================================="; \
