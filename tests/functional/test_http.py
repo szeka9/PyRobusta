@@ -1,99 +1,20 @@
 import asyncio
-import ssl
 import json
-import gc
 
-from os import mkdir, remove, rmdir, listdir
+from env_utils import (
+    garbage_collect,
+    test_assert,
+    send_request,
+    setup_config,
+    start_server,
+    fmkdir,
+    delete_path,
+)
 
 from pyrobusta.server import http_server
 from pyrobusta.protocol.http import HttpEngine
-from pyrobusta.utils.config import (
-    CONF_HTTP_SERVED_PATHS,
-    CONF_HTTP_FILES_API,
-    CONF_TLS,
-    CONF_LOG_LEVEL,
-    _CONFIG_CACHE,
-    parse_config,
-)
+
 from pyrobusta.utils.helpers import normalize_path
-
-#################################################
-# Test helpers
-#################################################
-
-
-def garbage_collect(coroutine):
-    async def decorated(*args, **kwargs):
-        gc.collect()
-        await coroutine(*args, **kwargs)
-        gc.collect()
-
-    return decorated
-
-
-def test_assert(name, actual, expected):
-    print(f"Test {name}: ", end="")
-    if actual == expected:
-        print("OK")
-    else:
-        print("Fail")
-        raise AssertionError(f"{actual} != {expected}")
-
-
-async def send_request(request, tls=False):
-    port = (
-        http_server.HttpServer.LISTEN_PORT_HTTPS
-        if tls
-        else http_server.HttpServer.LISTEN_PORT_HTTP
-    )
-
-    ctx = None
-    if tls:
-        # Disable certificate verification due to self-signed cert
-        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-        ctx.verify_mode = ssl.CERT_NONE
-
-    reader, writer = await asyncio.open_connection("127.0.0.1", port, ssl=ctx)
-    writer.write(request)
-    await writer.drain()
-
-    to_read = True
-    response = b""
-    while to_read:
-        response_part = await reader.read(1024)
-        response += response_part
-        to_read = len(response_part)
-    writer.close()
-    return response
-
-
-def fmkdir(path: str):
-    try:
-        mkdir(path)
-    except OSError:
-        pass
-
-
-def delete_path(path):
-    for name in listdir(path):
-        if path == "/":
-            full = "/" + name
-        else:
-            full = path + "/" + name
-
-        try:
-            remove(full)
-        except OSError:
-            delete_path(full)
-            try:
-                rmdir(full)
-            except OSError:
-                pass
-
-
-#################################################
-# Test driver
-#################################################
 
 
 @HttpEngine.route("/test/simple", "GET")
@@ -119,16 +40,6 @@ def create_chunked_route_handler(route):
         if not chunk:  # Received terminating chunk
             return "application/json", recv_chunks
         recv_chunks.append(chunk.decode("utf8"))
-
-
-async def start_server():
-    """
-    Start an HTTP server as a background task
-    """
-    server = http_server.HttpServer()
-    await server.start_socket_server()
-    await asyncio.sleep_ms(100)
-    return server
 
 
 @garbage_collect
@@ -366,23 +277,6 @@ async def test_keepalive():
         await server.terminate()
 
 
-#################################################
-# Test methods
-#################################################
-
-
-def setup_config(tls_enabled=False, served_paths="", files_api_enabled=False):
-    http_server.HttpServer.LISTEN_PORT_HTTP = 8080
-    http_server.HttpServer.LISTEN_PORT_HTTPS = 4443
-
-    _CONFIG_CACHE[2 * CONF_LOG_LEVEL + 1] = "warning"
-    _CONFIG_CACHE[2 * CONF_TLS + 1] = tls_enabled
-    _CONFIG_CACHE[2 * CONF_HTTP_SERVED_PATHS + 1] = parse_config(
-        CONF_HTTP_SERVED_PATHS, served_paths
-    )
-    _CONFIG_CACHE[2 * CONF_HTTP_FILES_API + 1] = files_api_enabled
-
-
 def test_registration():
     test_assert(
         "simple route registration",
@@ -397,15 +291,14 @@ def test_registration():
     )
 
 
-def test_main():
+async def test_main():
     test_registration()
-    asyncio.run(test_simple_response(tls_enabled=False))
-    asyncio.run(test_simple_response(tls_enabled=True))
+    await test_simple_response(tls_enabled=False)
+    await test_simple_response(tls_enabled=True)
+    await test_server_busy()
+    await test_chunked_transfer_encoding()
+    await test_fs_access_control()
+    await test_keepalive()
 
-    asyncio.run(test_server_busy())
-    asyncio.run(test_chunked_transfer_encoding())
-    asyncio.run(test_fs_access_control())
-    asyncio.run(test_keepalive())
 
-
-test_main()
+asyncio.run(test_main())
