@@ -15,7 +15,14 @@ import binascii
 from pyrobusta.protocol import http
 from pyrobusta.utils.patch import add_method
 from pyrobusta.utils.helpers import iterate_segments
-from pyrobusta.utils.config import get_config, CONF_PASSWD_FILE, CONF_ROLES_FILE
+from pyrobusta.utils.config import (
+    get_config,
+    CONF_PASSWD_FILE,
+    CONF_ROLES_FILE,
+    CONF_HTTP_AUTH,
+    CONF_HTTP_INSECURE_AUTH,
+    CONF_TLS,
+)
 from pyrobusta.utils.logging import warning
 
 _MAX_ROLES = 32
@@ -219,6 +226,7 @@ def _load_roles():
                         raise ValueError()
                     role_mask = index_roles(line[sep + 1 :])
                     for attr in iterate_segments(line[0:sep].strip(), ","):
+                        attr = attr.upper()
                         if attr in attributes:
                             raise ValueError()
                         if attr:
@@ -331,6 +339,13 @@ def apply_patches():
     """
     global _ATTR_TREE  # pylint: disable=W0603
     try:
+        if not get_config(CONF_TLS) and get_config(CONF_HTTP_AUTH):
+            insecure_auth_msg = "Authentication turned on without TLS"
+            if get_config(CONF_HTTP_INSECURE_AUTH):
+                warning(insecure_auth_msg)
+            else:
+                raise ValueError(insecure_auth_msg)
+
         add_method(http.HttpEngine, _handle_auth_st)
         add_method(http.HttpEngine, _handle_auth_header_st)
 

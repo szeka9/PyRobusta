@@ -18,6 +18,8 @@ class TestBasicAuthPolicyStateMachine(TestHttpBase):
             "http_auth": "basic",
             "passwd_file": "/tmp/pyrobusta.passwd",
             "roles_file": "/tmp/pyrobusta.roles",
+            # For disbaling authentication related warning messages
+            "tls": True,
         }
 
     def test_basic_auth_public_resource(self):
@@ -64,6 +66,8 @@ class TestBasicAuthStateMachine(TestHttpBase):
             "http_auth": "basic",
             "passwd_file": "/tmp/pyrobusta.passwd",
             "roles_file": "/tmp/pyrobusta.roles",
+            # For disbaling authentication related warning messages
+            "tls": True,
         }
 
     def prepare_auth(self, user, password, auth_header, user_roles, route_roles):
@@ -314,6 +318,8 @@ class TestBasicAuthPrefixTree(TestHttpBase):
             "http_auth": "basic",
             "passwd_file": "/tmp/pyrobusta.passwd",
             "roles_file": "/tmp/pyrobusta.roles",
+            # For disbaling authentication related warning messages
+            "tls": True,
         }
 
     def setup_roles(self, roles: dict):
@@ -456,6 +462,8 @@ class TestBasicAuthUserConfigReader(TestHttpBase):
             "http_auth": "basic",
             "passwd_file": "/tmp/pyrobusta.passwd",
             "roles_file": "/tmp/pyrobusta.roles",
+            # For disbaling authentication related warning messages
+            "tls": True,
         }
 
     def test_user_reader_valid_config(self):
@@ -544,6 +552,8 @@ class TestBasicAuthRoleConfigReader(TestHttpBase):
             "http_auth": "basic",
             "passwd_file": "/tmp/pyrobusta.passwd",
             "roles_file": "/tmp/pyrobusta.roles",
+            # For disbaling authentication related warning messages
+            "tls": True,
         }
 
     def test_role_reader_valid_config(self):
@@ -554,7 +564,7 @@ class TestBasicAuthRoleConfigReader(TestHttpBase):
             "/app/resource\n"
             "/app/resource/* # inline comment\n"
             "    GET: role_1\n"
-            "    POST,PUT:role_2,role_3\n"
+            "    pOsT,PuT:role_2,role_3\n"
             "    OPTIONS: *# inline comment\n"
             "    DELETE:\n"
             "    \n"

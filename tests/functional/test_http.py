@@ -54,8 +54,7 @@ async def test_simple_response(tls_enabled):
             b"Host: localhost\r\n"
             b"Connection: close\r\n"
             b"Accept:text/plain\r\n"
-            b"\r\n",
-            tls_enabled,
+            b"\r\n"
         )
         test_assert(
             f"http{"s" if tls_enabled else ""} response contains text/plain header",
@@ -74,8 +73,7 @@ async def test_simple_response(tls_enabled):
             b"Host: localhost\r\n"
             b"Connection: close\r\n"
             b"Accept: application/json\r\n"
-            b"\r\n",
-            tls_enabled,
+            b"\r\n"
         )
         test_assert(
             f"http{"s" if tls_enabled else ""} response contains application/json header",

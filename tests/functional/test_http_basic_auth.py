@@ -18,7 +18,7 @@ def auth_handler(http_ctx, _):
 
 @garbage_collect
 async def test_missing_auth_header():
-    setup_config(http_auth="basic")
+    setup_config(http_auth="basic", tls_enabled=True)
     server = await start_server()
 
     # Test: unauthenticated & unauthorized
@@ -40,7 +40,7 @@ async def test_missing_auth_header():
 
 @garbage_collect
 async def test_missing_role():
-    setup_config(http_auth="basic")
+    setup_config(http_auth="basic", tls_enabled=True)
     server = await start_server()
 
     # Test: authenticated & unauthorized
@@ -63,7 +63,7 @@ async def test_missing_role():
 
 @garbage_collect
 async def test_user_authorized():
-    setup_config(http_auth="basic")
+    setup_config(http_auth="basic", tls_enabled=True)
     server = await start_server()
 
     # Test: authenticated & authorized
@@ -82,6 +82,21 @@ async def test_user_authorized():
     )
 
     await server.terminate()
+
+
+@garbage_collect
+async def test_server_prevents_insecure_auth():
+    exception_raised = False
+    try:
+        setup_config(http_auth="basic", tls_enabled=False, http_insecure_auth=False)
+    except ValueError:
+        exception_raised = True
+
+    test_assert(
+        f"server prevents authentication without TLS",
+        exception_raised,
+        True,
+    )
 
 
 def setup_auth():
@@ -107,7 +122,7 @@ def test_registration():
 
 def test_auth_patches():
     setup_auth()
-    setup_config(http_auth="basic")
+    setup_config(http_auth="basic", tls_enabled=True)
     test_assert(
         "auth state machine patches",
         http_basic_auth._handle_auth_st,
@@ -122,6 +137,7 @@ async def test_main():
     await test_missing_auth_header()
     await test_missing_role()
     await test_user_authorized()
+    await test_server_prevents_insecure_auth()
 
 
 asyncio.run(test_main())
