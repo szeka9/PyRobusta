@@ -13,8 +13,10 @@ from pyrobusta.utils.config import (
     CONF_HTTP_FILES_API,
     CONF_HTTP_SERVED_PATHS,
     CONF_HTTP_AUTH,
+    CONF_HTTP_INSECURE_AUTH,
     _CONFIG_CACHE,
     parse_config,
+    get_config
 )
 
 
@@ -46,15 +48,16 @@ async def start_server():
     return server
 
 
-async def send_request(request, tls=False):
+async def send_request(request):
+    is_tls = get_config(CONF_TLS)
     port = (
         http_server.HttpServer.LISTEN_PORT_HTTPS
-        if tls
+        if is_tls
         else http_server.HttpServer.LISTEN_PORT_HTTP
     )
 
     ctx = None
-    if tls:
+    if is_tls:
         # Disable certificate verification due to self-signed cert
         ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
         ctx.verify_mode = ssl.CERT_NONE
@@ -103,6 +106,7 @@ def setup_config(
     http_multipart_enabled=False,
     served_paths="",
     http_auth="",
+    http_insecure_auth=False
 ):
     http_server.HttpServer.LISTEN_PORT_HTTP = 8080
     http_server.HttpServer.LISTEN_PORT_HTTPS = 4443
@@ -115,5 +119,6 @@ def setup_config(
     _CONFIG_CACHE[2 * CONF_HTTP_MULTIPART + 1] = http_multipart_enabled
     _CONFIG_CACHE[2 * CONF_HTTP_FILES_API + 1] = files_api_enabled
     _CONFIG_CACHE[2 * CONF_HTTP_AUTH + 1] = http_auth
+    _CONFIG_CACHE[2 * CONF_HTTP_INSECURE_AUTH + 1] = http_insecure_auth
 
     enable_optional_features()

@@ -30,11 +30,12 @@ CONF_HTTP_MEM_CAP = const(5)
 CONF_HTTP_SERVED_PATHS = const(6)
 CONF_HTTP_FILES_API = const(7)
 CONF_HTTP_AUTH = const(8)
-CONF_SOCKET_MAX_CON = const(9)
-CONF_TLS = const(10)
-CONF_LOG_LEVEL = const(11)
-CONF_PASSWD_FILE = const(12)
-CONF_ROLES_FILE = const(13)
+CONF_HTTP_INSECURE_AUTH = const(9)
+CONF_SOCKET_MAX_CON = const(10)
+CONF_TLS = const(11)
+CONF_LOG_LEVEL = const(12)
+CONF_PASSWD_FILE = const(13)
+CONF_ROLES_FILE = const(14)
 
 # -------------------
 # Configuration state
@@ -59,6 +60,8 @@ _CONFIG_CACHE = [
     False,
     CONF_HTTP_AUTH,
     None,
+    CONF_HTTP_INSECURE_AUTH,
+    False,
     CONF_SOCKET_MAX_CON,
     2,
     CONF_TLS,
@@ -80,7 +83,12 @@ def parse_config(key, value):
     """
     Normalize a configuration value depending on the key.
     """
-    if key in (CONF_HTTP_MULTIPART, CONF_HTTP_FILES_API, CONF_TLS):
+    if key in (
+        CONF_HTTP_MULTIPART,
+        CONF_HTTP_FILES_API,
+        CONF_HTTP_INSECURE_AUTH,
+        CONF_TLS,
+    ):
         return value.lower() == "true"
     if key in (CONF_HTTP_PORT, CONF_HTTPS_PORT, CONF_SOCKET_MAX_CON):
         return int(value)
@@ -130,8 +138,7 @@ def read_config(config=CONFIG_LOCATION):
 def get_config(key):
     """
     Read configuration by key.
-    The cache is reloaded if the key is missing
-    or the value is set to None.
+    The cache is reloaded during the first read.
     """
     global _CONFIG_LOADED  # pylint: disable=W0603
     if not _CONFIG_LOADED:
