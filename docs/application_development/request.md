@@ -155,7 +155,8 @@ Unlike regular request bodies, multipart parts are parsed by the server before b
 to the application. Preprocessed parts consist of headers (dictionary) and the raw part body
 (bytes), passed as a tuple.
 
-**Multipart state tracking**
+### Multipart State Tracking
+
 The HTTP context exposes the boolean attributes
 `mp_is_first` and
 `mp_is_last`

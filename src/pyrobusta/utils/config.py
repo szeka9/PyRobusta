@@ -29,9 +29,12 @@ CONF_HTTP_MULTIPART = const(4)
 CONF_HTTP_MEM_CAP = const(5)
 CONF_HTTP_SERVED_PATHS = const(6)
 CONF_HTTP_FILES_API = const(7)
-CONF_SOCKET_MAX_CON = const(8)
-CONF_TLS = const(9)
-CONF_LOG_LEVEL = const(10)
+CONF_HTTP_AUTH = const(8)
+CONF_SOCKET_MAX_CON = const(9)
+CONF_TLS = const(10)
+CONF_LOG_LEVEL = const(11)
+CONF_PASSWD_FILE = const(12)
+CONF_ROLES_FILE = const(13)
 
 # -------------------
 # Configuration state
@@ -51,21 +54,28 @@ _CONFIG_CACHE = [
     CONF_HTTP_MEM_CAP,
     0.1,
     CONF_HTTP_SERVED_PATHS,
-    ["/www", "/lib/pyrobusta"],
+    [normalize_path("/www"), normalize_path("/lib/pyrobusta")],
     CONF_HTTP_FILES_API,
     False,
+    CONF_HTTP_AUTH,
+    None,
     CONF_SOCKET_MAX_CON,
     2,
     CONF_TLS,
     False,
     CONF_LOG_LEVEL,
     "info",
+    CONF_PASSWD_FILE,
+    normalize_path("/pyrobusta.passwd"),
+    CONF_ROLES_FILE,
+    normalize_path("/pyrobusta.roles"),
 ]
 
 
 # --------------
 # Public helpers
 # --------------
+# pylint: disable=R0911
 def parse_config(key, value):
     """
     Normalize a configuration value depending on the key.
@@ -78,9 +88,11 @@ def parse_config(key, value):
         return float(value)
     if key == CONF_HTTP_SERVED_PATHS:
         return [normalize_path(p) for p in value.split()]
-    if key not in (CONF_WIFI_SSID, CONF_WIFI_PASSWORD):
-        return value.lower()
-    return value
+    if key in (CONF_PASSWD_FILE, CONF_ROLES_FILE):
+        return normalize_path(value)
+    if key in (CONF_WIFI_SSID, CONF_WIFI_PASSWORD):
+        return value
+    return value.lower()
 
 
 def read_config(config=CONFIG_LOCATION):
@@ -122,7 +134,7 @@ def get_config(key):
     or the value is set to None.
     """
     global _CONFIG_LOADED  # pylint: disable=W0603
-    if _CONFIG_CACHE[2 * key + 1] is None or not _CONFIG_LOADED:
+    if not _CONFIG_LOADED:
         read_config()
         _CONFIG_LOADED = True
     return _CONFIG_CACHE[2 * key + 1]

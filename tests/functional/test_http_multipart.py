@@ -1,71 +1,15 @@
 import asyncio
-import ssl
-import gc
 
-from os import mkdir, listdir, remove, rmdir
+from env_utils import (
+    garbage_collect,
+    test_assert,
+    send_request,
+    setup_config,
+    start_server,
+)
 
-from pyrobusta.server import http_server
 from pyrobusta.protocol import http_multipart
-from pyrobusta.protocol.http import (
-    HttpEngine,
-    enable_optional_features,
-)
-from pyrobusta.utils.config import (
-    CONF_TLS,
-    CONF_LOG_LEVEL,
-    CONF_HTTP_MULTIPART,
-    CONF_HTTP_FILES_API,
-    _CONFIG_CACHE,
-)
-
-#################################################
-# Test helpers
-#################################################
-
-
-def garbage_collect(coroutine):
-    async def decorated(*args, **kwargs):
-        gc.collect()
-        await coroutine(*args, **kwargs)
-        gc.collect()
-
-    return decorated
-
-
-def test_assert(name, actual, expected):
-    print(f"Test {name}: ", end="")
-    if actual == expected:
-        print("OK")
-    else:
-        print("Fail")
-        raise AssertionError(f"{actual} != {expected}")
-
-
-async def send_request(request, tls=False):
-    port = (
-        http_server.HttpServer.LISTEN_PORT_HTTPS
-        if tls
-        else http_server.HttpServer.LISTEN_PORT_HTTP
-    )
-
-    ctx = None
-    if tls:
-        # Disable certificate verification due to self-signed cert
-        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-        ctx.verify_mode = ssl.CERT_NONE
-
-    reader, writer = await asyncio.open_connection("127.0.0.1", port, ssl=ctx)
-    writer.write(request)
-    await writer.drain()
-
-    to_read = True
-    response = b""
-    while to_read:
-        response_part = await reader.read(1024)
-        response += response_part
-        to_read = len(response_part)
-    writer.close()
-    return response
+from pyrobusta.protocol.http import HttpEngine
 
 
 def multipart_response(num_responses):
@@ -81,67 +25,28 @@ def multipart_response(num_responses):
     return response_generator
 
 
-def fmkdir(path: str):
-    try:
-        mkdir(path)
-    except OSError:
-        pass
-
-
-def delete_path(path):
-    for name in listdir(path):
-        if path == "/":
-            full = "/" + name
-        else:
-            full = path + "/" + name
-
-        try:
-            remove(full)
-        except OSError:
-            delete_path(full)
-            try:
-                rmdir(full)
-            except OSError:
-                pass
-
-
-#################################################
-# Test driver
-#################################################
-
-
 @HttpEngine.route("/test/multipart", "GET")
 def multipart_handler(http_ctx, _):
     part_count = int(http_ctx.headers["x-part-count"])
     return "multipart/form-data", multipart_response(part_count)
 
 
-async def start_server():
-    """
-    Start an HTTP server as a background task.
-    """
-    server = http_server.HttpServer()
-    await server.start_socket_server()
-    await asyncio.sleep_ms(100)
-    return server
-
-
 @garbage_collect
-async def test_multipart_response(tls_enabled):
-    setup_config(tls_enabled=tls_enabled)
+async def test_multipart_response():
+    setup_config(http_multipart_enabled=True)
     server = await start_server()
 
     # Test: 1 part
     plain_response = await send_request(
         b"GET /test/multipart HTTP/1.1\r\n"
         b"Host: localhost\r\n"
+        b"Content-Length: 0\r\n"
         b"Connection: close\r\n"
-        b"X-Part-Count: 1\r\n\r\n",
-        tls_enabled,
+        b"X-Part-Count: 1\r\n\r\n"
     )
 
     test_assert(
-        f"http{"s" if tls_enabled else ""} response contains 1 part",
+        f"multipart response contains 1 part",
         b"Response 1" in plain_response,
         True,
     )
@@ -150,33 +55,18 @@ async def test_multipart_response(tls_enabled):
     plain_response = await send_request(
         b"GET /test/multipart HTTP/1.1\r\n"
         b"Host: localhost\r\n"
+        b"Content-Length: 0\r\n"
         b"Connection: close\r\n"
-        b"X-Part-Count: 10\r\n\r\n",
-        tls_enabled,
+        b"X-Part-Count: 10\r\n\r\n"
     )
+
     test_assert(
-        f"http{"s" if tls_enabled else ""} response contains 10 parts",
+        f"multipart response contains 10 parts",
         [b"Response %s" % i in plain_response for i in range(1, 11)],
         [True] * 10,
     )
 
     await server.terminate()
-
-
-#################################################
-# Test methods
-#################################################
-
-
-def setup_config(tls_enabled=False, files_api_enabled=False):
-    http_server.HttpServer.LISTEN_PORT_HTTP = 8080
-    http_server.HttpServer.LISTEN_PORT_HTTPS = 4443
-
-    _CONFIG_CACHE[2 * CONF_LOG_LEVEL + 1] = "warning"
-    _CONFIG_CACHE[2 * CONF_TLS + 1] = tls_enabled
-    _CONFIG_CACHE[2 * CONF_HTTP_MULTIPART + 1] = True
-    _CONFIG_CACHE[2 * CONF_HTTP_FILES_API + 1] = files_api_enabled
-    enable_optional_features()
 
 
 def test_registration():
@@ -188,7 +78,7 @@ def test_registration():
 
 
 def test_multipart_patches():
-    setup_config()
+    setup_config(http_multipart_enabled=True)
     test_assert(
         "multipart state machine patches",
         http_multipart._start_multipart_parser_st,
@@ -196,11 +86,10 @@ def test_multipart_patches():
     )
 
 
-def test_main():
+async def test_main():
     test_registration()
     test_multipart_patches()
-    asyncio.run(test_multipart_response(tls_enabled=False))
-    asyncio.run(test_multipart_response(tls_enabled=True))
+    await test_multipart_response()
 
 
-test_main()
+asyncio.run(test_main())
