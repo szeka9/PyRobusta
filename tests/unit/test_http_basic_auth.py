@@ -564,7 +564,7 @@ class TestBasicAuthRoleConfigReader(TestHttpBase):
             "/app/resource\n"
             "/app/resource/* # inline comment\n"
             "    GET: role_1\n"
-            "    POST,PUT:role_2,role_3\n"
+            "    pOsT,PuT:role_2,role_3\n"
             "    OPTIONS: *# inline comment\n"
             "    DELETE:\n"
             "    \n"

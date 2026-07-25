@@ -226,6 +226,7 @@ def _load_roles():
                         raise ValueError()
                     role_mask = index_roles(line[sep + 1 :])
                     for attr in iterate_segments(line[0:sep].strip(), ","):
+                        attr = attr.upper()
                         if attr in attributes:
                             raise ValueError()
                         if attr:
