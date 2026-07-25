@@ -16,7 +16,7 @@ from pyrobusta.utils.config import (
     CONF_HTTP_INSECURE_AUTH,
     _CONFIG_CACHE,
     parse_config,
-    get_config
+    get_config,
 )
 
 
@@ -106,7 +106,7 @@ def setup_config(
     http_multipart_enabled=False,
     served_paths="",
     http_auth="",
-    http_insecure_auth=False
+    http_insecure_auth=False,
 ):
     http_server.HttpServer.LISTEN_PORT_HTTP = 8080
     http_server.HttpServer.LISTEN_PORT_HTTPS = 4443
