@@ -15,9 +15,8 @@ import binascii
 from pyrobusta.protocol import http
 from pyrobusta.utils.patch import add_method
 from pyrobusta.utils.helpers import iterate_segments
-
-_PASSWD_LOCATION = "pyrobusta.passwd"
-_ROLES_LOCATION = "pyrobusta.roles"
+from pyrobusta.utils.config import get_config, CONF_PASSWD_FILE, CONF_ROLES_FILE
+from pyrobusta.utils.logging import warning
 
 _MAX_ROLES = 32
 _NO_POLICY = 2**_MAX_ROLES
@@ -165,61 +164,69 @@ def index_roles(roles: str):
     return role_mask
 
 
-def _load_users(config=_PASSWD_LOCATION):
-    with open(config, encoding="utf-8") as users:
-        for line in users:
-            comment_idx = line.find("#")
-            line = line[:comment_idx] if comment_idx != -1 else line
-            if not line:
-                continue
-            if not line.count(":") == 2:
-                raise ValueError()
-            user_sep = line.find(":")
-            password_sep = line.find(":", user_sep + 1)
-            user = line[:user_sep].strip().lower()
-            password_hash = line[user_sep + 1 : password_sep].strip()
-            roles = line[password_sep + 1 :]
-            role_mask = index_roles(roles)
-            if not user or not password_hash:
-                raise ValueError()
-            if user in _USERS:
-                raise ValueError()
-            _USERS[user] = [bytes.fromhex(password_hash), role_mask]
-
-
-def _load_roles(config=_ROLES_LOCATION):
-    with open(config, encoding="utf-8") as roles:
-        paths = []
-        attributes = {}
-        for line in roles:
-            comment_idx = line.find("#")
-            line = line[:comment_idx].strip() if comment_idx != -1 else line.strip()
-
-            # Parse URL path
-            if line.startswith("/"):
-                if paths and attributes:
-                    for path in paths:
-                        _ATTR_TREE.insert_path(path, attributes)
-                    paths = [line]
-                    attributes = {}
-                else:
-                    paths.append(line)
-
-            # Parse attributes
-            elif line:
-                if not paths:
+def _load_users():
+    passwd_file = get_config(CONF_PASSWD_FILE)
+    try:
+        with open(passwd_file, encoding="utf-8") as users:
+            for line in users:
+                comment_idx = line.find("#")
+                line = line[:comment_idx] if comment_idx != -1 else line
+                if not line:
+                    continue
+                if not line.count(":") == 2:
                     raise ValueError()
-                sep = line.find(":")
-                if sep in (0, -1):
+                user_sep = line.find(":")
+                password_sep = line.find(":", user_sep + 1)
+                user = line[:user_sep].strip().lower()
+                password_hash = line[user_sep + 1 : password_sep].strip()
+                roles = line[password_sep + 1 :]
+                role_mask = index_roles(roles)
+                if not user or not password_hash:
                     raise ValueError()
-                role_mask = index_roles(line[sep + 1 :])
-                for attr in iterate_segments(line[0:sep].strip(), ","):
-                    if attr in attributes:
+                if user in _USERS:
+                    raise ValueError()
+                _USERS[user] = [bytes.fromhex(password_hash), role_mask]
+    except OSError:
+        warning("Unable to open: " + passwd_file)
+
+
+def _load_roles():
+    roles_file = get_config(CONF_ROLES_FILE)
+    try:
+        with open(roles_file, encoding="utf-8") as roles:
+            paths = []
+            attributes = {}
+            for line in roles:
+                comment_idx = line.find("#")
+                line = line[:comment_idx].strip() if comment_idx != -1 else line.strip()
+
+                # Parse URL path
+                if line.startswith("/"):
+                    if paths and attributes:
+                        for path in paths:
+                            _ATTR_TREE.insert_path(path, attributes)
+                        paths = [line]
+                        attributes = {}
+                    else:
+                        paths.append(line)
+
+                # Parse attributes
+                elif line:
+                    if not paths:
                         raise ValueError()
-                    if attr:
-                        attributes[attr] = role_mask
-        for path in paths:
-            _ATTR_TREE.insert_path(path, attributes)
+                    sep = line.find(":")
+                    if sep in (0, -1):
+                        raise ValueError()
+                    role_mask = index_roles(line[sep + 1 :])
+                    for attr in iterate_segments(line[0:sep].strip(), ","):
+                        if attr in attributes:
+                            raise ValueError()
+                        if attr:
+                            attributes[attr] = role_mask
+            for path in paths:
+                _ATTR_TREE.insert_path(path, attributes)
+    except OSError:
+        warning("Unable to open: " + roles_file)
 
 
 def _handle_auth_st(self, _):

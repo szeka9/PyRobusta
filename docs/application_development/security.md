@@ -27,9 +27,11 @@ stored on the device. Passwords are stored as SHA-256 hashes.
 Basic authentication is disabled by default. It can be enabled by setting
 `http_auth=basic` in [pyrobusta.env](configuration.md).
 
-During initialization, PyRobusta reads `pyrobusta.passwd`
+During initialization, PyRobusta reads `pyrobusta.passwd` by default
 from the server's working directory. Each entry specifies a username,
-a password hash, and one or more role names.
+a password hash, and one or more role names. Set `passwd_file` in the configuration
+to specify an alternative user credentials file to load. For more information,
+see [Server Configuration](./configuration.md).
 
 PyRobusta defines a single realm (`realm="Device"`) to authenticate against.
 The server response includes the `WWW-Authenticate: Basic realm="Device"` header
@@ -73,6 +75,9 @@ HTTP methods and server resources. Authorization follows a least-privilege model
 Users have no permissions unless explicitly granted by one or more authorization rules.
 Each matching rule grants additional permissions. Requests that do not match an authorization
 rule receive HTTP 403 Forbidden.
+
+Set `roles_file` in the configuration to specify an alternative role configuration file to load.
+For more information, see [Server Configuration](./configuration.md).
 
 ### pyrobusta.roles
 

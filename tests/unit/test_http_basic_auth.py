@@ -2,7 +2,6 @@ import os
 import unittest
 import hashlib
 import base64
-import tempfile
 
 from http_base import TestHttpBase
 
@@ -14,8 +13,12 @@ class TestBasicAuthPolicyStateMachine(TestHttpBase):
 
     @classmethod
     def setUpClass(cls):
-        cls.base_config = {"http_auth": "basic"}
         cls.cwd = os.getcwd()
+        cls.base_config = {
+            "http_auth": "basic",
+            "passwd_file": "/tmp/pyrobusta.passwd",
+            "roles_file": "/tmp/pyrobusta.roles",
+        }
 
     def test_basic_auth_public_resource(self):
         self.basic_auth_module._ATTR_TREE.insert_path(
@@ -56,8 +59,12 @@ class TestBasicAuthStateMachine(TestHttpBase):
 
     @classmethod
     def setUpClass(cls):
-        cls.base_config = {"http_auth": "basic"}
         cls.cwd = os.getcwd()
+        cls.base_config = {
+            "http_auth": "basic",
+            "passwd_file": "/tmp/pyrobusta.passwd",
+            "roles_file": "/tmp/pyrobusta.roles",
+        }
 
     def prepare_auth(self, user, password, auth_header, user_roles, route_roles):
         if user is not None and password is not None:
@@ -302,8 +309,12 @@ class TestBasicAuthPrefixTree(TestHttpBase):
 
     @classmethod
     def setUpClass(cls):
-        cls.base_config = {"http_auth": "basic"}
         cls.cwd = os.getcwd()
+        cls.base_config = {
+            "http_auth": "basic",
+            "passwd_file": "/tmp/pyrobusta.passwd",
+            "roles_file": "/tmp/pyrobusta.roles",
+        }
 
     def setup_roles(self, roles: dict):
         self.attr_tree = self.basic_auth_module.AttributeNode("")
@@ -440,8 +451,12 @@ class TestBasicAuthUserConfigReader(TestHttpBase):
 
     @classmethod
     def setUpClass(cls):
-        cls.base_config = {"http_auth": "basic"}
         cls.cwd = os.getcwd()
+        cls.base_config = {
+            "http_auth": "basic",
+            "passwd_file": "/tmp/pyrobusta.passwd",
+            "roles_file": "/tmp/pyrobusta.roles",
+        }
 
     def test_user_reader_valid_config(self):
         file_content = (
@@ -451,13 +466,11 @@ class TestBasicAuthUserConfigReader(TestHttpBase):
             "user-3:280b73d2ac8375035501e5c06acb4b770e74ec95f479e6e2643227d7f57ce7ad:role1,role2\n"
         )
 
-        with tempfile.NamedTemporaryFile(
-            mode="w", encoding="utf-8", dir=self.cwd
-        ) as file:
+        with open(self.passwd_file, "w", encoding="utf-8") as passwd:
             self.basic_auth_module._USERS.clear()
-            file.write(file_content)
-            file.flush()
-            self.basic_auth_module._load_users(file.name)
+            passwd.write(file_content)
+
+        self.basic_auth_module._load_users()
 
         self.assertDictEqual(
             self.basic_auth_module._USERS,
@@ -488,13 +501,12 @@ class TestBasicAuthUserConfigReader(TestHttpBase):
             ":70b0577b18482fd0e42b92ba9a1ce90ac3b976648aa68fb8484098f76f816145:\n"
         )
 
-        with tempfile.NamedTemporaryFile(
-            mode="w", encoding="utf-8", dir=self.cwd
-        ) as file:
-            file.write(file_content)
-            file.flush()
-            with self.assertRaises(ValueError):
-                self.basic_auth_module._load_users(file.name)
+        with open(self.passwd_file, "w", encoding="utf-8") as passwd:
+            self.basic_auth_module._USERS.clear()
+            passwd.write(file_content)
+
+        with self.assertRaises(ValueError):
+            self.basic_auth_module._load_users()
 
     def test_user_reader_duplicate_user(self):
         file_content = (
@@ -502,24 +514,22 @@ class TestBasicAuthUserConfigReader(TestHttpBase):
             "user-1:718a8ca4dd4d30b8dc0756ad9d7de727079869b215b03782279e372ab6911ecf:\n"
         )
 
-        with tempfile.NamedTemporaryFile(
-            mode="w", encoding="utf-8", dir=self.cwd
-        ) as file:
-            file.write(file_content)
-            file.flush()
-            with self.assertRaises(ValueError):
-                self.basic_auth_module._load_users(file.name)
+        with open(self.passwd_file, "w", encoding="utf-8") as passwd:
+            self.basic_auth_module._USERS.clear()
+            passwd.write(file_content)
+
+        with self.assertRaises(ValueError):
+            self.basic_auth_module._load_users()
 
     def test_user_reader_empty_password(self):
         file_content = "user-1::\n"
 
-        with tempfile.NamedTemporaryFile(
-            mode="w", encoding="utf-8", dir=self.cwd
-        ) as file:
-            file.write(file_content)
-            file.flush()
-            with self.assertRaises(ValueError):
-                self.basic_auth_module._load_users(file.name)
+        with open(self.passwd_file, "w", encoding="utf-8") as passwd:
+            self.basic_auth_module._USERS.clear()
+            passwd.write(file_content)
+
+        with self.assertRaises(ValueError):
+            self.basic_auth_module._load_users()
 
 
 class TestBasicAuthRoleConfigReader(TestHttpBase):
@@ -529,8 +539,12 @@ class TestBasicAuthRoleConfigReader(TestHttpBase):
 
     @classmethod
     def setUpClass(cls):
-        cls.base_config = {"http_auth": "basic"}
         cls.cwd = os.getcwd()
+        cls.base_config = {
+            "http_auth": "basic",
+            "passwd_file": "/tmp/pyrobusta.passwd",
+            "roles_file": "/tmp/pyrobusta.roles",
+        }
 
     def test_role_reader_valid_config(self):
         file_content = (
@@ -549,13 +563,11 @@ class TestBasicAuthRoleConfigReader(TestHttpBase):
             "POST , PUT : role_1 , role_2 "
         )
 
-        with tempfile.NamedTemporaryFile(
-            mode="w", encoding="utf-8", dir=self.cwd
-        ) as file:
+        with open(self.roles_file, "w", encoding="utf-8") as roles:
             self.basic_auth_module._ATTR_TREE = self.basic_auth_module.AttributeNode("")
-            file.write(file_content)
-            file.flush()
-            self.basic_auth_module._load_roles(file.name)
+            roles.write(file_content)
+
+        self.basic_auth_module._load_roles()
 
         attributes = self.basic_auth_module._ATTR_TREE.get_attributes("/index.html")
         self.assertEqual(attributes, {"*": self.basic_auth_module._NO_POLICY})
@@ -585,26 +597,22 @@ class TestBasicAuthRoleConfigReader(TestHttpBase):
     def test_role_reader_missing_path(self):
         file_content = "   *:*\n"
 
-        with tempfile.NamedTemporaryFile(
-            mode="w", encoding="utf-8", dir=self.cwd
-        ) as file:
+        with open(self.roles_file, "w", encoding="utf-8") as roles:
             self.basic_auth_module._ATTR_TREE = self.basic_auth_module.AttributeNode("")
-            file.write(file_content)
-            file.flush()
-            with self.assertRaises(ValueError):
-                self.basic_auth_module._load_roles(file.name)
+            roles.write(file_content)
+
+        with self.assertRaises(ValueError):
+            self.basic_auth_module._load_roles()
 
     def test_role_reader_duplicate_attribute(self):
         file_content = "/app/resource\n" + "    GET: role_1\n" + "    GET: role_2\n"
 
-        with tempfile.NamedTemporaryFile(
-            mode="w", encoding="utf-8", dir=self.cwd
-        ) as file:
+        with open(self.roles_file, "w", encoding="utf-8") as roles:
             self.basic_auth_module._ATTR_TREE = self.basic_auth_module.AttributeNode("")
-            file.write(file_content)
-            file.flush()
-            with self.assertRaises(ValueError):
-                self.basic_auth_module._load_roles(file.name)
+            roles.write(file_content)
+
+        with self.assertRaises(ValueError):
+            self.basic_auth_module._load_roles()
 
 
 if __name__ == "__main__":

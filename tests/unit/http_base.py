@@ -11,6 +11,19 @@ class TestHttpBase(unittest.TestCase):
     Base class for HTTP file server module.
     """
 
+    def patch_config_loader(self, config, config_module):
+        def open_side_effect(*args, **kwargs):
+            data = "\n".join(f"{k}={v}" for k, v in config.items())
+            return mock_open(read_data=data)(*args, **kwargs)
+
+        self.open_patcher = patch.object(
+            config_module,
+            "open",
+            side_effect=open_side_effect,
+        )
+        self.open_patcher.start()
+        self.addCleanup(self.open_patcher.stop)
+
     @classmethod
     def setUpClass(cls):
         cls.base_config = {}
@@ -27,29 +40,35 @@ class TestHttpBase(unittest.TestCase):
         self.cwd_patcher.start()
         self.addCleanup(self.cwd_patcher.stop)
 
+        # --------------------------------
+        # Workspace, temporary directories
+        # --------------------------------
+        if "tmp" not in os.listdir(self.cwd):
+            os.mkdir(self.cwd + "/tmp")
+
+        if "passwd_file" in self.base_config:
+            self.passwd_file = self.cwd + self.base_config["passwd_file"]
+            with open(self.passwd_file, "w", encoding="utf-8"):
+                pass
+        if "roles_file" in self.base_config:
+            self.roles_file = self.cwd + self.base_config["roles_file"]
+            with open(self.roles_file, "w", encoding="utf-8"):
+                pass
+
         # -------------------
         # Patch config module
         # -------------------
         self.config = dict(self.base_config)
         self.config_module = load_module("pyrobusta/utils/config.py")
+        self.patch_config_loader(self.config, self.config_module)
+
         self.module_patcher = patch.dict(
             sys.modules,
             {"pyrobusta.utils.config": self.config_module},
         )
+
         self.module_patcher.start()
         self.addCleanup(self.module_patcher.stop)
-
-        def open_side_effect(*args, **kwargs):
-            data = "\n".join(f"{k}={v}" for k, v in self.config.items())
-            return mock_open(read_data=data)(*args, **kwargs)
-
-        self.open_patcher = patch.object(
-            self.config_module,
-            "open",
-            side_effect=open_side_effect,
-        )
-        self.open_patcher.start()
-        self.addCleanup(self.open_patcher.stop)
 
         # ------------------------------------------------
         # Load remaining modules, enable optional features
@@ -72,3 +91,12 @@ class TestHttpBase(unittest.TestCase):
         buffer_module = load_module("pyrobusta/stream/buffer.py")
         self.rx = buffer_module.SlidingBuffer(bytearray(1024))
         self.tx = buffer_module.SlidingBuffer(bytearray(1024))
+
+    def tearDown(self):
+        try:
+            if "passwd_file" in self.config:
+                os.remove(self.passwd_file)
+            if "roles_file" in self.config:
+                os.remove(self.roles_file)
+        finally:
+            super().tearDown()

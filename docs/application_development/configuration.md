@@ -54,7 +54,9 @@ $ mpremote a0 cp pyrobusta.env :/pyrobusta.env
 | `http_auth` | Selects the type of authentication method enforced by the server. Currently, basic authentication (`basic`) is supported. | None |
 | `socket_max_con` | Maximum number of simultaneous socket connections. | 2 |
 | `tls` | Enables or disables TLS. When enabled, `cert.der` and `key.der` must be installed at the server root. | False |
-| `log_level` | Logging level. Can be one of: `warning`, `info`, `debug`. | info |
+| `passwd_file` | Path to the file containing user credentials used for authentication. | `/pyrobusta.passwd` |
+| `roles_file` | Path to the file containing RBAC role definitions used for authorization. | `/pyrobusta.roles` |
+| `log_level` | Logging level. Can be one of: `warning`, `info`, `debug`. | `info` |
 
 ## Configuration API
 
