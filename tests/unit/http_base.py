@@ -73,6 +73,7 @@ class TestHttpBase(unittest.TestCase):
         # ------------------------------------------------
         # Load remaining modules, enable optional features
         # ------------------------------------------------
+        self.crypto_module = load_module("pyrobusta/utils/crypto.py")
         self.http_module = load_module("pyrobusta/protocol/http.py")
         self.fs_module = load_module("pyrobusta/protocol/http_file_server.py")
         self.multipart_module = load_module("pyrobusta/protocol/http_multipart.py")
