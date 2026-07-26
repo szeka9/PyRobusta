@@ -15,7 +15,7 @@ import binascii
 
 from pyrobusta.protocol import http
 from pyrobusta.utils.patch import add_method
-from pyrobusta.utils.helpers import iterate_segments
+from pyrobusta.utils.lexpath import iterate_segments
 from pyrobusta.utils.crypto import (
     constant_time_equal,
     create_signed_token,

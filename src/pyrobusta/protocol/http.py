@@ -14,7 +14,7 @@ from ..utils.config import (
     CONF_HTTP_SERVED_PATHS,
     CONF_HTTP_AUTH,
 )
-from ..utils import logging, helpers
+from ..utils import logging, lexpath
 from ..stream.buffer import BufferFullError
 
 
@@ -299,7 +299,7 @@ class HttpEngine:
         """
         cookie_header = self.headers.get("cookie", "")
         name = name.lower()
-        for part in helpers.iterate_segments(cookie_header, ";"):
+        for part in lexpath.iterate_segments(cookie_header, ";"):
             cookie_sep = part.find("=")
             if cookie_sep == -1:
                 continue
@@ -846,8 +846,8 @@ class HttpEngine:
         else:
             target_path = "/www" + self.url.decode("ascii")
 
-        norm_path = helpers.normalize_path(target_path)
-        is_path_served = helpers.is_norm_path_served(
+        norm_path = lexpath.normalize_path(target_path)
+        is_path_served = lexpath.is_norm_path_served(
             norm_path, get_config(CONF_HTTP_SERVED_PATHS)
         )
 

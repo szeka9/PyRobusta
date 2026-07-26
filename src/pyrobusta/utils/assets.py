@@ -4,7 +4,7 @@ Helper functions to install assets.
 
 from os import mkdir, listdir, stat
 
-from .helpers import normalize_path
+from .lexpath import normalize_path
 
 FS_ITER_ABS = 0
 FS_ITER_REL = 1

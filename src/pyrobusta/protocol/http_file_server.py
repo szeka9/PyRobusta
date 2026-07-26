@@ -8,7 +8,7 @@ from os import stat, listdir, rmdir, remove, rename, mkdir
 from json import dumps
 
 from pyrobusta.protocol import http
-from pyrobusta.utils.helpers import (
+from pyrobusta.utils.lexpath import (
     normalize_path,
     is_norm_path_served,
     is_file_path_valid,

@@ -33,9 +33,9 @@ class TestHttpBase(unittest.TestCase):
         # -------------------------------
         # Patch current working directory
         # -------------------------------
-        self.helpers_module = load_module("pyrobusta/utils/helpers.py")
+        self.lexpath_module = load_module("pyrobusta/utils/lexpath.py")
         self.cwd_patcher = patch.object(
-            self.helpers_module, "getcwd", return_value=self.cwd
+            self.lexpath_module, "getcwd", return_value=self.cwd
         )
         self.cwd_patcher.start()
         self.addCleanup(self.cwd_patcher.stop)

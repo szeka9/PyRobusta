@@ -118,7 +118,7 @@ incrementally rather than assuming the full payload is available at once.
 ```
 import pyrobusta.server.http_server as http_server
 from pyrobusta.protocol.http import HttpEngine
-from pyrobusta.utils.helpers import normalize_path
+from pyrobusta.utils.lexpath import normalize_path
 
 @HttpEngine.route("/app/chunks", "POST")
 def upload_chunks(http_ctx, payload: bytes):
@@ -174,7 +174,7 @@ from os import listdir, remove, rename, mkdir
 
 import pyrobusta.server.http_server as http_server
 from pyrobusta.protocol.http import HttpEngine
-from pyrobusta.utils.helpers import normalize_path
+from pyrobusta.utils.lexpath import normalize_path
 
 @HttpEngine.route("/app/parts", "POST")
 def handle_parts(http_ctx, payload: tuple):
