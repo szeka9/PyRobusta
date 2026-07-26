@@ -9,12 +9,13 @@ from os import stat
 
 from ..utils.config import (
     get_config,
+    is_protected_file,
     CONF_HTTP_MULTIPART,
     CONF_HTTP_FILES_API,
     CONF_HTTP_SERVED_PATHS,
     CONF_HTTP_AUTH,
 )
-from ..utils import logging, helpers
+from ..utils import logging, lexpath
 from ..stream.buffer import BufferFullError
 
 
@@ -299,7 +300,7 @@ class HttpEngine:
         """
         cookie_header = self.headers.get("cookie", "")
         name = name.lower()
-        for part in helpers.iterate_segments(cookie_header, ";"):
+        for part in lexpath.iterate_segments(cookie_header, ";"):
             cookie_sep = part.find("=")
             if cookie_sep == -1:
                 continue
@@ -836,6 +837,15 @@ class HttpEngine:
 
         self._handle_route_response(handler_response)
 
+    @staticmethod
+    def is_norm_path_served(norm_path: str):
+        """
+        Returns true if a directory is configured to be served.
+        """
+        return lexpath.is_child_path_of(
+            norm_path, get_config(CONF_HTTP_SERVED_PATHS)
+        ) and not is_protected_file(norm_path)
+
     def _fs_retrieve_st(self, _):
         """
         State for retrieving a file under /www.
@@ -845,14 +855,10 @@ class HttpEngine:
             target_path = "/www/index.html"
         else:
             target_path = "/www" + self.url.decode("ascii")
-
-        norm_path = helpers.normalize_path(target_path)
-        is_path_served = helpers.is_norm_path_served(
-            norm_path, get_config(CONF_HTTP_SERVED_PATHS)
-        )
+        norm_path = lexpath.normalize_path(target_path)
 
         try:
-            if not is_path_served:
+            if not self.is_norm_path_served(norm_path):
                 stat(norm_path)
                 self.terminate(403)
                 return

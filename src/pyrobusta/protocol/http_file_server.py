@@ -8,18 +8,12 @@ from os import stat, listdir, rmdir, remove, rename, mkdir
 from json import dumps
 
 from pyrobusta.protocol import http
-from pyrobusta.utils.helpers import (
+from pyrobusta.utils.lexpath import (
     normalize_path,
-    is_norm_path_served,
     is_file_path_valid,
     is_path_segment_valid,
 )
 from pyrobusta.utils.assets import iterate_fs, FS_ITER_FILE
-
-from ..utils.config import (
-    get_config,
-    CONF_HTTP_SERVED_PATHS,
-)
 
 _UPLOAD_ROOT = normalize_path("/www/user_data")
 _TMP_DIR = normalize_path("/tmp")
@@ -38,10 +32,9 @@ def fs_retrieve(http_ctx, _):
     """
     target_path = http_ctx.url[len(b"/files") :].decode("ascii")
     norm_path = normalize_path(target_path)
-    is_path_served = is_norm_path_served(norm_path, get_config(CONF_HTTP_SERVED_PATHS))
 
     try:
-        if not is_path_served:
+        if not http_ctx.is_norm_path_served(norm_path):
             stat(norm_path)
             http_ctx.terminate(403)
             return "text/plain", "Forbidden"

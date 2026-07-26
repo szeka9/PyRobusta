@@ -17,7 +17,7 @@ from ..utils.config import (
     CONF_TLS,
     CONF_SOCKET_MAX_CON,
 )
-from ..utils.helpers import normalize_path
+from ..utils.lexpath import normalize_path
 from ..utils import logging
 
 

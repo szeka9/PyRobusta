@@ -14,7 +14,7 @@ from env_utils import (
 from pyrobusta.server import http_server
 from pyrobusta.protocol.http import HttpEngine
 
-from pyrobusta.utils.helpers import normalize_path
+from pyrobusta.utils.lexpath import normalize_path
 
 
 @HttpEngine.route("/test/simple", "GET")

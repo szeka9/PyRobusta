@@ -29,18 +29,18 @@ def normalize_path(path: str):
     return cwd
 
 
-def is_norm_path_served(path: str, served_paths: list):
+def is_child_path_of(path: str, parent_paths: list):
     """
-    Returns true if a normalized path is configured to be served.
+    Returns true if a normalized path is the child of a parent path.
     :param path: path to check
-    :param served_paths: list of paths configured to be served
+    :param parent_paths: parent paths to check against
     """
     parts = path.split("/")
     for i, _ in enumerate(parts):
         current_path = "/".join(parts[: i + 1])
         if not current_path:
             current_path = "/"
-        if current_path in served_paths:
+        if current_path in parent_paths:
             return True
     return False
 

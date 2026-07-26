@@ -15,7 +15,7 @@ class TestHelpers(unittest.TestCase):
         cls.config = {}
 
     def setUp(self):
-        self.helpers_module = load_module("pyrobusta/utils/helpers.py")
+        self.lexpath_module = load_module("pyrobusta/utils/lexpath.py")
 
     def test_path_normalization_virtual_root(self):
         """
@@ -35,9 +35,9 @@ class TestHelpers(unittest.TestCase):
             ("/path/../../resource", f"{cwd}/resource"),
             ("/path/../../resource/..", f"{cwd}"),
         ):
-            self.assertEqual(self.helpers_module.normalize_path(case[0]), case[1])
+            self.assertEqual(self.lexpath_module.normalize_path(case[0]), case[1])
 
-    @patch("pyrobusta.utils.helpers.getcwd", return_value="/")
+    @patch("pyrobusta.utils.lexpath.getcwd", return_value="/")
     def test_path_normalization_host_root(self, _):
         """
         Test lexical path normalization assuming the working directory
@@ -55,9 +55,9 @@ class TestHelpers(unittest.TestCase):
             ("/path/../../resource", "/resource"),
             ("/path/../../resource/..", "/"),
         ):
-            self.assertEqual(self.helpers_module.normalize_path(case[0]), case[1])
+            self.assertEqual(self.lexpath_module.normalize_path(case[0]), case[1])
 
-    @patch("pyrobusta.utils.helpers.getcwd", return_value="/")
+    @patch("pyrobusta.utils.lexpath.getcwd", return_value="/")
     def test_path_serving_list(self, _):
         served_paths = ["/path/to/dir1", "/path/to/dir2"]
 
@@ -73,10 +73,10 @@ class TestHelpers(unittest.TestCase):
             ("/path/to", False),
         ):
             self.assertEqual(
-                self.helpers_module.is_norm_path_served(case[0], served_paths), case[1]
+                self.lexpath_module.is_child_path_of(case[0], served_paths), case[1]
             )
 
-    @patch("pyrobusta.utils.helpers.getcwd", return_value="/")
+    @patch("pyrobusta.utils.lexpath.getcwd", return_value="/")
     def test_path_serving_root(self, _):
         served_paths = ["/"]
 
@@ -86,10 +86,10 @@ class TestHelpers(unittest.TestCase):
             ("/path/to/served", True),
         ):
             self.assertEqual(
-                self.helpers_module.is_norm_path_served(case[0], served_paths), case[1]
+                self.lexpath_module.is_child_path_of(case[0], served_paths), case[1]
             )
 
-    @patch("pyrobusta.utils.helpers.getcwd", return_value="/")
+    @patch("pyrobusta.utils.lexpath.getcwd", return_value="/")
     def test_path_serving_none(self, _):
         served_paths = []
 
@@ -99,7 +99,7 @@ class TestHelpers(unittest.TestCase):
             ("/path/to/served", False),
         ):
             self.assertEqual(
-                self.helpers_module.is_norm_path_served(case[0], served_paths), case[1]
+                self.lexpath_module.is_child_path_of(case[0], served_paths), case[1]
             )
 
     def test_path_segment_validation(self):
@@ -114,10 +114,10 @@ class TestHelpers(unittest.TestCase):
         ]
 
         for segment in valid_segments:
-            self.assertTrue(self.helpers_module.is_path_segment_valid(segment))
+            self.assertTrue(self.lexpath_module.is_path_segment_valid(segment))
 
         for segment in invalid_segments:
-            self.assertFalse(self.helpers_module.is_path_segment_valid(segment))
+            self.assertFalse(self.lexpath_module.is_path_segment_valid(segment))
 
     def test_file_path_validation(self):
         valid_paths = ["/file", "/dir1/file", "/dir-2/file", "/dir_3/file"]
@@ -131,7 +131,7 @@ class TestHelpers(unittest.TestCase):
         ]
 
         for path in valid_paths:
-            self.assertTrue(self.helpers_module.is_file_path_valid(path))
+            self.assertTrue(self.lexpath_module.is_file_path_valid(path))
 
         for path in invalid_paths:
-            self.assertFalse(self.helpers_module.is_file_path_valid(path))
+            self.assertFalse(self.lexpath_module.is_file_path_valid(path))

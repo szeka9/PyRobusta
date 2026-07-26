@@ -2,14 +2,14 @@ import asyncio
 
 import pyrobusta.server.http_server as http_server
 from pyrobusta.protocol.http import HttpEngine
-from pyrobusta.utils import logging, config, assets, helpers
+from pyrobusta.utils import logging, config, assets, lexpath
 
 
 def append_package_files(dir, package_files, host_name, protocol):
     """
     Construct package file list recursively.
     """
-    dir = helpers.normalize_path(dir)
+    dir = lexpath.normalize_path(dir)
 
     for asset in assets.iterate_fs(dir):
         package_files["urls"].append(

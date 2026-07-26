@@ -12,10 +12,10 @@ except ImportError:
         return n
 
 
-from .helpers import normalize_path
+from .lexpath import normalize_path
 
 PYROBUSTA_VERSION = "v0.8.0"
-CONFIG_LOCATION = "pyrobusta.env"
+CONFIG_LOCATION = normalize_path("/pyrobusta.env")
 
 # -------------------------------------------
 # Global runtime configuration keys.
@@ -136,6 +136,18 @@ def read_config(config=CONFIG_LOCATION):
                     _CONFIG_CACHE.append(value)
     except OSError:
         pass
+
+
+def is_protected_file(norm_path: str):
+    """
+    Determines if a file path is required for core configuration
+    and is not meant to be served or handled by the server.
+    """
+    return norm_path in (
+        CONFIG_LOCATION,
+        get_config(CONF_PASSWD_FILE),
+        get_config(CONF_ROLES_FILE),
+    )
 
 
 def get_config(key):
