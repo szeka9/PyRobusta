@@ -73,7 +73,12 @@ class TestBasicAuthStateMachine(TestHttpBase):
     def prepare_auth(self, user, password, auth_header, user_roles, route_roles):
         if user is not None and password is not None:
             password_hash = hashlib.sha256(password.encode()).digest()
-            self.basic_auth_module._USERS[user] = [password_hash, user_roles]
+            nonce_size = self.basic_auth_module._CSRF_USER_SECRET_SIZE
+            self.basic_auth_module._USERS[user] = [
+                password_hash,
+                user_roles,
+                os.urandom(nonce_size),
+            ]
 
         self.basic_auth_module._ATTR_TREE.insert_path(
             "/app/private", {"GET": route_roles}
@@ -306,6 +311,216 @@ class TestBasicAuthStateMachine(TestHttpBase):
         self.assertEqual(self.engine.status_code, 401)
 
 
+class TestBasicAuthCSRFStateMachine(TestHttpBase):
+    """
+    Tests for HTTP authentication with CSRF protection.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.cwd = os.getcwd()
+        cls.base_config = {
+            "http_auth": "basic",
+            "passwd_file": "/tmp/pyrobusta.passwd",
+            "roles_file": "/tmp/pyrobusta.roles",
+            # For disbaling authentication related warning messages
+            "tls": True,
+        }
+
+    def prepare_auth(self, user, password, auth_header, user_roles, route_roles):
+        if user is not None and password is not None:
+            password_hash = hashlib.sha256(password.encode()).digest()
+            nonce_size = self.basic_auth_module._CSRF_USER_SECRET_SIZE
+            self.basic_auth_module._USERS[user] = [
+                password_hash,
+                user_roles,
+                os.urandom(nonce_size),
+            ]
+
+        self.basic_auth_module._ATTR_TREE.insert_path(
+            "/app/private", {"GET": route_roles, "POST": route_roles}
+        )
+        self.engine.state = self.engine._handle_auth_header_st
+        self.engine.url = b"/app/private"
+        if auth_header:
+            self.engine.headers["authorization"] = auth_header
+
+    def test_csrf_generated_token_valid(self):
+        self.prepare_auth(
+            user="dummy-user",
+            password="<password of dummy user>",
+            auth_header="Basic "
+            + base64.b64encode(
+                "dummy-user:<password of dummy user>".encode("ascii")
+            ).decode(),
+            user_roles=0b001,
+            route_roles=0b001,
+        )
+        self.engine.method = b"GET"
+
+        self.engine.state(self.rx)
+
+        user_secret = self.basic_auth_module._USERS["dummy-user"][2]
+        cookie_name, csrf_token = (
+            self.engine._lookup(self.engine.resp_headers, b"set-cookie")
+            .decode("ascii")
+            .split(";")[0]
+            .split("=")
+        )
+        is_token_valid = self.crypto_module.verify_signed_token(
+            user_secret, csrf_token, self.basic_auth_module._CSRF_NONCE_SIZE
+        )
+
+        self.assertEqual(cookie_name, "csrf-token")
+        self.assertTrue(is_token_valid)
+        self.assertEqual(self.engine.state, self.engine._route_request_st)
+        self.assertEqual(self.engine.status_code, None)
+
+    def test_csrf_existing_token_accepted(self):
+        self.prepare_auth(
+            user="dummy-user",
+            password="<password of dummy user>",
+            auth_header="Basic "
+            + base64.b64encode(
+                "dummy-user:<password of dummy user>".encode("ascii")
+            ).decode(),
+            user_roles=0b001,
+            route_roles=0b001,
+        )
+        self.engine.method = b"GET"
+
+        user_secret = self.basic_auth_module._USERS["dummy-user"][2]
+        csrf_token = self.crypto_module.create_signed_token(
+            user_secret, self.basic_auth_module._CSRF_NONCE_SIZE
+        )
+        self.engine.headers["cookie"] = "csrf-token=" + csrf_token.decode("ascii")
+        self.engine.headers["x-csrf-token"] = csrf_token.decode("ascii")
+
+        self.engine.state(self.rx)
+
+        with self.assertRaises(ValueError):
+            self.engine._lookup(self.engine.resp_headers, b"set-cookie")
+
+        self.assertEqual(self.engine.state, self.engine._route_request_st)
+        self.assertEqual(self.engine.status_code, None)
+
+    def test_csrf_request_token_accepted(self):
+        self.prepare_auth(
+            user="dummy-user",
+            password="<password of dummy user>",
+            auth_header="Basic "
+            + base64.b64encode(
+                "dummy-user:<password of dummy user>".encode("ascii")
+            ).decode(),
+            user_roles=0b001,
+            route_roles=0b001,
+        )
+        self.engine.method = b"POST"
+
+        user_secret = self.basic_auth_module._USERS["dummy-user"][2]
+        csrf_token = self.crypto_module.create_signed_token(
+            user_secret, self.basic_auth_module._CSRF_NONCE_SIZE
+        )
+        self.engine.headers["cookie"] = "csrf-token=" + csrf_token.decode("ascii")
+        self.engine.headers["x-csrf-token"] = csrf_token.decode("ascii")
+
+        self.engine.state(self.rx)
+
+        self.assertEqual(self.engine.state, self.engine._route_request_st)
+        self.assertEqual(self.engine.status_code, None)
+
+    def test_csrf_request_forged_token_rejected(self):
+        self.prepare_auth(
+            user="dummy-user",
+            password="<password of dummy user>",
+            auth_header="Basic "
+            + base64.b64encode(
+                "dummy-user:<password of dummy user>".encode("ascii")
+            ).decode(),
+            user_roles=0b001,
+            route_roles=0b001,
+        )
+        self.engine.method = b"POST"
+
+        forged_user_secret = os.urandom(self.basic_auth_module._CSRF_NONCE_SIZE)
+        csrf_token = self.crypto_module.create_signed_token(
+            forged_user_secret, self.basic_auth_module._CSRF_NONCE_SIZE
+        )
+        self.engine.headers["cookie"] = "csrf-token=" + csrf_token.decode("ascii")
+        self.engine.headers["x-csrf-token"] = csrf_token.decode("ascii")
+
+        self.engine.state(self.rx)
+
+        self.assertEqual(self.engine.state, self.engine._terminal_st)
+        self.assertEqual(self.engine.status_code, 403)
+
+    def test_csrf_request_missing_csrf_rejected(self):
+        self.prepare_auth(
+            user="dummy-user",
+            password="<password of dummy user>",
+            auth_header="Basic "
+            + base64.b64encode(
+                "dummy-user:<password of dummy user>".encode("ascii")
+            ).decode(),
+            user_roles=0b001,
+            route_roles=0b001,
+        )
+        self.engine.method = b"POST"
+
+        self.engine.state(self.rx)
+
+        self.assertEqual(self.engine.state, self.engine._terminal_st)
+        self.assertEqual(self.engine.status_code, 403)
+
+    def test_csrf_missing_cookie_rejected(self):
+        self.prepare_auth(
+            user="dummy-user",
+            password="<password of dummy user>",
+            auth_header="Basic "
+            + base64.b64encode(
+                "dummy-user:<password of dummy user>".encode("ascii")
+            ).decode(),
+            user_roles=0b001,
+            route_roles=0b001,
+        )
+        self.engine.method = b"POST"
+
+        user_secret = self.basic_auth_module._USERS["dummy-user"][2]
+        csrf_token = self.crypto_module.create_signed_token(
+            user_secret, self.basic_auth_module._CSRF_NONCE_SIZE
+        )
+        self.engine.headers["x-csrf-token"] = csrf_token.decode("ascii")
+
+        self.engine.state(self.rx)
+
+        self.assertEqual(self.engine.state, self.engine._terminal_st)
+        self.assertEqual(self.engine.status_code, 403)
+
+    def test_csrf_missing_token_rejected(self):
+        self.prepare_auth(
+            user="dummy-user",
+            password="<password of dummy user>",
+            auth_header="Basic "
+            + base64.b64encode(
+                "dummy-user:<password of dummy user>".encode("ascii")
+            ).decode(),
+            user_roles=0b001,
+            route_roles=0b001,
+        )
+        self.engine.method = b"POST"
+
+        user_secret = self.basic_auth_module._USERS["dummy-user"][2]
+        csrf_token = self.crypto_module.create_signed_token(
+            user_secret, self.basic_auth_module._CSRF_NONCE_SIZE
+        )
+        self.engine.headers["cookie"] = "csrf-token=" + csrf_token.decode("ascii")
+
+        self.engine.state(self.rx)
+
+        self.assertEqual(self.engine.state, self.engine._terminal_st)
+        self.assertEqual(self.engine.status_code, 403)
+
+
 class TestBasicAuthPrefixTree(TestHttpBase):
     """
     Tests for authorization based on prefix tree.
@@ -488,18 +703,21 @@ class TestBasicAuthUserConfigReader(TestHttpBase):
                         "70b0577b18482fd0e42b92ba9a1ce90ac3b976648aa68fb8484098f76f816145"
                     ),
                     0b00,
+                    self.basic_auth_module._USERS["user-1"][2],
                 ],
                 "user-2": [
                     bytes.fromhex(
                         "718a8ca4dd4d30b8dc0756ad9d7de727079869b215b03782279e372ab6911ecf"
                     ),
                     0b01,
+                    self.basic_auth_module._USERS["user-2"][2],
                 ],
                 "user-3": [
                     bytes.fromhex(
                         "280b73d2ac8375035501e5c06acb4b770e74ec95f479e6e2643227d7f57ce7ad"
                     ),
                     0b11,
+                    self.basic_auth_module._USERS["user-3"][2],
                 ],
             },
         )

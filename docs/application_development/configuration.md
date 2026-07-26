@@ -52,6 +52,7 @@ $ mpremote a0 cp pyrobusta.env :/pyrobusta.env
 | `http_served_paths` | Space-separated list of filesystem paths that may be served over HTTP. | `/www /lib/pyrobusta` |
 | `http_files_api` | Enables or disables the file management API endpoint (`/files`), allowing upload, download, and listing of files. | False |
 | `http_auth` | Selects the type of authentication method enforced by the server. Currently, basic authentication (`basic`) is supported. | None |
+| `http_auth_mode` | Selects authentication usage model. `browser` enables CSRF protection; `api` assumes credentials are explicitly provided by the client and disables CSRF protection. | `browser` |
 | `http_insecure_auth` | Allows clients to authenticate over unsecured HTTP (without TLS). This may expose credentials or authentication tokens in transit. | False |
 | `socket_max_con` | Maximum number of simultaneous socket connections. | 2 |
 | `tls` | Enables or disables TLS. When enabled, `cert.der` and `key.der` must be installed at the server root. | False |

@@ -293,6 +293,21 @@ class HttpEngine:
             return self.query[idx_start + len(key) + 1 : idx_end]
         return self.query[idx_start + len(key) + 1 :]
 
+    def get_cookie(self, name, default=None):
+        """
+        Obtain a named cookie from the request headers.
+        """
+        cookie_header = self.headers.get("cookie", "")
+        name = name.lower()
+        for part in helpers.iterate_segments(cookie_header, ";"):
+            cookie_sep = part.find("=")
+            if cookie_sep == -1:
+                continue
+            key = part[:cookie_sep].strip()
+            if key.lower() == name:
+                return part[cookie_sep + 1 :].strip()
+        return default
+
     @staticmethod
     def _is_matching_url_path(path: bytes, pattern: bytes) -> bool:
         """

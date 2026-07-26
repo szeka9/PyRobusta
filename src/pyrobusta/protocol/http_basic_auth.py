@@ -10,16 +10,23 @@ and role-based authorization.
 
 import hashlib
 import gc
+import os
 import binascii
 
 from pyrobusta.protocol import http
 from pyrobusta.utils.patch import add_method
 from pyrobusta.utils.helpers import iterate_segments
+from pyrobusta.utils.crypto import (
+    constant_time_equal,
+    create_signed_token,
+    verify_signed_token,
+)
 from pyrobusta.utils.config import (
     get_config,
     CONF_PASSWD_FILE,
     CONF_ROLES_FILE,
     CONF_HTTP_AUTH,
+    CONF_HTTP_AUTH_MODE,
     CONF_HTTP_INSECURE_AUTH,
     CONF_TLS,
 )
@@ -30,9 +37,11 @@ _NO_POLICY = 2**_MAX_ROLES
 _ALL_ROLES = 2**_MAX_ROLES - 1
 
 _ROLE_INDEX = {}
-_USERS = {}  # {"user": [b"<password-hash>", b"<role-mask>"]}
+_USERS = {}  # {"user": [b"<password-hash>", b"<role-mask>", b"<csrf_signing_key>"]}
 _ATTR_TREE = None  # root node: /
 
+_CSRF_NONCE_SIZE = 16
+_CSRF_USER_SECRET_SIZE = 32
 _DUMMY_HASH = hashlib.sha256(b"invalid-user").digest()
 
 
@@ -192,7 +201,11 @@ def _load_users():
                     raise ValueError()
                 if user in _USERS:
                     raise ValueError()
-                _USERS[user] = [bytes.fromhex(password_hash), role_mask]
+                _USERS[user] = [
+                    bytes.fromhex(password_hash),
+                    role_mask,
+                    os.urandom(_CSRF_USER_SECRET_SIZE),
+                ]
     except OSError:
         warning("Unable to open: " + passwd_file)
 
@@ -260,46 +273,22 @@ def _handle_auth_st(self, _):
         self.state = self._handle_auth_header_st
 
 
-def compare_digest(a, b):
-    """
-    Constant time comparison of hash digests to prevent timing attacks.
-    """
-    if len(a) != len(b):
-        return False
-    diff = 0
-    for x, y in zip(a, b):
-        diff |= x ^ y
-    return diff == 0
-
-
-def _handle_auth_header_st(self, _):
-    method = self.method.decode("ascii")
-    url = self.url.decode("ascii")
-    auth_header = self.headers.get("authorization", "").strip()
-    www_auth_header = b"WWW-Authenticate"
-    www_auth_method = b'Basic realm="Device"'
-
+def _authenticate(auth_header):
     # Protocol validation
-    if not auth_header or auth_header.strip()[:5].lower() != "basic":
-        self.set_response_header(www_auth_header, www_auth_method)
-        self.terminate(401)
-        return
+    if not auth_header or auth_header[:6].lower() != "basic ":
+        return None
 
     # Decoding
-    user_data = auth_header[5:].strip()
+    user_data = auth_header[6:].strip()
     try:
         user_data = binascii.a2b_base64(user_data).decode()
     except binascii.Error:
-        self.set_response_header(www_auth_header, www_auth_method)
-        self.terminate(401)
-        return
+        return None
 
     # Authentication
     user_sep = user_data.find(":")
     if user_sep < 0:
-        self.set_response_header(www_auth_header, www_auth_method)
-        self.terminate(401)
-        return
+        return None
 
     username = user_data[:user_sep].lower()
     user_info = _USERS.get(username)
@@ -308,13 +297,60 @@ def _handle_auth_header_st(self, _):
         user_data[user_sep + 1 :].strip().encode("ascii")
     ).digest()
 
-    hash_ok = compare_digest(password_hash, stored_hash)
+    hash_ok = constant_time_equal(password_hash, stored_hash)
     user_ok = user_info is not None
 
     if not (user_ok and hash_ok):
-        self.set_response_header(www_auth_header, www_auth_method)
+        return None
+
+    return user_info
+
+
+def _is_valid_csrf_token(cookie_token, header_token, user_secret):
+    if cookie_token is None or header_token is None:
+        return False
+    csrf_sep = header_token.find(".")
+    if csrf_sep == -1:
+        return False
+    if cookie_token != header_token:
+        return False
+    if not verify_signed_token(user_secret, header_token, _CSRF_NONCE_SIZE):
+        return False
+    return True
+
+
+def _handle_auth_header_st(self, _):
+    method = self.method.decode("ascii")
+    url = self.url.decode("ascii")
+    auth_header = self.headers.get("authorization", "").strip()
+
+    # Authentication
+    if not (user_info := _authenticate(auth_header)):
+        self.set_response_header(b"WWW-Authenticate", b'Basic realm="Device"')
         self.terminate(401)
         return
+
+    # CSRF validation, cookie setting
+    if get_config(CONF_HTTP_AUTH_MODE) == "browser":
+        if self.method not in (
+            self.GET,
+            self.HEAD,
+            self.OPTIONS,
+        ):
+            if not _is_valid_csrf_token(
+                self.get_cookie("csrf-token"),
+                self.headers.get("x-csrf-token"),
+                user_info[2],
+            ):
+                self.terminate(403)
+                return
+        elif self.method in (self.GET, self.HEAD):
+            if self.get_cookie("csrf-token") is None:
+                csrf_token = create_signed_token(user_info[2], _CSRF_NONCE_SIZE)
+                cookie = b"csrf-token=" + csrf_token + b"; path=/; samesite=strict"
+                if get_config(CONF_TLS):
+                    cookie += b"; secure"
+                self.set_response_header(b"set-cookie", cookie)
 
     # Authorization
     policy = _ATTR_TREE.get_attributes(url)
@@ -345,6 +381,12 @@ def apply_patches():
                 warning(insecure_auth_msg)
             else:
                 raise ValueError(insecure_auth_msg)
+
+        if get_config(CONF_HTTP_AUTH_MODE) != "browser":
+            warning(
+                "CSRF protection is disabled; authenticated browser "
+                "requests may be vulnerable to cross-site request forgery"
+            )
 
         add_method(http.HttpEngine, _handle_auth_st)
         add_method(http.HttpEngine, _handle_auth_header_st)

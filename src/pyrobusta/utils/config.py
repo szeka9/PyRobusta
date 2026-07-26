@@ -30,12 +30,13 @@ CONF_HTTP_MEM_CAP = const(5)
 CONF_HTTP_SERVED_PATHS = const(6)
 CONF_HTTP_FILES_API = const(7)
 CONF_HTTP_AUTH = const(8)
-CONF_HTTP_INSECURE_AUTH = const(9)
-CONF_SOCKET_MAX_CON = const(10)
-CONF_TLS = const(11)
-CONF_LOG_LEVEL = const(12)
-CONF_PASSWD_FILE = const(13)
-CONF_ROLES_FILE = const(14)
+CONF_HTTP_AUTH_MODE = const(9)
+CONF_HTTP_INSECURE_AUTH = const(10)
+CONF_SOCKET_MAX_CON = const(11)
+CONF_TLS = const(12)
+CONF_LOG_LEVEL = const(13)
+CONF_PASSWD_FILE = const(14)
+CONF_ROLES_FILE = const(15)
 
 # -------------------
 # Configuration state
@@ -60,6 +61,8 @@ _CONFIG_CACHE = [
     False,
     CONF_HTTP_AUTH,
     None,
+    CONF_HTTP_AUTH_MODE,
+    "browser",
     CONF_HTTP_INSECURE_AUTH,
     False,
     CONF_SOCKET_MAX_CON,
