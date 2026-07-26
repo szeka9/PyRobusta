@@ -73,7 +73,7 @@ class TestHelpers(unittest.TestCase):
             ("/path/to", False),
         ):
             self.assertEqual(
-                self.lexpath_module.is_norm_path_served(case[0], served_paths), case[1]
+                self.lexpath_module.is_child_path_of(case[0], served_paths), case[1]
             )
 
     @patch("pyrobusta.utils.lexpath.getcwd", return_value="/")
@@ -86,7 +86,7 @@ class TestHelpers(unittest.TestCase):
             ("/path/to/served", True),
         ):
             self.assertEqual(
-                self.lexpath_module.is_norm_path_served(case[0], served_paths), case[1]
+                self.lexpath_module.is_child_path_of(case[0], served_paths), case[1]
             )
 
     @patch("pyrobusta.utils.lexpath.getcwd", return_value="/")
@@ -99,7 +99,7 @@ class TestHelpers(unittest.TestCase):
             ("/path/to/served", False),
         ):
             self.assertEqual(
-                self.lexpath_module.is_norm_path_served(case[0], served_paths), case[1]
+                self.lexpath_module.is_child_path_of(case[0], served_paths), case[1]
             )
 
     def test_path_segment_validation(self):

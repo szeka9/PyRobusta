@@ -13,7 +13,13 @@ from env_utils import (
     delete_path,
 )
 
-from pyrobusta.utils.config import normalize_path
+from pyrobusta.utils.config import (
+    normalize_path,
+    get_config,
+    CONF_PASSWD_FILE,
+    CONF_ROLES_FILE,
+    CONFIG_LOCATION,
+)
 
 
 @garbage_collect
@@ -135,6 +141,95 @@ async def test_fs_access_control():
 
 
 @garbage_collect
+async def test_misconfigured_path():
+    setup_config(files_api_enabled=True, served_paths="/")
+    server = await start_server()
+
+    with open(normalize_path("/allowed"), "w") as roles:
+        roles.write(
+            "This file is located under root and is served due to configuration."
+        )
+
+    with open(CONFIG_LOCATION, "w") as passwd:
+        passwd.write("config_key=config_value")
+
+    with open(get_config(CONF_PASSWD_FILE), "w") as passwd:
+        passwd.write(
+            "user1:0b14d501a594442a01c6859541bcb3e8164d183d32937b851835442f69d5c94e:role1"
+        )
+
+    with open(get_config(CONF_ROLES_FILE), "w") as roles:
+        roles.write("/*\n*:*")
+
+    try:
+        # Case #1: /test/allowed
+        # Served due to configuration
+        response = await send_request(
+            b"GET /files/allowed HTTP/1.1\r\n"
+            b"Content-Length: 0\r\n"
+            b"Connection: close\r\n"
+            b"Host: localhost\r\n\r\n"
+        )
+
+        response_body = response.split(b"\r\n\r\n")[1]
+        test_assert(
+            f"FS access misconfiguration - test file downloaded from root",
+            response_body,
+            b"This file is located under root and is served due to configuration.",
+        )
+
+        # Case #2: /test/pyrobusta.env
+        # Must be rejected by policy
+        config_file = CONFIG_LOCATION.split("/")[-1]
+        response = await send_request(
+            b"GET /files/" + config_file.encode() + b" HTTP/1.1\r\n"
+            b"Content-Length: 0\r\n"
+            b"Connection: close\r\n"
+            b"Host: localhost\r\n\r\n"
+        )
+
+        test_assert(
+            f"FS access misconfiguration - config_file file restricted",
+            response.startswith(b"HTTP/1.1 403 Forbidden"),
+            True,
+        )
+
+        # Case #3: /test/<passwd-file>
+        # Must be rejected by policy
+        passwd_file = get_config(CONF_PASSWD_FILE).split("/")[-1]
+        response = await send_request(
+            b"GET /files/" + passwd_file.encode() + b" HTTP/1.1\r\n"
+            b"Content-Length: 0\r\n"
+            b"Connection: close\r\n"
+            b"Host: localhost\r\n\r\n"
+        )
+
+        test_assert(
+            f"FS access misconfiguration - passwd file restricted",
+            response.startswith(b"HTTP/1.1 403 Forbidden"),
+            True,
+        )
+
+        # Case #4: /test/<roles-file>
+        # Must be rejected by policy
+        roles_file = get_config(CONF_ROLES_FILE).split("/")[-1]
+        response = await send_request(
+            b"GET /files/" + roles_file.encode() + b" HTTP/1.1\r\n"
+            b"Content-Length: 0\r\n"
+            b"Connection: close\r\n"
+            b"Host: localhost\r\n\r\n"
+        )
+
+        test_assert(
+            f"FS access misconfiguration - roles file restricted",
+            response.startswith(b"HTTP/1.1 403 Forbidden"),
+            True,
+        )
+    finally:
+        await server.terminate()
+
+
+@garbage_collect
 async def test_bulk_file_upload():
     setup_config(files_api_enabled=True, http_multipart_enabled=True)
     server = await start_server()
@@ -239,6 +334,7 @@ async def test_chunked_file_upload():
 async def test_main():
     await test_fs_path_traversal()
     await test_fs_access_control()
+    await test_misconfigured_path()
     await test_bulk_file_upload()
     await test_chunked_file_upload()
 
