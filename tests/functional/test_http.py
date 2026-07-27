@@ -11,9 +11,8 @@ from env_utils import (
     delete_path,
 )
 
-from pyrobusta.server import http_server
 from pyrobusta.protocol.http import HttpEngine
-
+from pyrobusta.utils.assets import install_www, iterate_fs
 from pyrobusta.utils.lexpath import normalize_path
 
 
@@ -187,7 +186,7 @@ async def test_fs_access_control():
             True,
         )
     finally:
-        delete_path(test_root)
+        delete_path(www_root)
         await server.terminate()
 
 
@@ -275,6 +274,23 @@ async def test_keepalive():
         await server.terminate()
 
 
+def test_www_install():
+    www_root = normalize_path("/www")
+
+    try:
+        install_www()
+        origin_files = set(
+            file.split("/")[-1]
+            for file in iterate_fs(normalize_path("/lib/pyrobusta/assets/www"))
+        )
+        target_files = set(
+            file.split("/")[-1] for file in iterate_fs(normalize_path("/www"))
+        )
+        test_assert("all assets are installed to /www", origin_files, target_files)
+    finally:
+        delete_path(www_root)
+
+
 def test_registration():
     test_assert(
         "simple route registration",
@@ -297,6 +313,7 @@ async def test_main():
     await test_chunked_transfer_encoding()
     await test_fs_access_control()
     await test_keepalive()
+    test_www_install()
 
 
 asyncio.run(test_main())

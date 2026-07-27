@@ -66,7 +66,7 @@ def install_www():
     """
     source_dir = normalize_path("/lib/pyrobusta/assets/www")
     target_dir = normalize_path("/www")
-    if "www" not in listdir():
+    if "www" not in listdir(normalize_path("/")):
         mkdir(target_dir)
 
     for asset_dir in iterate_fs(source_dir, FS_ITER_DIR, FS_ITER_ABS):
