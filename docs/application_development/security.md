@@ -166,7 +166,7 @@ allowing an attacker-controlled website to cause the browser to issue requests t
 behalf of an authenticated user.
 
 To prevent CSRF attacks, **PyRobusta applies the Signed Double-Submit Cookie pattern**. For unsafe HTTP methods
-(currently POST, PUT, and DELETE), the client must return the CSRF token received from the server as
+(POST, PUT, PATCH, and DELETE), the client must return the CSRF token received from the server as
 a cookie. The client must send the same token in the `X-CSRF-Token` request header. The server
 rejects requests where the cookie value and header value do not match.
 

@@ -34,47 +34,38 @@ CONF_HTTP_AUTH_MODE = const(9)
 CONF_HTTP_INSECURE_AUTH = const(10)
 CONF_SOCKET_MAX_CON = const(11)
 CONF_TLS = const(12)
-CONF_LOG_LEVEL = const(13)
-CONF_PASSWD_FILE = const(14)
-CONF_ROLES_FILE = const(15)
+CONF_TLS_CERT_FILE = const(13)
+CONF_TLS_KEY_FILE = const(14)
+CONF_PASSWD_FILE = const(15)
+CONF_ROLES_FILE = const(16)
+CONF_LOG_LEVEL = const(17)
 
 # -------------------
 # Configuration state
 # -------------------
 _CONFIG_LOADED = False
 _CONFIG_CACHE = [
-    CONF_WIFI_SSID,
-    None,
-    CONF_WIFI_PASSWORD,
-    None,
-    CONF_HTTP_PORT,
-    80,
-    CONF_HTTPS_PORT,
-    443,
-    CONF_HTTP_MULTIPART,
-    False,
-    CONF_HTTP_MEM_CAP,
-    0.1,
-    CONF_HTTP_SERVED_PATHS,
-    [normalize_path("/www"), normalize_path("/lib/pyrobusta")],
-    CONF_HTTP_FILES_API,
-    False,
-    CONF_HTTP_AUTH,
-    None,
-    CONF_HTTP_AUTH_MODE,
-    "browser",
-    CONF_HTTP_INSECURE_AUTH,
-    False,
-    CONF_SOCKET_MAX_CON,
-    2,
-    CONF_TLS,
-    False,
-    CONF_LOG_LEVEL,
-    "info",
-    CONF_PASSWD_FILE,
-    normalize_path("/pyrobusta.passwd"),
-    CONF_ROLES_FILE,
-    normalize_path("/pyrobusta.roles"),
+    None,  # CONF_WIFI_SSID
+    None,  # CONF_WIFI_PASSWORD
+    80,  # CONF_HTTP_PORT
+    443,  # CONF_HTTPS_PORT
+    False,  # CONF_HTTP_MULTIPART
+    0.1,  # CONF_HTTP_MEM_CAP
+    [
+        normalize_path("/www"),
+        normalize_path("/lib/pyrobusta"),
+    ],  # CONF_HTTP_SERVED_PATHS
+    False,  # CONF_HTTP_FILES_API
+    None,  # CONF_HTTP_AUTH
+    "browser",  # CONF_HTTP_AUTH
+    False,  # CONF_HTTP_INSECURE_AUTH
+    2,  # CONF_SOCKET_MAX_CON
+    False,  # CONF_TLS
+    normalize_path("/cert.der"),  # CONF_TLS_CERT_FILE
+    normalize_path("/key.der"),  # CONF_TLS_KEY_FILE
+    normalize_path("/pyrobusta.passwd"),  # CONF_PASSWD_FILE
+    normalize_path("/pyrobusta.roles"),  # CONF_ROLES_FILE
+    "info",  # CONF_LOG_LEVEL
 ]
 
 
@@ -99,7 +90,12 @@ def parse_config(key, value):
         return float(value)
     if key == CONF_HTTP_SERVED_PATHS:
         return [normalize_path(p) for p in value.split()]
-    if key in (CONF_PASSWD_FILE, CONF_ROLES_FILE):
+    if key in (
+        CONF_PASSWD_FILE,
+        CONF_ROLES_FILE,
+        CONF_TLS_CERT_FILE,
+        CONF_TLS_KEY_FILE,
+    ):
         return normalize_path(value)
     if key in (CONF_WIFI_SSID, CONF_WIFI_PASSWORD):
         return value
@@ -108,8 +104,8 @@ def parse_config(key, value):
 
 def read_config(config=CONFIG_LOCATION):
     """
-    Read configuration from a file and update CONFIG_CACHE.
-    :param config: path to configuration
+    Read configuration from a file and update _CONFIG_CACHE.
+    :param config: path to configuration.
     """
     try:
         with open(config, encoding="utf-8") as conf:
@@ -117,23 +113,15 @@ def read_config(config=CONFIG_LOCATION):
                 line = line.rstrip("\r\n").split("#")[0]
                 if not line.strip():
                     continue
-                parts = line.split("=")
-                key_name = "CONF_" + parts[0].strip().upper()
-                if key_name in globals():
-                    key = globals()[key_name]
-                else:
-                    key = len(_CONFIG_CACHE) // 2 + 1
-                    globals()[key_name] = key
-                value = parts[1].strip().strip("'").strip('"')
-                value = parse_config(key, value)
-                if (
-                    key in _CONFIG_CACHE
-                    and (conf_idx := _CONFIG_CACHE.index(key)) % 2 == 0
-                ):
-                    _CONFIG_CACHE[conf_idx + 1] = value
-                else:
-                    _CONFIG_CACHE.append(key)
-                    _CONFIG_CACHE.append(value)
+
+                key_name, value = line.split("=", 1)
+                key = globals().get("CONF_" + key_name.strip().upper())
+                if key is None:
+                    continue
+
+                value = value.strip().strip("'").strip('"')
+                _CONFIG_CACHE[key] = parse_config(key, value)
+
     except OSError:
         pass
 
@@ -147,6 +135,8 @@ def is_protected_file(norm_path: str):
         CONFIG_LOCATION,
         get_config(CONF_PASSWD_FILE),
         get_config(CONF_ROLES_FILE),
+        get_config(CONF_TLS_CERT_FILE),
+        get_config(CONF_TLS_KEY_FILE),
     )
 
 
@@ -159,4 +149,4 @@ def get_config(key):
     if not _CONFIG_LOADED:
         read_config()
         _CONFIG_LOADED = True
-    return _CONFIG_CACHE[2 * key + 1]
+    return _CONFIG_CACHE[key]

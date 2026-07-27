@@ -111,14 +111,14 @@ def setup_config(
     http_server.HttpServer.LISTEN_PORT_HTTP = 8080
     http_server.HttpServer.LISTEN_PORT_HTTPS = 4443
 
-    _CONFIG_CACHE[2 * CONF_LOG_LEVEL + 1] = "warning"
-    _CONFIG_CACHE[2 * CONF_TLS + 1] = tls_enabled
-    _CONFIG_CACHE[2 * CONF_HTTP_SERVED_PATHS + 1] = parse_config(
+    _CONFIG_CACHE[CONF_LOG_LEVEL] = "warning"
+    _CONFIG_CACHE[CONF_TLS] = tls_enabled
+    _CONFIG_CACHE[CONF_HTTP_SERVED_PATHS] = parse_config(
         CONF_HTTP_SERVED_PATHS, served_paths
     )
-    _CONFIG_CACHE[2 * CONF_HTTP_MULTIPART + 1] = http_multipart_enabled
-    _CONFIG_CACHE[2 * CONF_HTTP_FILES_API + 1] = files_api_enabled
-    _CONFIG_CACHE[2 * CONF_HTTP_AUTH + 1] = http_auth
-    _CONFIG_CACHE[2 * CONF_HTTP_INSECURE_AUTH + 1] = http_insecure_auth
+    _CONFIG_CACHE[CONF_HTTP_MULTIPART] = http_multipart_enabled
+    _CONFIG_CACHE[CONF_HTTP_FILES_API] = files_api_enabled
+    _CONFIG_CACHE[CONF_HTTP_AUTH] = http_auth
+    _CONFIG_CACHE[CONF_HTTP_INSECURE_AUTH] = http_insecure_auth
 
     enable_optional_features()

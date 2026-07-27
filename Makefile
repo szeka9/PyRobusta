@@ -281,6 +281,7 @@ stage-test:
 
 	@cp -r build/pyrobusta $(TEST_RUNTIME)/lib
 	@cp tests/functional/*.py $(TEST_RUNTIME)/
+	@cp -r dist/pyrobusta/assets $(TEST_RUNTIME)/lib/pyrobusta
 
 # -----------------------------
 # Run functional tests on UNIX port

@@ -14,7 +14,7 @@ class HmacSha256:
     computation, based on RFC 2104.
     """
 
-    def __init__(self, key):
+    def __init__(self, key: bytes):
         if len(key) > 64:
             key = hashlib.sha256(key).digest()
         if len(key) < 64:
@@ -22,7 +22,7 @@ class HmacSha256:
         self.ipad = bytes(x ^ 0x36 for x in key)
         self.opad = bytes(x ^ 0x5C for x in key)
 
-    def digest(self, msg):
+    def digest(self, msg: bytes):
         """
         Calculate the HMAC digest of a message.
         """
@@ -35,7 +35,7 @@ class HmacSha256:
         return outer.digest()
 
 
-def constant_time_equal(a, b):
+def constant_time_equal(a: bytes, b: bytes):
     """
     Constant time comparison to prevent timing attacks.
     """
@@ -47,7 +47,7 @@ def constant_time_equal(a, b):
     return diff == 0
 
 
-def create_signed_token(secret, nonce_size=16):
+def create_signed_token(secret: bytes, nonce_size: int = 16):
     """
     Create a signed token containing only a random nonce.
     """
@@ -58,12 +58,12 @@ def create_signed_token(secret, nonce_size=16):
     return binascii.hexlify(data) + b"." + signature
 
 
-def verify_signed_token(secret, token, nonce_size=16):
+def verify_signed_token(secret: bytes, token: bytes, nonce_size: int = 16):
     """
     Verify a signed token containing only a random nonce.
     """
     try:
-        sep = token.find(".")
+        sep = token.find(b".")
         if sep == -1:
             return False
         data = binascii.unhexlify(token[:sep])

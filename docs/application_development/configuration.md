@@ -56,6 +56,8 @@ $ mpremote a0 cp pyrobusta.env :/pyrobusta.env
 | `http_insecure_auth` | Allows clients to authenticate over unsecured HTTP (without TLS). This may expose credentials or authentication tokens in transit. | False |
 | `socket_max_con` | Maximum number of simultaneous socket connections. | 2 |
 | `tls` | Enables or disables TLS. When enabled, `cert.der` and `key.der` must be installed at the server root. | False |
+| `tls_cert_file` | Path to the TLS certificate. | `/cert.der` |
+| `tls_key_file` | Path to the TLS private key. | `/key.der` |
 | `passwd_file` | Path to the file containing user credentials used for authentication. | `/pyrobusta.passwd` |
 | `roles_file` | Path to the file containing RBAC role definitions used for authorization. | `/pyrobusta.roles` |
 | `log_level` | Logging level. Can be one of: `warning`, `info`, `debug`. | `info` |
