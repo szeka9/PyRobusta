@@ -363,15 +363,14 @@ class TestBasicAuthCSRFStateMachine(TestHttpBase):
         user_secret = self.basic_auth_module._USERS["dummy-user"][2]
         cookie_name, csrf_token = (
             self.engine._lookup(self.engine.resp_headers, b"set-cookie")
-            .decode("ascii")
-            .split(";")[0]
-            .split("=")
+            .split(b";")[0]
+            .split(b"=")
         )
         is_token_valid = self.crypto_module.verify_signed_token(
             user_secret, csrf_token, self.basic_auth_module._CSRF_NONCE_SIZE
         )
 
-        self.assertEqual(cookie_name, "csrf-token")
+        self.assertEqual(cookie_name, b"csrf-token")
         self.assertTrue(is_token_valid)
         self.assertEqual(self.engine.state, self.engine._route_request_st)
         self.assertEqual(self.engine.status_code, None)

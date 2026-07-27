@@ -273,7 +273,7 @@ def _handle_auth_st(self, _):
         self.state = self._handle_auth_header_st
 
 
-def _authenticate(auth_header):
+def _authenticate(auth_header: str):
     # Protocol validation
     if not auth_header or auth_header[:6].lower() != "basic ":
         return None
@@ -306,10 +306,10 @@ def _authenticate(auth_header):
     return user_info
 
 
-def _is_valid_csrf_token(cookie_token, header_token, user_secret):
-    if cookie_token is None or header_token is None:
+def _is_valid_csrf_token(cookie_token: bytes, header_token: bytes, user_secret: bytes):
+    if not cookie_token or not header_token:
         return False
-    csrf_sep = header_token.find(".")
+    csrf_sep = header_token.find(b".")
     if csrf_sep == -1:
         return False
     if cookie_token != header_token:
@@ -338,8 +338,8 @@ def _handle_auth_header_st(self, _):
             self.OPTIONS,
         ):
             if not _is_valid_csrf_token(
-                self.get_cookie("csrf-token"),
-                self.headers.get("x-csrf-token"),
+                self.get_cookie("csrf-token", "").encode("ascii"),
+                self.headers.get("x-csrf-token", "").encode("ascii"),
                 user_info[2],
             ):
                 self.terminate(403)
