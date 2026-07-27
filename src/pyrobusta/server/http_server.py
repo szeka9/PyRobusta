@@ -15,9 +15,10 @@ from ..utils.config import (
     CONF_HTTPS_PORT,
     CONF_HTTP_MEM_CAP,
     CONF_TLS,
+    CONF_TLS_CERT_FILE,
+    CONF_TLS_KEY_FILE,
     CONF_SOCKET_MAX_CON,
 )
-from ..utils.lexpath import normalize_path
 from ..utils import logging
 
 
@@ -40,8 +41,6 @@ class HttpServer:
     )
     LISTEN_PORT_HTTP = get_config(CONF_HTTP_PORT)
     LISTEN_PORT_HTTPS = get_config(CONF_HTTPS_PORT)
-    TLS_CERT_PATH = "/cert.der"
-    TLS_KEY_PATH = "/key.der"
     CON_TIMEOUT_S = 30
 
     # -----------------------------------------
@@ -185,8 +184,8 @@ class HttpServer:
 
                 ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
                 ssl_ctx.load_cert_chain(
-                    normalize_path(self.TLS_CERT_PATH),
-                    normalize_path(self.TLS_KEY_PATH),
+                    get_config(CONF_TLS_CERT_FILE),
+                    get_config(CONF_TLS_KEY_FILE),
                 )
 
             self._server = await start_server(
