@@ -133,9 +133,10 @@ class HttpEngine:
     GET = b"GET"
     HEAD = b"HEAD"
     OPTIONS = b"OPTIONS"
+    PATCH = b"PATCH"
     POST = b"POST"
     PUT = b"PUT"
-    METHODS = (DELETE, GET, HEAD, OPTIONS, POST, PUT)
+    METHODS = (DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT)
     SUPPORTED_VERSIONS = (b"HTTP/1.1", b"HTTP/1.0")
     SESSION_COUNTER = 0
 
