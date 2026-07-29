@@ -5,10 +5,10 @@ HTTP application-layer interface for socket connections.
 import asyncio
 from asyncio import sleep_ms  # pylint: disable=E1101
 
-from ..stream.buffer import BufferFullError
-from ..transport.connection import BaseConnection
-from ..protocol.http import HttpEngine
-from ..utils import logging
+from pyrobusta.stream.buffer import BufferFullError
+from pyrobusta.transport.connection import BaseConnection
+from pyrobusta.protocol.http import HttpEngine
+from pyrobusta.utils import logging
 
 
 class HttpConnection(BaseConnection):

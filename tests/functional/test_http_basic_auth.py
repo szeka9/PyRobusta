@@ -48,7 +48,7 @@ async def test_missing_role():
         b"GET /test/auth HTTP/1.1\r\n"
         b"Host: localhost\r\n"
         b"Content-Length: 0\r\n"
-        b"Authorization: Basic dXNlcjE6cGFzc3dvcmQx\r\n"
+        b"Authorization: Basic YWxpY2U6YWxpY2Uncy1zZWNyZXQtcGFzc3dvcmQ=\r\n"
         b"Connection: close\r\n\r\n"
     )
 
@@ -71,7 +71,7 @@ async def test_user_authorized():
         b"GET /test/auth HTTP/1.1\r\n"
         b"Host: localhost\r\n"
         b"Content-Length: 0\r\n"
-        b"Authorization: Basic dXNlcjI6cGFzc3dvcmQy\r\n"
+        b"Authorization: Basic Ym9iOmJvYidzLXNlY3JldC1wYXNzd29yZA==\r\n"
         b"Connection: close\r\n\r\n"
     )
 
@@ -102,14 +102,14 @@ async def test_server_prevents_insecure_auth():
 def setup_auth():
     with open("pyrobusta.passwd", "w") as users:
         users.write(
-            "user1:0b14d501a594442a01c6859541bcb3e8164d183d32937b851835442f69d5c94e:role1\n"
+            "alice:role-1:mKmmf5wBEtlkty7LEcphieciOd3Pl0yY7r3WmDiZnzg=:XTQgg3Has79lDTNYVW+aPw==:5000:PBKDF2-HMAC-SHA256:v1.2.3\n"
         )
         users.write(
-            "user2:6cf615d5bcaac778352a8f1f3360d23f02f34ec182e259897fd6ce485d7870d4:role2\n"
+            "bob:role-2:sOqLqi48jCQUiR+VpcCcfMgKcKCspbE902y0yFe0DV4=:5PzMbQQJtQRP8aZ9C7t8qQ==:5000:PBKDF2-HMAC-SHA256:v1.2.3\n"
         )
 
     with open("pyrobusta.roles", "w") as users:
-        users.write("/test/auth\n*:role2\n")
+        users.write("/test/auth\n*:role-2\n")
 
 
 def test_registration():

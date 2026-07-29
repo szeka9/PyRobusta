@@ -6,7 +6,7 @@ and member variables for the socket server to use.
 import asyncio
 from time import ticks_ms
 
-from ..utils import logging
+from pyrobusta.utils import logging
 
 
 class BaseConnection:

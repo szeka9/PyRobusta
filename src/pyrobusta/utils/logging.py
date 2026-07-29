@@ -2,7 +2,7 @@
 Config-based logging module for different log levels
 """
 
-from .config import get_config, CONF_LOG_LEVEL
+from pyrobusta.utils.config import get_config, CONF_LOG_LEVEL
 
 _LOG_LEVEL_WARNING = 0
 _LOG_LEVEL_INFO = 1

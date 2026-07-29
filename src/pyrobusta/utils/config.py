@@ -12,7 +12,7 @@ except ImportError:
         return n
 
 
-from .lexpath import normalize_path
+from pyrobusta.utils.lexpath import normalize_path
 
 PYROBUSTA_VERSION = "v0.8.0"
 CONFIG_LOCATION = normalize_path("/pyrobusta.env")

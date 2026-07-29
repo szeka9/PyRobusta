@@ -5,6 +5,7 @@ Utility functions for cryptography operations.
 import binascii
 import hashlib
 import os
+import math
 
 
 class HmacSha256:
@@ -75,3 +76,64 @@ def verify_signed_token(secret: bytes, token: bytes, nonce_size: int = 16):
     except (ValueError, binascii.Error):
         return False
     return constant_time_equal(request_signature, expected_signature)
+
+
+def pbkdf2_sha256(password: bytes, salt: bytes, iterations: int, dklen: int = 32):
+    """
+    Compute PBKDF2-SHA256-based password hash,
+    based on RFC8018.
+    """
+    hmac = HmacSha256(password)
+    output = bytearray()
+    block_number = 1
+    if iterations <= 0:
+        raise ValueError("iterations must be positive")
+
+    if dklen <= 0:
+        raise ValueError("dklen must be positive")
+
+    if dklen > (2**dklen - 1) * dklen:
+        raise ValueError("derived key too long")
+
+    while len(output) < dklen:
+        # U1 = PRF(password, salt || INT(block))
+        u = hmac.digest(salt + block_number.to_bytes(4, "big"))
+        t = bytearray(u)
+        # U2 ... Uc
+        for _ in range(iterations - 1):
+            u = hmac.digest(u)
+            for i, _ in enumerate(t):
+                t[i] ^= u[i]
+        output.extend(t)
+        block_number += 1
+    return bytes(output[:dklen])
+
+
+def validate_password(password: str, min_length: int = 16, min_entropy: float = 80.0):
+    """
+    Validate user password complexity.
+
+    Entropy estimate assumes the password was generated randomly
+    from PASSWORD_ALPHABET.
+    """
+    password_alphabet = (
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        "abcdefghijklmnopqrstuvwxyz"
+        "0123456789"
+        "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~"
+    )
+
+    if len(password) < min_length:
+        raise ValueError(f"Password must be at least {min_length} characters")
+
+    for char in password:
+        if char not in password_alphabet:
+            raise ValueError("Password contains unsupported characters")
+
+    entropy = len(password) * math.log2(len(password_alphabet))
+
+    if entropy < min_entropy:
+        raise ValueError(
+            f"Password entropy too low ({entropy:.1f} bits, "
+            f"minimum {min_entropy:.1f} bits)"
+        )

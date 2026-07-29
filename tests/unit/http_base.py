@@ -3,7 +3,7 @@ import sys
 import unittest
 
 from unittest.mock import patch, mock_open
-from tests.unit.test_buffer import load_module
+from tests.unit.utils import load_module
 
 
 class TestHttpBase(unittest.TestCase):
@@ -48,23 +48,34 @@ class TestHttpBase(unittest.TestCase):
 
         if "passwd_file" in self.base_config:
             self.passwd_file = self.cwd + self.base_config["passwd_file"]
-            with open(self.passwd_file, "w", encoding="utf-8"):
-                pass
+            with open(self.passwd_file, "w", encoding="utf-8") as passwd:
+                if hasattr(self, "passwd_content"):
+                    passwd.write(self.passwd_content)
         if "roles_file" in self.base_config:
             self.roles_file = self.cwd + self.base_config["roles_file"]
-            with open(self.roles_file, "w", encoding="utf-8"):
-                pass
+            with open(self.roles_file, "w", encoding="utf-8") as roles:
+                if hasattr(self, "roles_content"):
+                    roles.write(self.roles_content)
 
-        # -------------------
-        # Patch config module
-        # -------------------
+        # -----------------------
+        # Patch config/iam module
+        # -----------------------
         self.config = dict(self.base_config)
         self.config_module = load_module("pyrobusta/utils/config.py")
         self.patch_config_loader(self.config, self.config_module)
 
+        self.iam_module = load_module("pyrobusta/utils/iam.py")
+        self.iam_db = None
+        if self.base_config.get("http_auth"):
+            self.iam_db = self.iam_module.IAMDatabase(self.passwd_file, self.roles_file)
+            self.iam_db.load()
+
         self.module_patcher = patch.dict(
             sys.modules,
-            {"pyrobusta.utils.config": self.config_module},
+            {
+                "pyrobusta.utils.config": self.config_module,
+                "pyrobusta.utils.iam": self.iam_module,
+            },
         )
 
         self.module_patcher.start()
@@ -83,7 +94,7 @@ class TestHttpBase(unittest.TestCase):
         self.fs_patcher.start()
         self.addCleanup(self.fs_patcher.stop)
 
-        self.http_module.enable_optional_features()
+        self.http_module.enable_optional_features(self.iam_db)
         self.engine = self.http_module.HttpEngine()
 
         # --------------------

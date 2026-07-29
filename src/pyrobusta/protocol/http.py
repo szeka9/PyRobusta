@@ -7,7 +7,7 @@ from json import dumps
 from io import BytesIO
 from os import stat
 
-from ..utils.config import (
+from pyrobusta.utils.config import (
     get_config,
     is_protected_file,
     CONF_HTTP_MULTIPART,
@@ -15,8 +15,9 @@ from ..utils.config import (
     CONF_HTTP_SERVED_PATHS,
     CONF_HTTP_AUTH,
 )
-from ..utils import logging, lexpath
-from ..stream.buffer import BufferFullError
+from pyrobusta.utils import logging, lexpath
+from pyrobusta.utils.iam import NO_POLICY
+from pyrobusta.stream.buffer import BufferFullError
 
 
 class InvalidHeaders(ValueError):
@@ -238,6 +239,26 @@ class HttpEngine:
             return func
 
         return decorator
+
+    # =========================================
+    # Authentication / authorization
+    # =========================================
+
+    @staticmethod
+    def get_policy(_: str):
+        """
+        Placeholder for retriving a role mask of
+        for a specific resource (route)
+        """
+        return NO_POLICY
+
+    @staticmethod
+    def _authenticate(_: str):
+        """
+        Placefolder for authentication based on
+        authorization header.
+        """
+        return None
 
     # =========================================
     # Helpers for parsing
@@ -922,7 +943,7 @@ class HttpEngine:
         self.state = None
 
 
-def enable_optional_features():
+def enable_optional_features(auth_provider=None):
     """
     Enable related optional features, set in the config.
     """
@@ -939,4 +960,4 @@ def enable_optional_features():
     if get_config(CONF_HTTP_AUTH) == "basic":
         from pyrobusta.protocol import http_basic_auth
 
-        http_basic_auth.apply_patches()
+        http_basic_auth.apply_patches(auth_provider)
