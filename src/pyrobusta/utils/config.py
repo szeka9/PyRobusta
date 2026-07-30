@@ -32,13 +32,15 @@ CONF_HTTP_FILES_API = const(7)
 CONF_HTTP_AUTH = const(8)
 CONF_HTTP_AUTH_MODE = const(9)
 CONF_HTTP_INSECURE_AUTH = const(10)
-CONF_SOCKET_MAX_CON = const(11)
-CONF_TLS = const(12)
-CONF_TLS_CERT_FILE = const(13)
-CONF_TLS_KEY_FILE = const(14)
-CONF_PASSWD_FILE = const(15)
-CONF_ROLES_FILE = const(16)
-CONF_LOG_LEVEL = const(17)
+CONF_HTTP_SESSIONS = const(11)
+CONF_HTTP_SESSION_TTL_SEC = const(12)
+CONF_SOCKET_MAX_CON = const(13)
+CONF_TLS = const(14)
+CONF_TLS_CERT_FILE = const(15)
+CONF_TLS_KEY_FILE = const(16)
+CONF_PASSWD_FILE = const(17)
+CONF_ROLES_FILE = const(18)
+CONF_LOG_LEVEL = const(19)
 
 # -------------------
 # Configuration state
@@ -59,6 +61,8 @@ _CONFIG_CACHE = [
     None,  # CONF_HTTP_AUTH
     "browser",  # CONF_HTTP_AUTH
     False,  # CONF_HTTP_INSECURE_AUTH
+    False,  # CONF_HTTP_SESSIONS
+    900,  # CONF_HTTP_SESSION_TTL_SEC
     2,  # CONF_SOCKET_MAX_CON
     False,  # CONF_TLS
     normalize_path("/cert.der"),  # CONF_TLS_CERT_FILE
@@ -81,10 +85,16 @@ def parse_config(key, value):
         CONF_HTTP_MULTIPART,
         CONF_HTTP_FILES_API,
         CONF_HTTP_INSECURE_AUTH,
+        CONF_HTTP_SESSIONS,
         CONF_TLS,
     ):
         return value.lower() == "true"
-    if key in (CONF_HTTP_PORT, CONF_HTTPS_PORT, CONF_SOCKET_MAX_CON):
+    if key in (
+        CONF_HTTP_PORT,
+        CONF_HTTPS_PORT,
+        CONF_SOCKET_MAX_CON,
+        CONF_HTTP_SESSION_TTL_SEC,
+    ):
         return int(value)
     if key == CONF_HTTP_MEM_CAP:
         return float(value)

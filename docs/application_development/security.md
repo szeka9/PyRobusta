@@ -14,6 +14,7 @@ whether the authenticated user is permitted to access a resource.
 
 * [Authentication & Security](#authentication-security)
   + [Basic Authentication](#basic-authentication)
+  + [HTTP Sessions](#http-sessions)
   + [Authorization](#authorization)
   + [HTTPS / TLS](#https-tls)
   + [Certificate Installation](#certificate-installation)
@@ -51,7 +52,7 @@ of a user entry is:
 - roles: comma-separated role names (case insensitive)
 - password-hash: Base64-encoded PBKDF2 output
 - salt: Base64-encoded random salt
-- iterations: Number of PBKDF2 iterations
+- iterations: number of PBKDF2 iterations
 - algorithm: password hashing algorithm (currently PBKDF2-HMAC-SHA256)
 - version: version of PyRobusta when the user was created
 
@@ -72,6 +73,28 @@ iam_db = IAMDatabase("pyrobusta.passwd", "pyrobusta.roles")
 iam_db.load()
 iam_db.create_user("john", "secret-password", "role-1,role-2")
 ```
+
+## HTTP Sessions
+
+Password-based authentication relies on computationally expensive cryptographic algorithms
+to resist offline password cracking attacks. PyRobusta stores user passwords using
+PBKDF2-HMAC-SHA256. Consequently, every authentication request requires a PBKDF2 computation,
+whose execution time depends on the configured iteration count.
+
+Authenticating every HTTP request with PBKDF2 can significantly increase response latency in
+browser-based applications. To avoid repeated password verification, PyRobusta can issue
+stateless session cookies after a successful authentication. Subsequent requests are authenticated
+using the session cookie instead of recomputing the PBKDF2 password hash.
+
+Session cookies are cryptographically signed and validated by the server without maintaining
+per-session state. Signatures are generated using per-user secrets that are randomly generated
+during server initialization and stored only in memory. Existing sessions are invalidated
+automatically upon expiration or when the server is restarted.
+
+Stateless sessions are enabled by setting `http_sessions=true` in pyrobusta.env.
+Sessions expire after 15 minutes by default. The session lifetime can be configured with
+`http_session_ttl_sec`.
+
 
 ## Authorization
 
@@ -202,30 +225,42 @@ user secret and compares it with the signature provided in the token. Requests a
 
 ```mermaid
 flowchart TD
-    A[Request] --> B[Resolve requested resource]
-    B --> C[Determine security policy for resource]
+    A[Incoming request]
 
-    C --> D[Public]
-    C --> E[Protected]
+    A --> B[Resolve resource]
+    B --> C{Resource security policy}
 
-    D --> F[Ignore auth requirement]
-    F --> G[Process request]
+    C -->|Public| Z[Process request]
 
-    E --> H{Authorization header present?}
+    C -->|Protected| D[Establish identity]
 
-    H -->|No| I[401 +<br/>WWW-Authenticate]
-    H -->|Yes| J[Authenticate]
+    D --> E{Session cookie?}
 
-    J --> K{Valid credentials?}
+    E -->|Yes| F[Validate session]
+    E -->|No| G[Use configured auth method]
 
-    K -->|No| I
-    K -->|Yes| L{Valid CSRF token?}
+    F --> H{Session valid?}
+    H -->|Yes| I[Authenticated identity]
+    H -->|No| G
 
-    L -->|No| M[403 Forbidden]
-    L -->|Yes| N{Authorized?}
+    G --> J{Authorization header?}
+    J -->|No| K[401 Unauthorized]
+    J -->|Yes| L[Validate credentials]
 
-    N -->|No| M
-    N -->|Yes| G
+    L --> M{Credentials valid?}
+    M -->|No| K
+    M -->|Yes| I
+
+    I --> N{CSRF required?}
+    N -->|No| O[Authorize]
+    N -->|Yes| P{CSRF token valid?}
+
+    P -->|No| Q[403 Forbidden]
+    P -->|Yes| O
+
+    O --> R{Permission granted?}
+    R -->|Yes| Z
+    R -->|No| Q
 ```
 
 PyRobusta returns the following HTTP status codes for authentication and authorization failures:

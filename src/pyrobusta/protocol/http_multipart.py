@@ -11,7 +11,12 @@ delimiter.
 
 # pylint: disable=W0212,R0401
 
-from pyrobusta.protocol import http
+from pyrobusta.protocol.http import (
+    HttpEngine,
+    InvalidHeaders,
+    MalformedRequest,
+    InvalidContentLength,
+)
 from pyrobusta.utils.patch import add_method, add_property, patch_extra_property
 
 
@@ -103,15 +108,15 @@ def _get_mp_boundary(headers: dict) -> str:
 
         if value.startswith('"'):
             if len(value) < 2 or not value.endswith('"'):
-                raise http.InvalidHeaders()
+                raise InvalidHeaders()
             value = value[1:-1]
         elif value.endswith('"'):
-            raise http.InvalidHeaders()
+            raise InvalidHeaders()
 
         if not value:
-            raise http.InvalidHeaders()
+            raise InvalidHeaders()
         return value
-    raise http.InvalidHeaders()
+    raise InvalidHeaders()
 
 
 def _start_multipart_parser_st(self, rx):
@@ -121,7 +126,7 @@ def _start_multipart_parser_st(self, rx):
     header is required for multipart parsing.
     """
     if not "content-length" in self.headers:
-        raise http.InvalidContentLength()
+        raise InvalidContentLength()
 
     self.mp_boundary = _get_mp_boundary(self.headers).encode("ascii")
 
@@ -129,7 +134,7 @@ def _start_multipart_parser_st(self, rx):
         return
 
     if rx.peek(start_delimiter + 2) != self.mp_delimiter:
-        raise http.MalformedRequest()
+        raise MalformedRequest()
     self._consume_payload(rx, start_delimiter + 2)
     self.mp_is_first = True
     self.mp_is_last = False
@@ -173,17 +178,17 @@ def _parse_complete_part_st(self, rx):
             blank_idx = i
             break
     if blank_idx == -1:
-        raise http.InvalidHeaders()
-    part_headers = http.HttpEngine._parse_headers(part[:blank_idx])
+        raise InvalidHeaders()
+    part_headers = HttpEngine._parse_headers(part[:blank_idx])
     part_body = part[blank_idx + 4 :]
 
-    handler = http.HttpEngine._get_handler(self.url, self.method)
+    handler = HttpEngine._get_handler(self.url, self.method)
 
     # Process complete part
     if not is_final:
         handler_response = handler(self, (part_headers, part_body))
         if rx.peek(len(self.mp_delimiter)) != self.mp_delimiter:
-            raise http.MalformedRequest()
+            raise MalformedRequest()
         self._consume_payload(rx, len(self.mp_delimiter))
         self.mp_is_first = False
         if not self.state == self._terminal_st:
@@ -226,18 +231,18 @@ def apply_patches():
             return None
         return b"--" + self.mp_boundary + b"--"
 
-    add_property(http.HttpEngine, mp_delimiter)
-    add_property(http.HttpEngine, mp_last_delimiter)
+    add_property(HttpEngine, mp_delimiter)
+    add_property(HttpEngine, mp_last_delimiter)
 
-    patch_extra_property(http.HttpEngine, "mp_boundary")
-    patch_extra_property(http.HttpEngine, "mp_is_first")
-    patch_extra_property(http.HttpEngine, "mp_is_last")
+    patch_extra_property(HttpEngine, "mp_boundary")
+    patch_extra_property(HttpEngine, "mp_is_first")
+    patch_extra_property(HttpEngine, "mp_is_last")
 
-    add_method(http.HttpEngine, generate_multipart_response)
-    add_method(http.HttpEngine, _get_mp_boundary, "static")
-    add_method(http.HttpEngine, _multipart_wrapper_factory, "static")
-    add_method(http.HttpEngine, _start_multipart_parser_st)
-    add_method(http.HttpEngine, _parse_boundary_st)
-    add_method(http.HttpEngine, _parse_complete_part_st)
+    add_method(HttpEngine, generate_multipart_response)
+    add_method(HttpEngine, _get_mp_boundary, "static")
+    add_method(HttpEngine, _multipart_wrapper_factory, "static")
+    add_method(HttpEngine, _start_multipart_parser_st)
+    add_method(HttpEngine, _parse_boundary_st)
+    add_method(HttpEngine, _parse_complete_part_st)
 
-    http.HttpEngine.MULTIPART_BOUNDARY = b"pyrobusta-boundary"
+    HttpEngine.MULTIPART_BOUNDARY = b"pyrobusta-boundary"

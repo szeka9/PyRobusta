@@ -62,6 +62,7 @@ class TestBasicAuthStateMachine(TestHttpBase):
         cls.cwd = os.getcwd()
         cls.base_config = {
             "http_auth": "basic",
+            "http_session": "false",
             "passwd_file": "/tmp/pyrobusta.passwd",
             "roles_file": "/tmp/pyrobusta.roles",
             # For disbaling authentication related warning messages
@@ -253,6 +254,7 @@ class TestBasicAuthCSRFStateMachine(TestHttpBase):
         cls.cwd = os.getcwd()
         cls.base_config = {
             "http_auth": "basic",
+            "http_session": "false",
             "passwd_file": "/tmp/pyrobusta.passwd",
             "roles_file": "/tmp/pyrobusta.roles",
             # For disbaling authentication related warning messages
@@ -284,13 +286,15 @@ class TestBasicAuthCSRFStateMachine(TestHttpBase):
         self.engine.state(self.rx)
 
         user_secret = self.iam_db.get_user_info("alice")[-1]
+        csrf_key = self.crypto_module.HmacSha256(user_secret)
+        csrf_secret = csrf_key.digest(self.csrf_module._CSRF_INFO)
         cookie_name, csrf_token = (
             self.engine._lookup(self.engine.resp_headers, b"set-cookie")
             .split(b";")[0]
             .split(b"=")
         )
         is_token_valid = self.crypto_module.verify_signed_token(
-            user_secret, csrf_token, self.basic_auth_module._CSRF_NONCE_SIZE
+            csrf_secret, csrf_token, self.csrf_module._NONCE_SIZE
         )
 
         self.assertEqual(cookie_name, b"csrf-token")
@@ -307,7 +311,7 @@ class TestBasicAuthCSRFStateMachine(TestHttpBase):
 
         user_secret = self.iam_db.get_user_info("alice")[-1]
         csrf_token = self.crypto_module.create_signed_token(
-            user_secret, self.basic_auth_module._CSRF_NONCE_SIZE
+            user_secret, os.urandom(self.csrf_module._NONCE_SIZE)
         )
         self.engine.headers["cookie"] = "csrf-token=" + csrf_token.decode("ascii")
         self.engine.headers["x-csrf-token"] = csrf_token.decode("ascii")
@@ -328,8 +332,10 @@ class TestBasicAuthCSRFStateMachine(TestHttpBase):
         self.engine.method = b"POST"
 
         user_secret = self.iam_db.get_user_info("alice")[-1]
+        csrf_key = self.crypto_module.HmacSha256(user_secret)
+        csrf_secret = csrf_key.digest(self.csrf_module._CSRF_INFO)
         csrf_token = self.crypto_module.create_signed_token(
-            user_secret, self.basic_auth_module._CSRF_NONCE_SIZE
+            csrf_secret, os.urandom(self.csrf_module._NONCE_SIZE)
         )
         self.engine.headers["cookie"] = "csrf-token=" + csrf_token.decode("ascii")
         self.engine.headers["x-csrf-token"] = csrf_token.decode("ascii")
@@ -346,9 +352,9 @@ class TestBasicAuthCSRFStateMachine(TestHttpBase):
         )
         self.engine.method = b"POST"
 
-        forged_user_secret = os.urandom(self.basic_auth_module._CSRF_NONCE_SIZE)
+        forged_user_secret = os.urandom(self.csrf_module._NONCE_SIZE)
         csrf_token = self.crypto_module.create_signed_token(
-            forged_user_secret, self.basic_auth_module._CSRF_NONCE_SIZE
+            forged_user_secret, os.urandom(self.csrf_module._NONCE_SIZE)
         )
         self.engine.headers["cookie"] = "csrf-token=" + csrf_token.decode("ascii")
         self.engine.headers["x-csrf-token"] = csrf_token.decode("ascii")
@@ -379,7 +385,7 @@ class TestBasicAuthCSRFStateMachine(TestHttpBase):
 
         user_secret = self.iam_db.get_user_info("alice")[-1]
         csrf_token = self.crypto_module.create_signed_token(
-            user_secret, self.basic_auth_module._CSRF_NONCE_SIZE
+            user_secret, os.urandom(self.csrf_module._NONCE_SIZE)
         )
         self.engine.headers["x-csrf-token"] = csrf_token.decode("ascii")
 
@@ -397,7 +403,7 @@ class TestBasicAuthCSRFStateMachine(TestHttpBase):
 
         user_secret = self.iam_db.get_user_info("alice")[-1]
         csrf_token = self.crypto_module.create_signed_token(
-            user_secret, self.basic_auth_module._CSRF_NONCE_SIZE
+            user_secret, os.urandom(self.csrf_module._NONCE_SIZE)
         )
         self.engine.headers["cookie"] = "csrf-token=" + csrf_token.decode("ascii")
 
@@ -405,3 +411,181 @@ class TestBasicAuthCSRFStateMachine(TestHttpBase):
 
         self.assertEqual(self.engine.state, self.engine._terminal_st)
         self.assertEqual(self.engine.status_code, 403)
+
+
+class TestBasicAuthSessionStateMachine(TestHttpBase):
+    """
+    Tests for HTTP authentication with session management.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.cwd = os.getcwd()
+        cls.base_config = {
+            "http_auth": "basic",
+            "http_auth_mode": "api",  # Disabling CSRF for session tests
+            "http_sessions": "true",
+            "http_session_ttl_sec": 5,
+            "passwd_file": "/tmp/pyrobusta.passwd",
+            "roles_file": "/tmp/pyrobusta.roles",
+            # For disbaling authentication related warning messages
+            "tls": True,
+        }
+
+        cls.passwd_content = (
+            "# User configuration\n"
+            "alice:role-1:mKmmf5wBEtlkty7LEcphieciOd3Pl0yY7r3WmDiZnzg=:XTQgg3Has79lDTNYVW+aPw=="
+            ":5000:PBKDF2-HMAC-SHA256:v1.2.3\n"
+        )
+
+        cls.roles_content = "/app/private\nGET: role-1\nPOST: role-1\n"
+
+    def prepare_request(self, auth_header=None):
+        self.engine.state = self.engine._handle_auth_header_st
+        self.engine.url = b"/app/private"
+        self.engine.method = b"GET"
+        if auth_header:
+            self.engine.headers["authorization"] = auth_header
+
+    def get_cookie_data(self, cookie_name):
+        try:
+            cookie_header = self.engine._lookup(self.engine.resp_headers, b"set-cookie")
+        except ValueError:
+            return None
+        cookies = cookie_header.split(b";")
+        for cookie in cookies:
+            name, _, value = cookie.partition(b"=")
+            if name.strip() == cookie_name.encode("ascii"):
+                return value.strip()
+        return None
+
+    def create_session_cookie(self, username, ttl=None):
+        user_secret = self.iam_db.get_user_info(username)[-1]
+        session_cookie = self.session_module.create_cookie(
+            username,
+            user_secret,
+            ttl if ttl is not None else self.base_config["http_session_ttl_sec"],
+        )
+        return session_cookie.split(b";")[0].split(b"=")[1]
+
+    def test_session_generated_cookie_valid(self):
+        self.prepare_request(
+            auth_header="Basic "
+            + base64.b64encode("alice:alice's-secret-password".encode("ascii")).decode()
+        )
+        self.engine.method = b"GET"
+
+        self.engine.state(self.rx)
+
+        session_cookie = self.get_cookie_data("session")
+        credentials = self.session_module.verify_cookie(session_cookie, self.iam_db)
+
+        self.assertNotEqual(credentials, None)
+        self.assertEqual(self.engine.state, self.engine._route_request_st)
+        self.assertEqual(self.engine.status_code, None)
+
+    def test_session_existing_cookie_accepted(self):
+        self.prepare_request(auth_header="")
+        self.engine.method = b"GET"
+
+        session_cookie = self.create_session_cookie("alice")
+        self.engine.headers["cookie"] = "session=" + session_cookie.decode("ascii")
+        self.engine.state(self.rx)
+
+        self.assertEqual(self.get_cookie_data("session"), None)
+        self.assertEqual(self.engine.state, self.engine._route_request_st)
+
+    def test_session_expired_cookie_rejected(self):
+        self.prepare_request(auth_header="")
+        self.engine.method = b"GET"
+
+        session_cookie = self.create_session_cookie("alice", ttl=0)
+        self.engine.headers["cookie"] = "session=" + session_cookie.decode("ascii")
+        self.engine.state(self.rx)
+
+        self.assertEqual(self.engine.state, self.engine._terminal_st)
+        self.assertEqual(self.engine.status_code, 401)
+
+    def test_session_invalid_cookie_rejected(self):
+        self.prepare_request(auth_header="")
+        self.engine.method = b"GET"
+
+        # Create a valid session cookie and then tamper with it
+        session_cookie = self.create_session_cookie("alice")
+        invalid_digit = b"0" if session_cookie[-1:] != b"0" else b"1"
+        tampered_session_cookie = (
+            session_cookie[:-1] + invalid_digit
+        )  # Tamper with the last character
+        self.engine.headers["cookie"] = "session=" + tampered_session_cookie.decode(
+            "ascii"
+        )
+        self.engine.state(self.rx)
+
+        self.assertEqual(self.engine.state, self.engine._terminal_st)
+        self.assertEqual(self.engine.status_code, 401)
+
+    def test_session_missing_cookie_rejected(self):
+        self.prepare_request(auth_header="")
+        self.engine.method = b"GET"
+
+        self.engine.state(self.rx)
+
+        self.assertEqual(self.engine.state, self.engine._terminal_st)
+        self.assertEqual(self.engine.status_code, 401)
+
+    def test_session_invalid_user_rejected(self):
+        self.prepare_request(auth_header="")
+        self.engine.method = b"GET"
+
+        # Create a valid session cookie for a non-existent user
+        fake_user_secret = os.urandom(self.iam_module.RUNTIME_SECRET_SIZE)
+        session_cookie = (
+            self.session_module.create_cookie(
+                "nonexistentuser",
+                fake_user_secret,
+                self.base_config["http_session_ttl_sec"],
+            )
+            .split(b";")[0]
+            .split(b"=")[1]
+        )
+        self.engine.headers["cookie"] = "session=" + session_cookie.decode("ascii")
+        self.engine.state(self.rx)
+
+        self.assertEqual(self.engine.state, self.engine._terminal_st)
+        self.assertEqual(self.engine.status_code, 401)
+
+    def test_expired_cookie_with_auth_header_generates_new_session(self):
+        self.prepare_request(
+            auth_header="Basic "
+            + base64.b64encode("alice:alice's-secret-password".encode("ascii")).decode()
+        )
+        self.engine.method = b"GET"
+
+        # Create an expired session cookie
+        expired_session_cookie = self.create_session_cookie("alice", ttl=0)
+        self.engine.headers["cookie"] = "session=" + expired_session_cookie.decode(
+            "ascii"
+        )
+        self.engine.state(self.rx)
+
+        session_cookie = self.get_cookie_data("session")
+        credentials = self.session_module.verify_cookie(session_cookie, self.iam_db)
+
+        self.assertNotEqual(credentials, None)
+        self.assertNotEqual(session_cookie, expired_session_cookie)
+        self.assertEqual(self.engine.state, self.engine._route_request_st)
+        self.assertEqual(self.engine.status_code, None)
+
+    def test_valid_cookie_with_auth_header_does_not_generate_new_session(self):
+        self.prepare_request(
+            auth_header="Basic "
+            + base64.b64encode("alice:alice's-secret-password".encode("ascii")).decode()
+        )
+        self.engine.method = b"GET"
+        session_cookie = self.create_session_cookie("alice")
+        self.engine.headers["cookie"] = "session=" + session_cookie.decode("ascii")
+        self.engine.state(self.rx)
+
+        self.assertEqual(self.get_cookie_data("session"), None)
+        self.assertEqual(self.engine.state, self.engine._route_request_st)
+        self.assertEqual(self.engine.status_code, None)

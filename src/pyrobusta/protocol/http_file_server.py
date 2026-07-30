@@ -7,7 +7,7 @@ Module for extended file serving features, registered at the /files route.
 from os import stat, listdir, rmdir, remove, rename, mkdir
 from json import dumps
 
-from pyrobusta.protocol import http
+from pyrobusta.protocol.http import HttpEngine
 from pyrobusta.utils.lexpath import (
     normalize_path,
     is_file_path_valid,
@@ -282,14 +282,14 @@ def apply_patches():
     Apply patches to class attributes for file serving.
     """
 
-    http.HttpEngine.deregister("/files/{fs_path:path}", "GET")
-    http.HttpEngine.deregister("/files/{fs_path:path}", "DELETE")
-    http.HttpEngine.deregister("/files/{fs_path:path}", "PUT")
-    http.HttpEngine.deregister("/files", "POST")
+    HttpEngine.deregister("/files/{fs_path:path}", "GET")
+    HttpEngine.deregister("/files/{fs_path:path}", "DELETE")
+    HttpEngine.deregister("/files/{fs_path:path}", "PUT")
+    HttpEngine.deregister("/files", "POST")
 
-    http.HttpEngine.register("/files/{fs_path:path}", fs_retrieve, "GET")
-    http.HttpEngine.register("/files/{fs_path:path}", delete_file, "DELETE")
-    http.HttpEngine.register("/files/{fs_path:path}", upload_file, "PUT")
-    http.HttpEngine.register("/files", bulk_upload_file, "POST")
+    HttpEngine.register("/files/{fs_path:path}", fs_retrieve, "GET")
+    HttpEngine.register("/files/{fs_path:path}", delete_file, "DELETE")
+    HttpEngine.register("/files/{fs_path:path}", upload_file, "PUT")
+    HttpEngine.register("/files", bulk_upload_file, "POST")
 
     setup_directories()

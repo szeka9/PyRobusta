@@ -1,6 +1,7 @@
 import os
 import sys
 import unittest
+import time
 
 from unittest.mock import patch, mock_open
 from tests.unit.utils import load_module
@@ -70,11 +71,17 @@ class TestHttpBase(unittest.TestCase):
             self.iam_db = self.iam_module.IAMDatabase(self.passwd_file, self.roles_file)
             self.iam_db.load()
 
+        self.clock_module = load_module("pyrobusta/utils/clock.py")
+        self.clock_module.ticks_ms = lambda: time.monotonic_ns() // 1_000_000
+        self.clock_module.ticks_add = lambda ticks, ms: ticks + ms
+        self.clock_module.ticks_diff = lambda ticks1, ticks2: ticks1 - ticks2
+
         self.module_patcher = patch.dict(
             sys.modules,
             {
                 "pyrobusta.utils.config": self.config_module,
                 "pyrobusta.utils.iam": self.iam_module,
+                "pyrobusta.utils.clock": self.clock_module,
             },
         )
 
@@ -89,6 +96,8 @@ class TestHttpBase(unittest.TestCase):
         self.fs_module = load_module("pyrobusta/protocol/http_file_server.py")
         self.multipart_module = load_module("pyrobusta/protocol/http_multipart.py")
         self.basic_auth_module = load_module("pyrobusta/protocol/http_basic_auth.py")
+        self.csrf_module = load_module("pyrobusta/protocol/http_csrf.py")
+        self.session_module = load_module("pyrobusta/protocol/http_session.py")
 
         self.fs_patcher = patch.object(self.fs_module, "setup_directories")
         self.fs_patcher.start()

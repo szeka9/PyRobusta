@@ -14,7 +14,10 @@ from pyrobusta.utils.config import (
     CONF_HTTP_FILES_API,
     CONF_HTTP_SERVED_PATHS,
     CONF_HTTP_AUTH,
+    CONF_HTTP_AUTH_MODE,
     CONF_HTTP_INSECURE_AUTH,
+    CONF_HTTP_SESSIONS,
+    CONF_HTTP_SESSION_TTL_SEC,
     CONF_PASSWD_FILE,
     CONF_ROLES_FILE,
     _CONFIG_CACHE,
@@ -109,7 +112,10 @@ def setup_config(
     http_multipart_enabled=False,
     served_paths="",
     http_auth="",
+    http_auth_mode="browser",
     http_insecure_auth=False,
+    http_sessions=False,
+    http_session_ttl_sec=900,
 ):
     http_server.HttpServer.LISTEN_PORT_HTTP = 8080
     http_server.HttpServer.LISTEN_PORT_HTTPS = 4443
@@ -122,7 +128,10 @@ def setup_config(
     _CONFIG_CACHE[CONF_HTTP_MULTIPART] = http_multipart_enabled
     _CONFIG_CACHE[CONF_HTTP_FILES_API] = files_api_enabled
     _CONFIG_CACHE[CONF_HTTP_AUTH] = http_auth
+    _CONFIG_CACHE[CONF_HTTP_AUTH_MODE] = http_auth_mode
     _CONFIG_CACHE[CONF_HTTP_INSECURE_AUTH] = http_insecure_auth
+    _CONFIG_CACHE[CONF_HTTP_SESSIONS] = http_sessions
+    _CONFIG_CACHE[CONF_HTTP_SESSION_TTL_SEC] = http_session_ttl_sec
 
     iam_db = None
     if get_config(CONF_HTTP_AUTH):

@@ -54,6 +54,8 @@ $ mpremote a0 cp pyrobusta.env :/pyrobusta.env
 | `http_auth` | Selects the type of authentication method enforced by the server. Currently, basic authentication (`basic`) is supported. | None |
 | `http_auth_mode` | Selects authentication usage model. `browser` enables CSRF protection; `api` assumes credentials are explicitly provided by the client and disables CSRF protection. | `browser` |
 | `http_insecure_auth` | Allows clients to authenticate over unsecured HTTP (without TLS). This may expose credentials or authentication tokens in transit. | False |
+| `http_sessions` | Allow the creation of session cookies after successful authentication requests. | False |
+| `http_session_ttl_sec` | Duration of validity of session cookies in seconds. | 900 |
 | `socket_max_con` | Maximum number of simultaneous socket connections. | 2 |
 | `tls` | Enables or disables TLS. When enabled, `cert.der` and `key.der` must be installed at the server root. | False |
 | `tls_cert_file` | Path to the TLS certificate. | `/cert.der` |

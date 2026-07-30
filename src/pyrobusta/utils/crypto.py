@@ -4,7 +4,6 @@ Utility functions for cryptography operations.
 
 import binascii
 import hashlib
-import os
 import math
 
 
@@ -48,27 +47,26 @@ def constant_time_equal(a: bytes, b: bytes):
     return diff == 0
 
 
-def create_signed_token(secret: bytes, nonce_size: int = 16):
+def create_signed_token(secret: bytes, payload: bytes):
     """
-    Create a signed token containing only a random nonce.
+    Create a signed token with a payload.
     """
-    nonce = os.urandom(nonce_size)
-    data = nonce
     hmac = HmacSha256(secret)
-    signature = binascii.hexlify(hmac.digest(data))
-    return binascii.hexlify(data) + b"." + signature
+    signature = binascii.hexlify(hmac.digest(payload))
+    return binascii.hexlify(payload) + b"." + signature
 
 
-def verify_signed_token(secret: bytes, token: bytes, nonce_size: int = 16):
+def verify_signed_token(secret: bytes, token: bytes, payload_size: int):
     """
-    Verify a signed token containing only a random nonce.
+    Verify a signed token with a payload.
+    The size of the payload is verified if payload_size != -1.
     """
     try:
         sep = token.find(b".")
         if sep == -1:
             return False
         data = binascii.unhexlify(token[:sep])
-        if len(data) != nonce_size:
+        if payload_size != -1 and len(data) != payload_size:
             return False
         request_signature = binascii.unhexlify(token[sep + 1 :])
         hmac = HmacSha256(secret)
