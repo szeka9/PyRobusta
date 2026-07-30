@@ -6,8 +6,8 @@ from time import sleep
 
 from network import WLAN, STA_IF
 
-from ..utils.config import get_config, CONF_WIFI_SSID, CONF_WIFI_PASSWORD
-from ..utils import logging
+from pyrobusta.utils.config import get_config, CONF_WIFI_SSID, CONF_WIFI_PASSWORD
+from pyrobusta.utils import logging
 
 
 def initialize():

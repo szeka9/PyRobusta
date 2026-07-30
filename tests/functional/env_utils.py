@@ -6,6 +6,7 @@ from os import mkdir, listdir, remove, rmdir
 
 from pyrobusta.server import http_server
 from pyrobusta.protocol.http import enable_optional_features
+from pyrobusta.utils.iam import IAMDatabase
 from pyrobusta.utils.config import (
     CONF_TLS,
     CONF_LOG_LEVEL,
@@ -14,6 +15,8 @@ from pyrobusta.utils.config import (
     CONF_HTTP_SERVED_PATHS,
     CONF_HTTP_AUTH,
     CONF_HTTP_INSECURE_AUTH,
+    CONF_PASSWD_FILE,
+    CONF_ROLES_FILE,
     _CONFIG_CACHE,
     parse_config,
     get_config,
@@ -121,4 +124,10 @@ def setup_config(
     _CONFIG_CACHE[CONF_HTTP_AUTH] = http_auth
     _CONFIG_CACHE[CONF_HTTP_INSECURE_AUTH] = http_insecure_auth
 
-    enable_optional_features()
+    iam_db = None
+    if get_config(CONF_HTTP_AUTH):
+        iam_db = IAMDatabase(get_config(CONF_PASSWD_FILE), get_config(CONF_ROLES_FILE))
+        if not iam_db.load():
+            raise RuntimeError("Unable to initialize IAM")
+
+    enable_optional_features(iam_db)

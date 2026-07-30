@@ -23,15 +23,16 @@ whether the authenticated user is permitted to access a resource.
 ## Basic Authentication
 
 PyRobusta supports HTTP Basic Authentication with per-user credentials
-stored on the device. Passwords are stored as SHA-256 hashes.
-Basic authentication is disabled by default. It can be enabled by setting
+stored on the device. Passwords are stored as PBKDF2-HMAC-SHA256 hashes
+along with randomly generated salt values. Basic authentication is
+disabled by default. It can be enabled by setting
 `http_auth=basic` in [pyrobusta.env](configuration.md).
 
 During initialization, PyRobusta reads `pyrobusta.passwd` by default
 from the server's working directory. Each entry specifies a username,
-a password hash, and one or more role names. Set `passwd_file` in the configuration
-to specify an alternative user credentials file to load. For more information,
-see [Server Configuration](./configuration.md).
+one or more access role names, password hash and other related metadata.
+Set `passwd_file` in the configuration to specify an alternative user
+credentials file to load. For more information, see [Server Configuration](./configuration.md).
 
 PyRobusta defines a single realm (`realm="Device"`) to authenticate against.
 The server response includes the `WWW-Authenticate: Basic realm="Device"` header
@@ -41,27 +42,35 @@ when a request does not contain valid credentials.
 
 `pyrobusta.passwd` utilizes a passwd-like format, specifying one user per line,
 with each element of the user data separated by `:`. The expected format
-of a user entry is `<username>:<SHA256-password-hash>:<comma-separated-role-names>`.
+of a user entry is:
+
+```
+<username>:<roles>:<password-hash>:<salt>:<iterations>:<algorithm>:<version>
+```
+- username: name of the user (case insensitive)
+- roles: comma-separated role names (case insensitive)
+- password-hash: Base64-encoded PBKDF2 output
+- salt: Base64-encoded random salt
+- iterations: Number of PBKDF2 iterations
+- algorithm: password hashing algorithm (currently PBKDF2-HMAC-SHA256)
+- version: version of PyRobusta when the user was created
 
 ```
 # Example
 # File: /pyrobusta.passwd
-szeka9:9b085649ac73a164314f00ec70010ec37d6c663cf71e9672a0600d6609b3ae12:api_admin
-user-1:c0418ce1f43b9013c6871d4ac4941de6cd83a3fac29677785b250b86c88320a0:api_user,app_viewer
+szeka9:api_admin:JlSousyaBB87FIIS/xoQIWTCH7+Z/yjQao5NGE7O/ww=:Zz1n+l9UN89hKlpnnvcXAg==:5000:PBKDF2-HMAC-SHA256:v0.8.0
+alice:api_user,app_viewer:mKmmf5wBEtlkty7LEcphieciOd3Pl0yY7r3WmDiZnzg=:XTQgg3Has79lDTNYVW+aPw==:5000:PBKDF2-HMAC-SHA256:v0.8.0
+bob:api_user,app_maintainer:sOqLqi48jCQUiR+VpcCcfMgKcKCspbE902y0yFe0DV4=:5PzMbQQJtQRP8aZ9C7t8qQ==:5000:PBKDF2-HMAC-SHA256:v0.8.0
 [...]
-user-n:a8105c3c8b75556a9099b8dcab9cc13362d5a6f9fa5888ce39efc57961deb519:api_user,app_maintainer
 ```
 
-When adding new users, follow the below steps to calculate the password hash:
+New users can be added programmatically through the IAM API:
 
 ```python3
-import hashlib
-
-password_raw = "<password-data>"
-password_hash = hashlib.sha256(password_raw.encode()).digest().hex()
-print(password_hash) # paste the output into pyrobusta.passwd
-
-b9fa35baa8069f3dabe214aed3525da0824efefdbce5ad83dfe4e7f48f8ce15f
+from pyrobusta.utils.iam import IAMDatabase
+iam_db = IAMDatabase("pyrobusta.passwd", "pyrobusta.roles")
+iam_db.load()
+iam_db.create_user("john", "secret-password", "role-1,role-2")
 ```
 
 ## Authorization

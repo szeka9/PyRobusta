@@ -6,20 +6,24 @@ from gc import collect, mem_free, mem_alloc
 from asyncio import sleep_ms, start_server  # pylint: disable=E1101
 from time import ticks_ms, ticks_diff
 
-from ..protocol import http
-from ..bindings.http_connection import HttpConnection
-from ..stream.buffer import MemoryPool, SlidingBuffer
-from ..utils.config import (
+from pyrobusta.protocol import http
+from pyrobusta.bindings.http_connection import HttpConnection
+from pyrobusta.stream.buffer import MemoryPool, SlidingBuffer
+from pyrobusta.utils.iam import IAMDatabase
+from pyrobusta.utils.config import (
     get_config,
     CONF_HTTP_PORT,
     CONF_HTTPS_PORT,
     CONF_HTTP_MEM_CAP,
+    CONF_HTTP_AUTH,
     CONF_TLS,
     CONF_TLS_CERT_FILE,
     CONF_TLS_KEY_FILE,
     CONF_SOCKET_MAX_CON,
+    CONF_PASSWD_FILE,
+    CONF_ROLES_FILE,
 )
-from ..utils import logging
+from pyrobusta.utils import logging
 
 
 class HttpServer:
@@ -28,7 +32,7 @@ class HttpServer:
     and managing active clients.
     """
 
-    __slots__ = ["_host", "_port", "_server", "_max_clients"]
+    __slots__ = ["_host", "_port", "_server", "_max_clients", "_iam_db"]
 
     ACTIVE_CLIENTS = []
 
@@ -106,6 +110,7 @@ class HttpServer:
         )
         self._server = None
         self._max_clients = 0
+        self._iam_db = None
 
     async def _reserve_buffers(self):
         """
@@ -173,7 +178,14 @@ class HttpServer:
         """
         try:
             collect()
-            http.enable_optional_features()
+            if get_config(CONF_HTTP_AUTH):
+                self._iam_db = IAMDatabase(
+                    get_config(CONF_PASSWD_FILE), get_config(CONF_ROLES_FILE)
+                )
+                if not self._iam_db.load():
+                    raise RuntimeError("Unable to initialize IAM")
+
+            http.enable_optional_features(auth_provider=self._iam_db)
             logging.debug(__name__ + f"registered routes: {http.HttpEngine.ROUTES}")
             self._max_clients = get_config(CONF_SOCKET_MAX_CON)
             self._init_pools(self._max_clients)

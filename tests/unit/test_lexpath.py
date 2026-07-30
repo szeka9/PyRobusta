@@ -2,12 +2,12 @@ import unittest
 from unittest.mock import patch
 from os import getcwd
 
-from utils import load_module
+from tests.unit.utils import load_module
 
 
-class TestHelpers(unittest.TestCase):
+class TestLexPath(unittest.TestCase):
     """
-    Base class for helper functions.
+    Base class for lexical path helper functions.
     """
 
     @classmethod
