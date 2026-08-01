@@ -14,6 +14,7 @@ from pyrobusta.utils.config import (
     CONF_HTTP_FILES_API,
     CONF_HTTP_SERVED_PATHS,
     CONF_HTTP_AUTH,
+    CONF_HTTP_SESSIONS,
 )
 from pyrobusta.utils import logging, lexpath
 from pyrobusta.utils.iam import NO_POLICY
@@ -245,18 +246,16 @@ class HttpEngine:
     # =========================================
 
     @staticmethod
-    def get_policy(_: str):
+    def get_policy(route: str):  # pylint: disable=W0613
         """
         Placeholder for retriving a role mask of
-        for a specific resource (route)
+        for a specific resource (route).
         """
         return NO_POLICY
 
-    @staticmethod
-    def _authenticate(_: str):
+    def _authenticate(self):
         """
-        Placefolder for authentication based on
-        authorization header.
+        Placeholder for authentication.
         """
         return None
 
@@ -452,16 +451,18 @@ class HttpEngine:
     # Helpers for state machine termination
     # =========================================
 
-    def set_response_header(self, key: bytes, value: bytes):
+    def set_response_header(self, key: bytes, value: bytes, override: bool = True):
         """
         Set a response header by key and value.
         :param key: HTTP header key
         :param value: HTTP header value
+        :param override: override existing header
         """
         key = key.lower()
         if (
             key in self.resp_headers
             and (index := self.resp_headers.index(key)) % 2 == 0
+            and override
         ):
             self.resp_headers[index + 1] = value
         else:
@@ -960,4 +961,5 @@ def enable_optional_features(auth_provider=None):
     if get_config(CONF_HTTP_AUTH) == "basic":
         from pyrobusta.protocol import http_basic_auth
 
-        http_basic_auth.apply_patches(auth_provider)
+        allow_sessions = get_config(CONF_HTTP_SESSIONS)
+        http_basic_auth.apply_patches(auth_provider, allow_sessions)

@@ -10,12 +10,12 @@ and applies the basic authentication scheme with CSRF protection.
 import binascii
 import os
 
-from pyrobusta.protocol import http
+from pyrobusta.protocol.http import HttpEngine
+from pyrobusta.protocol import http_session
+from pyrobusta.protocol import http_csrf
 from pyrobusta.utils.patch import add_method
 from pyrobusta.utils.crypto import (
     constant_time_equal,
-    create_signed_token,
-    verify_signed_token,
     pbkdf2_sha256,
 )
 from pyrobusta.utils.config import (
@@ -23,6 +23,8 @@ from pyrobusta.utils.config import (
     CONF_HTTP_AUTH,
     CONF_HTTP_AUTH_MODE,
     CONF_HTTP_INSECURE_AUTH,
+    CONF_HTTP_SESSIONS,
+    CONF_HTTP_SESSION_TTL_SEC,
     CONF_TLS,
 )
 from pyrobusta.utils.iam import (
@@ -36,15 +38,25 @@ from pyrobusta.utils.iam import (
 )
 from pyrobusta.utils.logging import warning
 
-_CSRF_NONCE_SIZE = 16
-
 _DUMMY_ITER = 5000
 _DUMMY_SALT = os.urandom(16)
 _DUMMY_HASH = pbkdf2_sha256(os.urandom(20), _DUMMY_SALT, _DUMMY_ITER)
 
 
-def _auth_user(auth_header: str, auth_provider: IAMDatabase):
+def _auth_user(self: HttpEngine, auth_provider: IAMDatabase, sessions=False):
+    # Session validation
+    if sessions and (session_cookie := self.get_cookie("session")):
+        if credentials := http_session.verify_cookie(
+            session_cookie.encode("ascii"), auth_provider
+        ):
+            username, user_info = credentials
+            is_session = True
+            return username, user_info, is_session
+
+    is_session = False
+
     # Protocol validation
+    auth_header = self.headers.get("authorization")
     if not auth_header or auth_header[:6].lower() != "basic ":
         return None
 
@@ -83,20 +95,7 @@ def _auth_user(auth_header: str, auth_provider: IAMDatabase):
     if not (user_ok and hash_ok):
         return None
 
-    return user_info
-
-
-def _is_valid_csrf_token(cookie_token: bytes, header_token: bytes, user_secret: bytes):
-    if not cookie_token or not header_token:
-        return False
-    csrf_sep = header_token.find(b".")
-    if csrf_sep == -1:
-        return False
-    if cookie_token != header_token:
-        return False
-    if not verify_signed_token(user_secret, header_token, _CSRF_NONCE_SIZE):
-        return False
-    return True
+    return username, user_info, is_session
 
 
 def _handle_auth_st(self, _):
@@ -125,22 +124,22 @@ def _handle_auth_st(self, _):
 def _handle_auth_header_st(self, _):
     method = self.method.decode("ascii")
     url = self.url.decode("ascii")
-    auth_header = self.headers.get("authorization", "").strip()
 
     # Authentication
-    if not (user_info := self._authenticate(auth_header)):
+    if not (credentials := self._authenticate()):
         self.set_response_header(b"WWW-Authenticate", b'Basic realm="Device"')
         self.terminate(401)
         return
+    username, user_info, is_session = credentials
 
     # CSRF validation, cookie setting
-    if get_config(CONF_HTTP_AUTH_MODE) == "browser":
+    if get_config(CONF_HTTP_AUTH_MODE) == "browser" and not is_session:
         if self.method not in (
             self.GET,
             self.HEAD,
             self.OPTIONS,
         ):
-            if not _is_valid_csrf_token(
+            if not http_csrf.verify_cookie(
                 self.get_cookie("csrf-token", "").encode("ascii"),
                 self.headers.get("x-csrf-token", "").encode("ascii"),
                 user_info[USER_SECRET],
@@ -149,13 +148,15 @@ def _handle_auth_header_st(self, _):
                 return
         elif self.method in (self.GET, self.HEAD):
             if self.get_cookie("csrf-token") is None:
-                csrf_token = create_signed_token(
-                    user_info[USER_SECRET], _CSRF_NONCE_SIZE
-                )
-                cookie = b"csrf-token=" + csrf_token + b"; path=/; samesite=strict"
-                if get_config(CONF_TLS):
-                    cookie += b"; secure"
-                self.set_response_header(b"set-cookie", cookie)
+                cookie = http_csrf.create_cookie(user_info[USER_SECRET])
+                self.set_response_header(b"set-cookie", cookie, override=False)
+
+    # Session creation
+    if not is_session and get_config(CONF_HTTP_SESSIONS):
+        session_cookie = http_session.create_cookie(
+            username, user_info[USER_SECRET], get_config(CONF_HTTP_SESSION_TTL_SEC)
+        )
+        self.set_response_header(b"set-cookie", session_cookie, override=False)
 
     # Authorization
     policy = self.get_policy(url)
@@ -174,7 +175,7 @@ def _handle_auth_header_st(self, _):
     self.state = self._route_request_st
 
 
-def apply_patches(auth_provider: IAMDatabase):
+def apply_patches(auth_provider: IAMDatabase, sessions=False):
     """
     Apply patches to class attributes for HTTP basic authentication.
     """
@@ -197,10 +198,10 @@ def apply_patches(auth_provider: IAMDatabase):
     def get_policy(route: str):
         return auth_provider.get_access_policies(route)
 
-    def _authenticate(auth_header: str):
-        return _auth_user(auth_header, auth_provider)
+    def _authenticate(self: HttpEngine):
+        return _auth_user(self, auth_provider, sessions)
 
-    add_method(http.HttpEngine, _handle_auth_st)
-    add_method(http.HttpEngine, _handle_auth_header_st)
-    add_method(http.HttpEngine, get_policy, "static")
-    add_method(http.HttpEngine, _authenticate, "static")
+    add_method(HttpEngine, _handle_auth_st)
+    add_method(HttpEngine, _handle_auth_header_st)
+    add_method(HttpEngine, get_policy, "static")
+    add_method(HttpEngine, _authenticate)
