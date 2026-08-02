@@ -71,25 +71,39 @@ New users can be added programmatically through the IAM API:
 from pyrobusta.utils.iam import IAMDatabase
 iam_db = IAMDatabase("pyrobusta.passwd", "pyrobusta.roles")
 iam_db.load()
-iam_db.create_user("john", "secret-password", "role-1,role-2")
+iam_db.create_user("johno", "john's-secret-password", ["role-1", "role-2"])
+```
+
+Password verification uses PBKDF2-HMAC-SHA256 with a default iteration count of 5000.
+The iteration count is intentionally chosen as a compromise between resistance against
+offline attacks and the computational limitations of microcontroller-class hardware.
+Because lower iteration counts reduce the computational cost of each password guess,
+PyRobusta enforces strong password requirements to increase the password search
+space and improve resistance against brute-force attacks.
+
+```python3
+iam_db.create_user("john", "secret", ["role-1", "role-2"])
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+  File "src/pyrobusta/utils/iam.py", line 198, in create_user
+  File "src/pyrobusta/utils/crypto.py", line 125, in validate_password
+ValueError: Password must be at least 16 characters
 ```
 
 ## HTTP Sessions
 
-Password-based authentication relies on computationally expensive cryptographic algorithms
-to resist offline password cracking attacks. PyRobusta stores user passwords using
-PBKDF2-HMAC-SHA256. Consequently, every authentication request requires a PBKDF2 computation,
-whose execution time depends on the configured iteration count.
+Without session authentication, each HTTP request authenticated with Basic Auth requires a
+new password verification operation. Since PBKDF2 is intentionally computationally expensive,
+this can introduce noticeable latency on microcontroller-class hardware.
 
-Authenticating every HTTP request with PBKDF2 can significantly increase response latency in
-browser-based applications. To avoid repeated password verification, PyRobusta can issue
-stateless session cookies after a successful authentication. Subsequent requests are authenticated
-using the session cookie instead of recomputing the PBKDF2 password hash.
+To avoid repeated password verification, PyRobusta can issue stateless session cookies
+after a successful authentication. Subsequent requests are authenticated using the session
+cookie instead of recomputing the PBKDF2 password hash.
 
 Session cookies are cryptographically signed and validated by the server without maintaining
-per-session state. Signatures are generated using per-user secrets that are randomly generated
-during server initialization and stored only in memory. Existing sessions are invalidated
-automatically upon expiration or when the server is restarted.
+per-session state. Session signing keys are derived from per-user secrets that are randomly
+generated during server startup and stored only in memory. Consequently, all existing
+sessions are invalidated automatically when the server restarts.
 
 Stateless sessions are enabled by setting `http_sessions=true` in pyrobusta.env.
 Sessions expire after 15 minutes by default. The session lifetime can be configured with
