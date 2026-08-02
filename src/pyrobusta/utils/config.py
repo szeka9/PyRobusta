@@ -55,7 +55,6 @@ _CONFIG_CACHE = [
     0.1,  # CONF_HTTP_MEM_CAP
     [
         normalize_path("/www"),
-        normalize_path("/lib/pyrobusta"),
     ],  # CONF_HTTP_SERVED_PATHS
     False,  # CONF_HTTP_FILES_API
     None,  # CONF_HTTP_AUTH

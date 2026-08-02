@@ -15,7 +15,7 @@ from pyrobusta.utils.lexpath import (
 )
 from pyrobusta.utils.assets import iterate_fs, FS_ITER_FILE
 
-_UPLOAD_ROOT = normalize_path("/www/user_data")
+_UPLOAD_ROOT = HttpEngine.USER_DIRECTORY
 _TMP_DIR = normalize_path("/tmp")
 
 
@@ -49,12 +49,13 @@ def fs_retrieve(http_ctx, _):
 
         # Retrieve file
         try:
-            extension = target_path.rsplit(".", 1)[-1]
-            content_type = http_ctx._lookup(
-                http_ctx.CONTENT_TYPES, extension.encode("ascii")
-            )
+            extension = target_path.rsplit(".", 1)[-1].lower().encode("ascii")
+            content_type = http_ctx._lookup(http_ctx.CONTENT_TYPES, extension)
         except ValueError:
-            content_type = http_ctx._lookup(http_ctx.CONTENT_TYPES, b"raw")
+            content_type = b"application/octet-stream"
+
+        if content_type not in http_ctx.SAFE_CONTENT_TYPES:
+            http_ctx.set_response_header(b"content-disposition", b"attachment")
 
         http_ctx.set_response_header(
             b"content-length", str(stat(norm_path)[6]).encode("ascii")

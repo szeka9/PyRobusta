@@ -19,6 +19,7 @@ from pyrobusta.utils.config import (
 from pyrobusta.utils import logging, lexpath
 from pyrobusta.utils.iam import NO_POLICY
 from pyrobusta.stream.buffer import BufferFullError
+from pyrobusta.utils.lexpath import is_child_path_of, normalize_path
 
 
 class InvalidHeaders(ValueError):
@@ -113,6 +114,8 @@ class HttpEngine:
         b"text/html",
         b"css",
         b"text/css",
+        b"csv",
+        b"text/csv",
         b"js",
         b"application/javascript",
         b"json",
@@ -125,11 +128,30 @@ class HttpEngine:
         b"image/jpeg",
         b"png",
         b"image/png",
-        b"txt",
-        b"text/plain",
+        b"svg",
+        b"image/svg",
         b"gif",
         b"image/gif",
+        b"webp",
+        b"image/webp",
+        b"txt",
+        b"text/plain",
+        b"log",
+        b"text/plain",
     )
+
+    SAFE_CONTENT_TYPES = (
+        b"application/json",
+        b"image/gif",
+        b"image/jpeg",
+        b"image/png",
+        b"image/webp",
+        b"image/x-icon",
+        b"text/csv",
+        b"text/plain",
+    )
+
+    USER_DIRECTORY = normalize_path("/www/user_data")
 
     DELETE = b"DELETE"
     GET = b"GET"
@@ -887,12 +909,17 @@ class HttpEngine:
                 return
 
             try:
-                extension = target_path.rsplit(".", 1)[-1]
-                content_type = self._lookup(
-                    self.CONTENT_TYPES, extension.encode("ascii")
-                )
+                extension = target_path.rsplit(".", 1)[-1].lower().encode("ascii")
+                content_type = self._lookup(self.CONTENT_TYPES, extension)
             except ValueError:
-                content_type = self._lookup(self.CONTENT_TYPES, b"raw")
+                content_type = b"application/octet-stream"
+
+            if get_config(CONF_HTTP_FILES_API):
+                if (
+                    is_child_path_of(target_path, [self.USER_DIRECTORY])
+                    and content_type not in self.SAFE_CONTENT_TYPES
+                ):
+                    self.set_response_header(b"content-disposition", b"attachment")
 
             self.set_response_header(
                 b"content-length", str(stat(norm_path)[6]).encode("ascii")
@@ -917,9 +944,9 @@ class HttpEngine:
         """
         self.abort(503)
 
-    def _terminal_st(self, rx):  # pylint: disable=W0613
+    def apply_keepalive_headers(self):
         """
-        Terminal state for finalizing request/response processing.
+        Apply headers for persistent connection management.
         """
         if (
             self.version == b"HTTP/1.0"
@@ -932,14 +959,47 @@ class HttpEngine:
         ):
             self.set_response_header(b"connection", b"close")
 
+    def apply_security_headers(self):
+        """
+        Apply default HTTP security headers for browser hardening.
+        """
+        if not self.get_response_header(b"x-content-type-options"):
+            self.set_response_header(b"x-content-type-options", b"nosniff")
+
+        if not self.get_response_header(b"content-security-policy"):
+            self.set_response_header(
+                b"content-security-policy",
+                b"default-src 'self';"
+                b"script-src 'self';"
+                b"style-src 'self' 'unsafe-inline';"
+                b"object-src 'none';"
+                b"base-uri 'self';"
+                b"frame-ancestors 'none'",
+            )
+
+        if not self.get_response_header(b"referrer-policy"):
+            self.set_response_header(
+                b"referrer-policy",
+                b"no-referrer",
+            )
+
+    def _terminal_st(self, rx):  # pylint: disable=W0613
+        """
+        Terminal state for finalizing request/response processing.
+        """
+        self.apply_keepalive_headers()
+
+        if self.get_response_header(b"content-type"):
+            self.apply_security_headers()
+
+        if not self.get_response_header(b"cache-control"):
+            self.set_response_header(b"cache-control", b"no-store")
+
         if (
             self.get_response_header(b"transfer-encoding") != b"chunked"
             and self.get_response_header(b"content-length") is None
         ):
             self.set_response_header(b"content-length", b"0")
-
-        if not self.get_response_header(b"cache-control"):
-            self.set_response_header(b"cache-control", b"no-store")
 
         self.state = None
 
