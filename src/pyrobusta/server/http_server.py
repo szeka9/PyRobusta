@@ -78,9 +78,7 @@ class HttpServer:
             cls.RECV_BUF_MAX_BYTES + cls.SEND_BUF_MAX_BYTES + cls.CON_OVERHEAD_BYTES
         )
         if is_low_memory:
-            logging.warning(
-                __name__ + ".init_pools: low-memory mode with reduced buffer size"
-            )
+            logging.warning("%s: low-memory mode with reduced buffer size", __name__)
         recv_size = cls.RECV_BUF_MIN_BYTES if is_low_memory else cls.RECV_BUF_MAX_BYTES
         send_size = cls.SEND_BUF_MIN_BYTES if is_low_memory else cls.SEND_BUF_MAX_BYTES
         per_con = recv_size + send_size + cls.CON_OVERHEAD_BYTES
@@ -93,7 +91,7 @@ class HttpServer:
                 )
             )
         con_limit = min(usable // per_con, con_limit)
-        logging.info((__name__ + f".init_pools: {con_limit} connection(s) allowed"))
+        logging.info("%s: %s connection(s) allowed", __name__, con_limit)
         cls.RECV_POOL = MemoryPool(recv_size, con_limit, wrapper=SlidingBuffer)
         cls.SEND_POOL = MemoryPool(send_size, con_limit, wrapper=SlidingBuffer)
 
@@ -145,22 +143,26 @@ class HttpServer:
 
             if recv_buf is None or send_buf is None:
                 logging.debug(
-                    __name__
-                    + ": connection from "
-                    + writer.get_extra_info("peername")[0]
-                    + " rejected (server at capacity)"
+                    "%s: connection from %s rejected (server at capacity)",
+                    __name__,
+                    writer.get_extra_info("peername")[0],
                 )
                 writer.close()
                 await writer.wait_closed()
                 return
 
             client = HttpConnection(reader, writer, recv_buf, send_buf)
-            logging.debug(__name__ + f": accept {client.id}")
+            logging.debug("%s: accept client=[%s]", __name__, client.id)
             self.ACTIVE_CLIENTS.append(client)
             async with client:
                 await client.run()
         except Exception as e:  # pylint: disable=W0718
-            logging.warning(__name__ + f": error in run(): {e}")
+            logging.warning(
+                "%s: client=[%s] error=[%s]",
+                __name__,
+                writer.get_extra_info("peername")[0],
+                e,
+            )
         finally:
             if send_buf:
                 send_buf.consume()
@@ -186,7 +188,7 @@ class HttpServer:
                     raise RuntimeError("Unable to initialize IAM")
 
             http.enable_optional_features(auth_provider=self._iam_db)
-            logging.debug(__name__ + f"registered routes: {http.HttpEngine.ROUTES}")
+            logging.debug("%s: registered routes: %s", __name__, http.HttpEngine.ROUTES)
             self._max_clients = get_config(CONF_SOCKET_MAX_CON)
             self._init_pools(self._max_clients)
             ssl_ctx = None
@@ -207,18 +209,18 @@ class HttpServer:
                 backlog=max(1, self._max_clients),
                 ssl=ssl_ctx,
             )
-            logging.info(__name__ + ": started")
+            logging.info("%s: started", __name__)
         except MemoryError as e:
-            logging.warning(__name__ + f": allocation failed - {e}")
+            logging.error("%s: allocation error=[%s]", __name__, e)
 
     async def terminate(self):
         """
         Terminate HTTP server and drop clients.
         """
-        logging.info(__name__ + ": terminated")
+        logging.info("%s: terminated", __name__)
         while self.ACTIVE_CLIENTS:
             client = self.ACTIVE_CLIENTS[0]
-            logging.debug(__name__ + f": {client.id} dropped")
+            logging.debug("%s: client=[%s] dropped", __name__, client.id)
             self.ACTIVE_CLIENTS.remove(client)
             await client.close()
         if self._server:

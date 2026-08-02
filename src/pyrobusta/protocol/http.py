@@ -630,9 +630,9 @@ class HttpEngine:
             self.abort(400)
             self.set_response_body(b"Malformed request")
         except Exception as e:  # pylint: disable=W0718
-            logging.warning(__name__ + f"._run_state_machine: {e}")
+            logging.warning("%s.run: error=[%s]", __name__, e)
             self.abort(500)
-            self.set_response_body(str(e).encode("ascii"))
+            self.set_response_body(b"Internal Server Error")
 
     # ========================================
     # Helpers for routing, state machine logic

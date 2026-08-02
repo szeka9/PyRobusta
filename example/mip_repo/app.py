@@ -36,7 +36,7 @@ def self_serve_mip_package(http_ctx, _):
 
     protocol = "https" if tls_enabled else "http"
 
-    logging.debug(f"[mip_repo] server_addr: {server_addr}")
+    logging.debug("mip_repo addr=[%s]", server_addr)
     append_package_files("/lib/pyrobusta", package_files, server_addr, protocol)
     return "application/json", package_files
 

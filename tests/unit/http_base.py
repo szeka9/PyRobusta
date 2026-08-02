@@ -62,6 +62,8 @@ class TestHttpBase(unittest.TestCase):
         # Patch config/iam module
         # -----------------------
         self.config = dict(self.base_config)
+        if "log_level" not in self.config:
+            self.config["log_level"] = "off"
         self.config_module = load_module("pyrobusta/utils/config.py")
         self.patch_config_loader(self.config, self.config_module)
 

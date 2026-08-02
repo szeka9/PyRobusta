@@ -58,7 +58,7 @@ class HttpConnection(BaseConnection):
             timeout_seconds=self.RECV_TIMEOUT_SECONDS,
         )
         self._recv_buf.write(request)
-        logging.debug(__name__ + f"._read_to_buf: [{request}]")
+        logging.debug("%s: request=[%s]", __name__, request)
         return len(request)
 
     async def _run_state_machine(self):
@@ -76,8 +76,9 @@ class HttpConnection(BaseConnection):
             except asyncio.TimeoutError:
                 self._engine.abort(408)
             except Exception as e:  # pylint: disable=W0718
+                logging.warning("%s: error=[%s]", __name__, e)
                 self._engine.abort(500)
-                self._engine.set_response_body(b"Read error: " + str(e).encode("ascii"))
+                self._engine.set_response_body(b"Internal Server Error")
 
         # [2] process request by state machine
         while True:
