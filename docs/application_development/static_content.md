@@ -58,17 +58,21 @@ The following mapping between extensions and content types is maintained by the 
 
 | Extension | Content-Type header |
 | --- | --- |
-| .html | text/html |
 | .css | text/css |
+| .csv | text/csv |
+| .gif | image/gif |
+| .html | text/html |
+| .ico | image/x-icon |
+| .jpeg/.jpg | image/jpeg |
 | .js | application/javascript |
 | .json | application/json |
-| .ico | image/x-icon |
-| .jpeg | image/jpeg |
-| .jpg | image/jpeg |
+| .log | text/plain |
 | .png | image/png |
+| .raw | application/octet-stream |
+| .svg | image/svg |
 | .txt | text/plain |
-| .gif | image/gif |
-| .raw, unknown extensions | application/octet-stream |
+| .webp | image/webp |
+| unknown extensions | application/octet-stream |
 
 ---
 

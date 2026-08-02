@@ -16,6 +16,9 @@ whether the authenticated user is permitted to access a resource.
   + [Basic Authentication](#basic-authentication)
   + [HTTP Sessions](#http-sessions)
   + [Authorization](#authorization)
+  + [CSRF Protection](#csrf-protection)
+  + [Authentication & Authorization Flow](#authentication-authorization-flow)
+  + [Content Serving & Browser Security Headers](#content-serving-browser-security-headers)
   + [HTTPS / TLS](#https-tls)
   + [Certificate Installation](#certificate-installation)
 
@@ -235,6 +238,7 @@ During verification, PyRobusta recalculates the HMAC-SHA256 signature over the n
 user secret and compares it with the signature provided in the token. Requests are rejected with HTTP
 `403 Forbidden` if the token signature is invalid or if the cookie and `X-CSRF-Token` header values do not match.
 
+
 ## Authentication & Authorization Flow
 
 ```mermaid
@@ -285,6 +289,67 @@ PyRobusta returns the following HTTP status codes for authentication and authori
 | Invalid authentication credentials | 401 Unauthorized |
 | Authenticated, but CSRF validation failed | 403 Forbidden |
 | Authenticated, but authorization failed | 403 Forbidden |
+
+
+## Content Serving & Browser Security Headers
+
+### Unsafe Content Types
+
+To lower the risk of cross-site scripting (XSS) attacks, browser-interpreted or
+active content types like `text/html` and `application/javascript` are served
+as attachments by setting `Content-Disposition: attachment`. This rule applies
+to every file stored under `/www/user_data`. The following file extensions are
+allowlisted and are served inline with their corresponding content types:
+
+| Extension | Content-Type header |
+| --- | --- |
+| .csv | text/csv |
+| .gif | image/gif |
+| .ico | image/x-icon |
+| .jpeg/.jpg | image/jpeg |
+| .json | application/json |
+| .log | text/plain |
+| .png | image/png |
+| .txt | text/plain |
+| .webp | image/webp |
+
+Unless overridden by the application, responses include `X-Content-Type-Options: nosniff`
+to prevent browsers from interpreting content using a different MIME type than the one
+provided by the server.
+
+### Browser Security Headers
+
+#### Content Security Policy
+
+Content Security Policy controls which resources the browser is allowed to
+load, execute, and embed, acting as a defense mechanism against XSS
+(cross-site scripting) vulnerabilities. PyRobusta includes a default
+Content-Security-Policy header in every response. Applications may override
+this header when required, but doing so can reduce browser-side security
+protections.
+
+The following defaults are applicable to the `Content-Security-Policy` header:
+
+| Policy | Setting | Meaning |
+| --- | --- | --- |
+| default-src | 'self' | Resources are only allowed from the same origin by default. |
+| script-src | 'self' | JavaScript may only be loaded from the same origin. Inline scripts are blocked. |
+| style-src | 'self' 'unsafe-inline' | Stylesheets may be loaded from the same origin. Inline styles are allowed. |
+| object-src | 'none' | Embedded plugin content such as `<object>` and `<embed>` is disabled. |
+| base-uri | 'self' | The document base URL can only be set to the same origin. |
+| frame-ancestors | 'none' | Prevents the application from being embedded in frames. |
+
+Inline styles are permitted for compatibility with embedded resources such as
+SVG files. Inline JavaScript remains disabled by the default policy.
+
+#### Referrer Policy
+
+Referrer Policy controls the amount of referrer information sent by the browser.
+The following default is applicable to the `Referrer-Policy` header:
+
+| Header | Setting | Meaning |
+| --- | --- | --- |
+| Referrer-Policy | no-referrer | Prevents browsers from sending the originating URL in the `Referer` header. |
 
 ## HTTPS / TLS
 

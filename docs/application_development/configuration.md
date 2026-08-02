@@ -49,7 +49,7 @@ $ mpremote a0 cp pyrobusta.env :/pyrobusta.env
 | `https_port` | Port number for HTTPS. | 443 |
 | `http_multipart` | Enables or disables multipart request and response processing. Enabling multipart support increases memory usage. | False |
 | `http_mem_cap` | Fraction of available heap memory reserved for stream buffers. Valid range: (0, 1]. | 0.1 |
-| `http_served_paths` | Space-separated list of filesystem paths that may be served over HTTP. | `/www /lib/pyrobusta` |
+| `http_served_paths` | Space-separated list of filesystem paths that may be served over HTTP. | `/www` |
 | `http_files_api` | Enables or disables the file management API endpoint (`/files`), allowing upload, download, and listing of files. | False |
 | `http_auth` | Selects the type of authentication method enforced by the server. Currently, basic authentication (`basic`) is supported. | None |
 | `http_auth_mode` | Selects authentication usage model. `browser` enables CSRF protection; `api` assumes credentials are explicitly provided by the client and disables CSRF protection. | `browser` |
@@ -62,7 +62,7 @@ $ mpremote a0 cp pyrobusta.env :/pyrobusta.env
 | `tls_key_file` | Path to the TLS private key. | `/key.der` |
 | `passwd_file` | Path to the file containing user credentials used for authentication. | `/pyrobusta.passwd` |
 | `roles_file` | Path to the file containing RBAC role definitions used for authorization. | `/pyrobusta.roles` |
-| `log_level` | Logging level. Can be one of: `warning`, `info`, `debug`. | `info` |
+| `log_level` | Logging level. Can be one of: `error`, `warning`, `info`, `debug`. | `info` |
 
 ## Configuration API
 
