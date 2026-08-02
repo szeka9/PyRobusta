@@ -36,7 +36,7 @@ from pyrobusta.utils.iam import (
     PASS_ITER,
     USER_SECRET,
 )
-from pyrobusta.utils.logging import warning
+from pyrobusta.utils import logging
 
 _DUMMY_ITER = 5000
 _DUMMY_SALT = os.urandom(16)
@@ -93,6 +93,7 @@ def _auth_user(self: HttpEngine, auth_provider: IAMDatabase, sessions=False):
     user_ok = user_info is not None
 
     if not (user_ok and hash_ok):
+        logging.info("authentication failed for user=[%s]", username)
         return None
 
     return username, user_info, is_session
@@ -183,16 +184,16 @@ def apply_patches(auth_provider: IAMDatabase, sessions=False):
         raise ValueError
 
     if not get_config(CONF_TLS) and get_config(CONF_HTTP_AUTH):
-        insecure_auth_msg = "Authentication turned on without TLS"
+        insecure_auth_msg = "authentication turned on without TLS"
         if get_config(CONF_HTTP_INSECURE_AUTH):
-            warning(insecure_auth_msg)
+            logging.warning(insecure_auth_msg)
         else:
             raise ValueError(insecure_auth_msg)
 
     if get_config(CONF_HTTP_AUTH_MODE) != "browser":
-        warning(
-            "CSRF protection is disabled; authenticated browser "
-            "requests may be vulnerable to cross-site request forgery"
+        logging.warning(
+            "CSRF protection is disabled; "
+            "authenticated clients are vulnerable to CSRF attacks"
         )
 
     def get_policy(route: str):

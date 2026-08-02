@@ -71,7 +71,7 @@ New users can be added programmatically through the IAM API:
 from pyrobusta.utils.iam import IAMDatabase
 iam_db = IAMDatabase("pyrobusta.passwd", "pyrobusta.roles")
 iam_db.load()
-iam_db.create_user("johno", "john's-secret-password", ["role-1", "role-2"])
+iam_db.create_user("john", "john's-secret-password", ["role-1", "role-2"])
 ```
 
 Password verification uses PBKDF2-HMAC-SHA256 with a default iteration count of 5000.

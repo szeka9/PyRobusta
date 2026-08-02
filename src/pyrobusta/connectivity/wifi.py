@@ -18,13 +18,14 @@ def initialize():
     password = get_config(CONF_WIFI_PASSWORD)
 
     if not ssid or not password:
-        logging.warning(__name__ + ": missing SSID/password")
+        logging.error("%s: missing SSID/password", __name__)
         return False
 
     sta_if = WLAN(STA_IF)
     sta_if.active(True)
+    addr = sta_if.ifconfig()[0]
     if sta_if.isconnected():
-        logging.info(__name__ + f": already connected IP={sta_if.ifconfig()[0]}")
+        logging.info("%s: already connected ip=[%s]", __name__, addr)
         return True
 
     sta_if.connect(ssid, password)
@@ -32,13 +33,12 @@ def initialize():
     timeout = 30
     while timeout > 0:
         if sta_if.isconnected():
-            ip = sta_if.ifconfig()[0]
-            logging.info(__name__ + f": connected, IP={ip}")
+            logging.info("%s: connected, ip=[%s]", __name__, addr)
             return True
         sleep(1)
         timeout -= 1
 
-    logging.warning(__name__ + ": connection failed")
+    logging.error("%s: connection failed", __name__)
     return False
 
 
