@@ -21,6 +21,7 @@ from pyrobusta.utils.config import (
     CONF_SOCKET_MAX_CON,
     CONF_PASSWD_FILE,
     CONF_ROLES_FILE,
+    CONF_LOG_LEVEL,
 )
 from pyrobusta.utils import logging
 
@@ -179,6 +180,7 @@ class HttpServer:
         """
         try:
             collect()
+            logging.set_log_level(get_config(CONF_LOG_LEVEL))
             if get_config(CONF_HTTP_AUTH):
                 from pyrobusta.utils.iam import IAMDatabase
 

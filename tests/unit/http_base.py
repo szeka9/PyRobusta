@@ -62,8 +62,10 @@ class TestHttpBase(unittest.TestCase):
         # Patch config/iam module
         # -----------------------
         self.config = dict(self.base_config)
-        if "log_level" not in self.config:
-            self.config["log_level"] = "off"
+
+        self.logging_module = load_module("pyrobusta/utils/logging.py")
+        self.logging_module.set_log_level("off")
+
         self.config_module = load_module("pyrobusta/utils/config.py")
         self.patch_config_loader(self.config, self.config_module)
 
@@ -81,6 +83,7 @@ class TestHttpBase(unittest.TestCase):
         self.module_patcher = patch.dict(
             sys.modules,
             {
+                "pyrobusta.utils.logging": self.logging_module,
                 "pyrobusta.utils.config": self.config_module,
                 "pyrobusta.utils.iam": self.iam_module,
                 "pyrobusta.utils.clock": self.clock_module,
