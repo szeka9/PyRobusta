@@ -2,10 +2,10 @@
 This module adds browser security hardening headers.
 """
 
-from pyrobusta.protocol.http import HttpEngine
 from pyrobusta.utils.patch import add_method
 
-def apply_security_headers(self:HttpEngine):
+
+def _apply_security_headers(self):
     """
     Apply default HTTP security headers for browser hardening.
     """
@@ -29,8 +29,9 @@ def apply_security_headers(self:HttpEngine):
             b"no-referrer",
         )
 
-def apply_patches():
+
+def apply_patches(cls):
     """
     Apply patches for security headers.
     """
-    add_method(HttpEngine, apply_security_headers)
+    add_method(cls, _apply_security_headers)

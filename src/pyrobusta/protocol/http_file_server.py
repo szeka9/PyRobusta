@@ -7,7 +7,6 @@ Module for extended file serving features, registered at the /files route.
 from os import stat, listdir, rmdir, remove, rename, mkdir
 from json import dumps
 
-from pyrobusta.protocol.http import HttpEngine
 from pyrobusta.utils.lexpath import (
     normalize_path,
     is_file_path_valid,
@@ -15,7 +14,7 @@ from pyrobusta.utils.lexpath import (
 )
 from pyrobusta.utils.assets import iterate_fs, FS_ITER_FILE
 
-_UPLOAD_ROOT = HttpEngine.USER_DIRECTORY
+_UPLOAD_ROOT = normalize_path("/www/user_data")
 _TMP_DIR = normalize_path("/tmp")
 
 
@@ -278,19 +277,22 @@ def setup_directories():
         remove(_TMP_DIR + "/" + file)
 
 
-def apply_patches():
+def apply_patches(cls, upload_root=None):
     """
     Apply patches to class attributes for file serving.
     """
+    if upload_root:
+        global _UPLOAD_ROOT  # pylint: disable=W0603
+        _UPLOAD_ROOT = upload_root
 
-    HttpEngine.deregister("/files/{fs_path:path}", "GET")
-    HttpEngine.deregister("/files/{fs_path:path}", "DELETE")
-    HttpEngine.deregister("/files/{fs_path:path}", "PUT")
-    HttpEngine.deregister("/files", "POST")
+    cls.deregister("/files/{fs_path:path}", "GET")
+    cls.deregister("/files/{fs_path:path}", "DELETE")
+    cls.deregister("/files/{fs_path:path}", "PUT")
+    cls.deregister("/files", "POST")
 
-    HttpEngine.register("/files/{fs_path:path}", fs_retrieve, "GET")
-    HttpEngine.register("/files/{fs_path:path}", delete_file, "DELETE")
-    HttpEngine.register("/files/{fs_path:path}", upload_file, "PUT")
-    HttpEngine.register("/files", bulk_upload_file, "POST")
+    cls.register("/files/{fs_path:path}", fs_retrieve, "GET")
+    cls.register("/files/{fs_path:path}", delete_file, "DELETE")
+    cls.register("/files/{fs_path:path}", upload_file, "PUT")
+    cls.register("/files", bulk_upload_file, "POST")
 
     setup_directories()
