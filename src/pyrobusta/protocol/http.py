@@ -16,9 +16,9 @@ from pyrobusta.utils.config import (
     CONF_HTTP_SESSIONS,
     CONF_HTTP_BROWSER_SECURITY,
 )
-from pyrobusta.utils import logging, lexpath
+from pyrobusta.utils import logging
 from pyrobusta.stream.buffer import BufferFullError
-from pyrobusta.utils.lexpath import is_child_path_of, normalize_path
+from pyrobusta.utils.lexpath import is_child_path_of, normalize_path, iterate_segments
 
 
 class InvalidHeaders(ValueError):
@@ -334,7 +334,7 @@ class HttpEngine:
         """
         cookie_header = self.headers.get("cookie", "")
         name = name.lower()
-        for part in lexpath.iterate_segments(cookie_header, ";"):
+        for part in iterate_segments(cookie_header, ";"):
             cookie_sep = part.find("=")
             if cookie_sep == -1:
                 continue
@@ -872,7 +872,7 @@ class HttpEngine:
         """
         Returns true if a directory is configured to be served.
         """
-        return lexpath.is_child_path_of(
+        return is_child_path_of(
             norm_path, get_config(CONF_HTTP_SERVED_PATHS)
         ) and not is_protected_file(norm_path)
 
@@ -885,7 +885,7 @@ class HttpEngine:
             target_path = "/www/index.html"
         else:
             target_path = "/www" + self.url.decode("ascii")
-        norm_path = lexpath.normalize_path(target_path)
+        norm_path = normalize_path(target_path)
 
         try:
             if not self.is_norm_path_served(norm_path):

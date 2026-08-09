@@ -9,7 +9,6 @@ from time import ticks_ms, ticks_diff
 from pyrobusta.protocol import http
 from pyrobusta.bindings.http_connection import HttpConnection
 from pyrobusta.stream.buffer import MemoryPool, SlidingBuffer
-from pyrobusta.utils.iam import IAMDatabase
 from pyrobusta.utils.config import (
     get_config,
     CONF_HTTP_PORT,
@@ -181,6 +180,8 @@ class HttpServer:
         try:
             collect()
             if get_config(CONF_HTTP_AUTH):
+                from pyrobusta.utils.iam import IAMDatabase
+
                 self._iam_db = IAMDatabase(
                     get_config(CONF_PASSWD_FILE), get_config(CONF_ROLES_FILE)
                 )
