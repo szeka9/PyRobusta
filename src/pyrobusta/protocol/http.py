@@ -15,6 +15,7 @@ from pyrobusta.utils.config import (
     CONF_HTTP_SERVED_PATHS,
     CONF_HTTP_AUTH,
     CONF_HTTP_SESSIONS,
+    CONF_HTTP_BROWSER_SECURITY,
 )
 from pyrobusta.utils import logging, lexpath
 from pyrobusta.utils.iam import NO_POLICY
@@ -961,27 +962,9 @@ class HttpEngine:
 
     def apply_security_headers(self):
         """
-        Apply default HTTP security headers for browser hardening.
+        Placeholder for security hardenings.
         """
-        if not self.get_response_header(b"x-content-type-options"):
-            self.set_response_header(b"x-content-type-options", b"nosniff")
-
-        if not self.get_response_header(b"content-security-policy"):
-            self.set_response_header(
-                b"content-security-policy",
-                b"default-src 'self';"
-                b"script-src 'self';"
-                b"style-src 'self' 'unsafe-inline';"
-                b"object-src 'none';"
-                b"base-uri 'self';"
-                b"frame-ancestors 'none'",
-            )
-
-        if not self.get_response_header(b"referrer-policy"):
-            self.set_response_header(
-                b"referrer-policy",
-                b"no-referrer",
-            )
+        pass
 
     def _terminal_st(self, rx):  # pylint: disable=W0613
         """
@@ -989,11 +972,13 @@ class HttpEngine:
         """
         self.apply_keepalive_headers()
 
-        if self.get_response_header(b"content-type"):
-            self.apply_security_headers()
-
         if not self.get_response_header(b"cache-control"):
             self.set_response_header(b"cache-control", b"no-store")
+
+        if self.get_response_header(b"content-type") and get_config(
+            CONF_HTTP_BROWSER_SECURITY
+        ):
+            self.apply_security_headers()
 
         if (
             self.get_response_header(b"transfer-encoding") != b"chunked"
@@ -1023,3 +1008,8 @@ def enable_optional_features(auth_provider=None):
 
         allow_sessions = get_config(CONF_HTTP_SESSIONS)
         http_basic_auth.apply_patches(auth_provider, allow_sessions)
+
+    if get_config(CONF_HTTP_BROWSER_SECURITY):
+        from pyrobusta.protocol import http_security
+
+        http_security.apply_patches()

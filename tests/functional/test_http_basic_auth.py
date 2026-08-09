@@ -108,8 +108,8 @@ async def test_server_prevents_insecure_auth():
 async def test_server_basic_auth_with_sessions():
     setup_config(
         http_auth="basic",
-        http_auth_mode="api",  # Disabling CSRF for session tests
-        http_sessions="true",
+        http_browser_security=False,  # Disabling CSRF for session tests
+        http_sessions=True,
         http_session_ttl_sec=5,
         tls_enabled=True,
     )

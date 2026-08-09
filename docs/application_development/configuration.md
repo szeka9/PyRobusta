@@ -52,7 +52,7 @@ $ mpremote a0 cp pyrobusta.env :/pyrobusta.env
 | `http_served_paths` | Space-separated list of filesystem paths that may be served over HTTP. | `/www` |
 | `http_files_api` | Enables or disables the file management API endpoint (`/files`), allowing upload, download, and listing of files. | False |
 | `http_auth` | Selects the type of authentication method enforced by the server. Currently, basic authentication (`basic`) is supported. | None |
-| `http_auth_mode` | Selects authentication usage model. `browser` enables CSRF protection; `api` assumes credentials are explicitly provided by the client and disables CSRF protection. | `browser` |
+| `http_browser_security` | Enables or disables browser security features, including CSRF protection, and browser security headers (Content Security Policy, referrer policy). Disabling browser security is only recommended when using non-browser clients or during local development and testing. | True |
 | `http_insecure_auth` | Allows clients to authenticate over unsecured HTTP (without TLS). This may expose credentials or authentication tokens in transit. | False |
 | `http_sessions` | Allow the creation of session cookies after successful authentication requests. | False |
 | `http_session_ttl_sec` | Duration of validity of session cookies in seconds. | 900 |

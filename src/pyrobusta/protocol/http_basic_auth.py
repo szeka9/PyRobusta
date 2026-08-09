@@ -21,7 +21,7 @@ from pyrobusta.utils.crypto import (
 from pyrobusta.utils.config import (
     get_config,
     CONF_HTTP_AUTH,
-    CONF_HTTP_AUTH_MODE,
+    CONF_HTTP_BROWSER_SECURITY,
     CONF_HTTP_INSECURE_AUTH,
     CONF_HTTP_SESSIONS,
     CONF_HTTP_SESSION_TTL_SEC,
@@ -134,7 +134,7 @@ def _handle_auth_header_st(self, _):
     username, user_info, is_session = credentials
 
     # CSRF validation, cookie setting
-    if get_config(CONF_HTTP_AUTH_MODE) == "browser" and not is_session:
+    if get_config(CONF_HTTP_BROWSER_SECURITY) and not is_session:
         if self.method not in (
             self.GET,
             self.HEAD,
@@ -190,7 +190,7 @@ def apply_patches(auth_provider: IAMDatabase, sessions=False):
         else:
             raise ValueError(insecure_auth_msg)
 
-    if get_config(CONF_HTTP_AUTH_MODE) != "browser":
+    if not get_config(CONF_HTTP_BROWSER_SECURITY):
         logging.warning(
             "CSRF protection is disabled; "
             "authenticated clients are vulnerable to CSRF attacks"
