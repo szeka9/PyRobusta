@@ -7,7 +7,6 @@ Module for extended file serving features, registered at the /files route.
 from os import stat, listdir, rmdir, remove, rename, mkdir
 from json import dumps
 
-from pyrobusta.protocol.http import HttpEngine
 from pyrobusta.utils.lexpath import (
     normalize_path,
     is_file_path_valid,
@@ -49,12 +48,13 @@ def fs_retrieve(http_ctx, _):
 
         # Retrieve file
         try:
-            extension = target_path.rsplit(".", 1)[-1]
-            content_type = http_ctx._lookup(
-                http_ctx.CONTENT_TYPES, extension.encode("ascii")
-            )
+            extension = target_path.rsplit(".", 1)[-1].lower().encode("ascii")
+            content_type = http_ctx._lookup(http_ctx.CONTENT_TYPES, extension)
         except ValueError:
-            content_type = http_ctx._lookup(http_ctx.CONTENT_TYPES, b"raw")
+            content_type = b"application/octet-stream"
+
+        if content_type not in http_ctx.SAFE_CONTENT_TYPES:
+            http_ctx.set_response_header(b"content-disposition", b"attachment")
 
         http_ctx.set_response_header(
             b"content-length", str(stat(norm_path)[6]).encode("ascii")
@@ -277,19 +277,22 @@ def setup_directories():
         remove(_TMP_DIR + "/" + file)
 
 
-def apply_patches():
+def apply_patches(cls, upload_root=None):
     """
     Apply patches to class attributes for file serving.
     """
+    if upload_root:
+        global _UPLOAD_ROOT  # pylint: disable=W0603
+        _UPLOAD_ROOT = upload_root
 
-    HttpEngine.deregister("/files/{fs_path:path}", "GET")
-    HttpEngine.deregister("/files/{fs_path:path}", "DELETE")
-    HttpEngine.deregister("/files/{fs_path:path}", "PUT")
-    HttpEngine.deregister("/files", "POST")
+    cls.deregister("/files/{fs_path:path}", "GET")
+    cls.deregister("/files/{fs_path:path}", "DELETE")
+    cls.deregister("/files/{fs_path:path}", "PUT")
+    cls.deregister("/files", "POST")
 
-    HttpEngine.register("/files/{fs_path:path}", fs_retrieve, "GET")
-    HttpEngine.register("/files/{fs_path:path}", delete_file, "DELETE")
-    HttpEngine.register("/files/{fs_path:path}", upload_file, "PUT")
-    HttpEngine.register("/files", bulk_upload_file, "POST")
+    cls.register("/files/{fs_path:path}", fs_retrieve, "GET")
+    cls.register("/files/{fs_path:path}", delete_file, "DELETE")
+    cls.register("/files/{fs_path:path}", upload_file, "PUT")
+    cls.register("/files", bulk_upload_file, "POST")
 
     setup_directories()

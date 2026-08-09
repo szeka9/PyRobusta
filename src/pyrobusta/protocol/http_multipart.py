@@ -12,7 +12,6 @@ delimiter.
 # pylint: disable=W0212,R0401
 
 from pyrobusta.protocol.http import (
-    HttpEngine,
     InvalidHeaders,
     MalformedRequest,
     InvalidContentLength,
@@ -179,10 +178,10 @@ def _parse_complete_part_st(self, rx):
             break
     if blank_idx == -1:
         raise InvalidHeaders()
-    part_headers = HttpEngine._parse_headers(part[:blank_idx])
+    part_headers = self._parse_headers(part[:blank_idx])
     part_body = part[blank_idx + 4 :]
 
-    handler = HttpEngine._get_handler(self.url, self.method)
+    handler = self._get_handler(self.url, self.method)
 
     # Process complete part
     if not is_final:
@@ -216,7 +215,7 @@ def _parse_complete_part_st(self, rx):
     self._handle_route_response(handler_response)
 
 
-def apply_patches():
+def apply_patches(cls):
     """
     Apply patches to class attributes for multipart parsing.
     """
@@ -231,18 +230,18 @@ def apply_patches():
             return None
         return b"--" + self.mp_boundary + b"--"
 
-    add_property(HttpEngine, mp_delimiter)
-    add_property(HttpEngine, mp_last_delimiter)
+    add_property(cls, mp_delimiter)
+    add_property(cls, mp_last_delimiter)
 
-    patch_extra_property(HttpEngine, "mp_boundary")
-    patch_extra_property(HttpEngine, "mp_is_first")
-    patch_extra_property(HttpEngine, "mp_is_last")
+    patch_extra_property(cls, "mp_boundary")
+    patch_extra_property(cls, "mp_is_first")
+    patch_extra_property(cls, "mp_is_last")
 
-    add_method(HttpEngine, generate_multipart_response)
-    add_method(HttpEngine, _get_mp_boundary, "static")
-    add_method(HttpEngine, _multipart_wrapper_factory, "static")
-    add_method(HttpEngine, _start_multipart_parser_st)
-    add_method(HttpEngine, _parse_boundary_st)
-    add_method(HttpEngine, _parse_complete_part_st)
+    add_method(cls, generate_multipart_response)
+    add_method(cls, _get_mp_boundary, "static")
+    add_method(cls, _multipart_wrapper_factory, "static")
+    add_method(cls, _start_multipart_parser_st)
+    add_method(cls, _parse_boundary_st)
+    add_method(cls, _parse_complete_part_st)
 
-    HttpEngine.MULTIPART_BOUNDARY = b"pyrobusta-boundary"
+    cls.MULTIPART_BOUNDARY = b"pyrobusta-boundary"

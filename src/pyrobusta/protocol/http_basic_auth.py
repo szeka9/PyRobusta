@@ -10,7 +10,6 @@ and applies the basic authentication scheme with CSRF protection.
 import binascii
 import os
 
-from pyrobusta.protocol.http import HttpEngine
 from pyrobusta.protocol import http_session
 from pyrobusta.protocol import http_csrf
 from pyrobusta.utils.patch import add_method
@@ -21,7 +20,7 @@ from pyrobusta.utils.crypto import (
 from pyrobusta.utils.config import (
     get_config,
     CONF_HTTP_AUTH,
-    CONF_HTTP_AUTH_MODE,
+    CONF_HTTP_BROWSER_SECURITY,
     CONF_HTTP_INSECURE_AUTH,
     CONF_HTTP_SESSIONS,
     CONF_HTTP_SESSION_TTL_SEC,
@@ -43,7 +42,7 @@ _DUMMY_SALT = os.urandom(16)
 _DUMMY_HASH = pbkdf2_sha256(os.urandom(20), _DUMMY_SALT, _DUMMY_ITER)
 
 
-def _auth_user(self: HttpEngine, auth_provider: IAMDatabase, sessions=False):
+def _auth_user(self, auth_provider: IAMDatabase, sessions=False):
     # Session validation
     if sessions and (session_cookie := self.get_cookie("session")):
         if credentials := http_session.verify_cookie(
@@ -134,7 +133,7 @@ def _handle_auth_header_st(self, _):
     username, user_info, is_session = credentials
 
     # CSRF validation, cookie setting
-    if get_config(CONF_HTTP_AUTH_MODE) == "browser" and not is_session:
+    if get_config(CONF_HTTP_BROWSER_SECURITY) and not is_session:
         if self.method not in (
             self.GET,
             self.HEAD,
@@ -176,7 +175,7 @@ def _handle_auth_header_st(self, _):
     self.state = self._route_request_st
 
 
-def apply_patches(auth_provider: IAMDatabase, sessions=False):
+def apply_patches(cls, auth_provider: IAMDatabase, sessions=False):
     """
     Apply patches to class attributes for HTTP basic authentication.
     """
@@ -190,7 +189,7 @@ def apply_patches(auth_provider: IAMDatabase, sessions=False):
         else:
             raise ValueError(insecure_auth_msg)
 
-    if get_config(CONF_HTTP_AUTH_MODE) != "browser":
+    if not get_config(CONF_HTTP_BROWSER_SECURITY):
         logging.warning(
             "CSRF protection is disabled; "
             "authenticated clients are vulnerable to CSRF attacks"
@@ -199,10 +198,10 @@ def apply_patches(auth_provider: IAMDatabase, sessions=False):
     def get_policy(route: str):
         return auth_provider.get_access_policies(route)
 
-    def _authenticate(self: HttpEngine):
+    def _authenticate(self):
         return _auth_user(self, auth_provider, sessions)
 
-    add_method(HttpEngine, _handle_auth_st)
-    add_method(HttpEngine, _handle_auth_header_st)
-    add_method(HttpEngine, get_policy, "static")
-    add_method(HttpEngine, _authenticate)
+    add_method(cls, _handle_auth_st)
+    add_method(cls, _handle_auth_header_st)
+    add_method(cls, get_policy, "static")
+    add_method(cls, _authenticate)

@@ -423,7 +423,7 @@ class TestBasicAuthSessionStateMachine(TestHttpBase):
         cls.cwd = os.getcwd()
         cls.base_config = {
             "http_auth": "basic",
-            "http_auth_mode": "api",  # Disabling CSRF for session tests
+            "http_browser_security": False,  # Disabling CSRF for session tests
             "http_sessions": "true",
             "http_session_ttl_sec": 5,
             "passwd_file": "/tmp/pyrobusta.passwd",

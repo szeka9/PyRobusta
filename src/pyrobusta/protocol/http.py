@@ -1,6 +1,5 @@
 """
-This module is responsible HTTP protocol parsing
-with partial guarantees on RFC compliance.
+This module is responsible HTTP protocol parsing with partial guarantees on RFC compliance.
 """
 
 from json import dumps
@@ -15,10 +14,11 @@ from pyrobusta.utils.config import (
     CONF_HTTP_SERVED_PATHS,
     CONF_HTTP_AUTH,
     CONF_HTTP_SESSIONS,
+    CONF_HTTP_BROWSER_SECURITY,
 )
 from pyrobusta.utils import logging, lexpath
-from pyrobusta.utils.iam import NO_POLICY
 from pyrobusta.stream.buffer import BufferFullError
+from pyrobusta.utils.lexpath import is_child_path_of, normalize_path
 
 
 class InvalidHeaders(ValueError):
@@ -42,18 +42,14 @@ class MalformedRequest(ValueError):
 class HttpEngine:
     """
     HTTP protocol parser state machine and middleware.
-    - each instance represents a connection, allowing a request to be parsed
-      through a state machine
-    - provides an adapter/routing layer for applications
-      through registered routes (see also: register(), route())
-    - supports percent encoded URLs and query parameters (x-www-form-urlencoded)
-    - allows applications to set response attributes (headers, status code)
+    - each instance represents a connection, allowing a request to be parsed through a state machine
+    - provides an adapter/routing layer for applications (see also: register(), route())
 
     Feature flags (configured in pyrobusta.env)
-    - http_files_api: serve files at the /files API, with support for uploads,
-      removal and directory listing
+    - http_files_api: serve files at the /files API, with support for CRUD methods
     - http_multipart: support for multipart requests/responses
     - http_auth: authenticate and authorize users
+    - browser_security: enable security features like CSRF protection and hardening headers
     """
 
     __slots__ = (
@@ -113,6 +109,8 @@ class HttpEngine:
         b"text/html",
         b"css",
         b"text/css",
+        b"csv",
+        b"text/csv",
         b"js",
         b"application/javascript",
         b"json",
@@ -125,11 +123,30 @@ class HttpEngine:
         b"image/jpeg",
         b"png",
         b"image/png",
-        b"txt",
-        b"text/plain",
+        b"svg",
+        b"image/svg",
         b"gif",
         b"image/gif",
+        b"webp",
+        b"image/webp",
+        b"txt",
+        b"text/plain",
+        b"log",
+        b"text/plain",
     )
+
+    SAFE_CONTENT_TYPES = (
+        b"application/json",
+        b"image/gif",
+        b"image/jpeg",
+        b"image/png",
+        b"image/webp",
+        b"image/x-icon",
+        b"text/csv",
+        b"text/plain",
+    )
+
+    USER_DIRECTORY = normalize_path("/www/user_data")
 
     DELETE = b"DELETE"
     GET = b"GET"
@@ -248,10 +265,9 @@ class HttpEngine:
     @staticmethod
     def get_policy(route: str):  # pylint: disable=W0613
         """
-        Placeholder for retriving a role mask of
-        for a specific resource (route).
+        Placeholder for retriving a role mask of for a specific resource (route).
         """
-        return NO_POLICY
+        return 0b0
 
     def _authenticate(self):
         """
@@ -281,11 +297,8 @@ class HttpEngine:
 
     def path_segment(self, idx: int):
         """
-        Return the nth path segment of the URL path.
-        The index is shifted by one to ignore the first
-        empty segment before the leading slash ('/').
-        :param idx: index of the segment
-        :return: string path segment
+        Return the nth path segment of the URL path. The index is shifted by one to
+        ignore the first empty segment before the leading slash ('/').
         """
         return self.url.split(b"/")[idx + 1].decode("ascii")
 
@@ -504,10 +517,9 @@ class HttpEngine:
         content_type: str = "text/plain",
     ):
         """
-        Serialize and wrap the response body with a BytesIO
-        object, stored by the resp_handler member. resp_handler
-        can be used for writing the body by the transport layer.
-        This method also updates the content-type and content-length
+        Serialize and wrap the response body with a BytesIO object, stored by the
+        resp_handler member. resp_handler can be used for writing the body by the
+        transport layer. This method also updates the content-type and content-length
         headers. In the case of a HEAD request, the body is omitted.
         :param body: body to be sent in the response
         :param content_type: content-type of the body
@@ -556,10 +568,9 @@ class HttpEngine:
 
     def _handle_route_response(self, handler_response: tuple | None):
         """
-        Terminate the state machine based on the return value of a
-        user-defined route handler. If the handler does not explicitly
-        set a status code, default to HTTP 200. If the handler returns
-        a response body and content type, set them accordingly.
+        Terminate the state machine based on the return value of a user-defined route handler.
+        If the handler does not explicitly set a status code, default to HTTP 200. If the handler
+        returns a response body and content type, set them accordingly.
         """
         self.terminate(self.status_code or 200)
 
@@ -577,7 +588,6 @@ class HttpEngine:
     def terminate(self, status_code: int):
         """
         Regular state machine termination with a specific status code.
-        :param status_code: HTTP status code
         """
         self.state = self._terminal_st
         if not isinstance(status_code, int) or status_code not in self.RESP_HEADERS:
@@ -588,7 +598,6 @@ class HttpEngine:
         """
         Abort state machine due to runtime errors.
         Reset any header or response body set earlier.
-        :param status_code: HTTP status code
         """
         self.resp_headers = []
         self.set_response_body(b"")
@@ -738,8 +747,7 @@ class HttpEngine:
         self.state = self._handle_auth_st
 
     def _handle_auth_st(self, _):
-        # This a placeholder for authentication & authorization
-        # purposes to be overridden by extensions.
+        # This a placeholder for authentication & authorization.
         self.state = self._route_request_st
 
     def _route_request_st(self, _):
@@ -830,8 +838,7 @@ class HttpEngine:
     def _handle_route_st(self, rx):
         """
         Process a request by a registered route handler.
-        HEAD requests are temporarily mapped to GET for routing and handler execution,
-        but the response body is not sent back.
+        HEAD requests are temporarily mapped to GET for routing and handler execution.
         """
         method = self.GET if self.method == self.HEAD else self.method
         handler = self._get_handler(self.url, method)
@@ -887,12 +894,17 @@ class HttpEngine:
                 return
 
             try:
-                extension = target_path.rsplit(".", 1)[-1]
-                content_type = self._lookup(
-                    self.CONTENT_TYPES, extension.encode("ascii")
-                )
+                extension = target_path.rsplit(".", 1)[-1].lower().encode("ascii")
+                content_type = self._lookup(self.CONTENT_TYPES, extension)
             except ValueError:
-                content_type = self._lookup(self.CONTENT_TYPES, b"raw")
+                content_type = b"application/octet-stream"
+
+            if get_config(CONF_HTTP_FILES_API):
+                if (
+                    is_child_path_of(target_path, [self.USER_DIRECTORY])
+                    and content_type not in self.SAFE_CONTENT_TYPES
+                ):
+                    self.set_response_header(b"content-disposition", b"attachment")
 
             self.set_response_header(
                 b"content-length", str(stat(norm_path)[6]).encode("ascii")
@@ -917,9 +929,9 @@ class HttpEngine:
         """
         self.abort(503)
 
-    def _terminal_st(self, rx):  # pylint: disable=W0613
+    def _apply_keepalive_headers(self):
         """
-        Terminal state for finalizing request/response processing.
+        Apply headers for persistent connection management.
         """
         if (
             self.version == b"HTTP/1.0"
@@ -932,14 +944,31 @@ class HttpEngine:
         ):
             self.set_response_header(b"connection", b"close")
 
+    def _apply_security_headers(self):
+        """
+        Placeholder for security hardenings.
+        """
+        pass
+
+    def _terminal_st(self, rx):  # pylint: disable=W0613
+        """
+        Terminal state for finalizing request/response processing.
+        """
+        self._apply_keepalive_headers()
+
+        if not self.get_response_header(b"cache-control"):
+            self.set_response_header(b"cache-control", b"no-store")
+
+        if self.get_response_header(b"content-type") and get_config(
+            CONF_HTTP_BROWSER_SECURITY
+        ):
+            self._apply_security_headers()
+
         if (
             self.get_response_header(b"transfer-encoding") != b"chunked"
             and self.get_response_header(b"content-length") is None
         ):
             self.set_response_header(b"content-length", b"0")
-
-        if not self.get_response_header(b"cache-control"):
-            self.set_response_header(b"cache-control", b"no-store")
 
         self.state = None
 
@@ -951,15 +980,20 @@ def enable_optional_features(auth_provider=None):
     if get_config(CONF_HTTP_MULTIPART):
         from pyrobusta.protocol import http_multipart
 
-        http_multipart.apply_patches()
+        http_multipart.apply_patches(HttpEngine)
 
     if get_config(CONF_HTTP_FILES_API):
         from pyrobusta.protocol import http_file_server
 
-        http_file_server.apply_patches()
+        http_file_server.apply_patches(HttpEngine, HttpEngine.USER_DIRECTORY)
 
     if get_config(CONF_HTTP_AUTH) == "basic":
         from pyrobusta.protocol import http_basic_auth
 
         allow_sessions = get_config(CONF_HTTP_SESSIONS)
-        http_basic_auth.apply_patches(auth_provider, allow_sessions)
+        http_basic_auth.apply_patches(HttpEngine, auth_provider, allow_sessions)
+
+    if get_config(CONF_HTTP_BROWSER_SECURITY):
+        from pyrobusta.protocol import http_security
+
+        http_security.apply_patches(HttpEngine)

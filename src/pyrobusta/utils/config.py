@@ -30,7 +30,7 @@ CONF_HTTP_MEM_CAP = const(5)
 CONF_HTTP_SERVED_PATHS = const(6)
 CONF_HTTP_FILES_API = const(7)
 CONF_HTTP_AUTH = const(8)
-CONF_HTTP_AUTH_MODE = const(9)
+CONF_HTTP_BROWSER_SECURITY = const(9)
 CONF_HTTP_INSECURE_AUTH = const(10)
 CONF_HTTP_SESSIONS = const(11)
 CONF_HTTP_SESSION_TTL_SEC = const(12)
@@ -55,11 +55,10 @@ _CONFIG_CACHE = [
     0.1,  # CONF_HTTP_MEM_CAP
     [
         normalize_path("/www"),
-        normalize_path("/lib/pyrobusta"),
     ],  # CONF_HTTP_SERVED_PATHS
     False,  # CONF_HTTP_FILES_API
     None,  # CONF_HTTP_AUTH
-    "browser",  # CONF_HTTP_AUTH
+    True,  # CONF_HTTP_BROWSER_SECURITY
     False,  # CONF_HTTP_INSECURE_AUTH
     False,  # CONF_HTTP_SESSIONS
     900,  # CONF_HTTP_SESSION_TTL_SEC
@@ -86,6 +85,7 @@ def parse_config(key, value):
         CONF_HTTP_FILES_API,
         CONF_HTTP_INSECURE_AUTH,
         CONF_HTTP_SESSIONS,
+        CONF_HTTP_BROWSER_SECURITY,
         CONF_TLS,
     ):
         return value.lower() == "true"

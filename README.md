@@ -10,9 +10,11 @@ PyRobusta is a memory-conscious HTTP/1.1 server library built for embedded devic
 - Built-in API for uploading, downloading, and deleting files stored on the server
 - Persistent connection handling via the `Connection: keep-alive` header
 - HTTP/1.0 and HTTP/1.1 support
-- Basic authentication and RBAC authorization
+- Basic authentication with RBAC authorization
+- Stateless browser sessions with signed cookies
 - CSRF protection for browser clients
 - TLS support
+- Security hardening features including CSP, secure content handling, and MIME sniffing protection
 
 ## Design Principles
 
