@@ -2,7 +2,7 @@
 Config-based logging module for different log levels
 """
 
-from pyrobusta.utils.clock import ticks_ms
+from time import ticks_ms
 
 _LOG_LEVEL_OFF = -1  # Disable all logging
 _LOG_LEVEL_ERROR = 0

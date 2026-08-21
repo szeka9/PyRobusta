@@ -2,36 +2,37 @@
 This module adds browser security hardening headers.
 """
 
-from pyrobusta.utils.patch import add_method
 
-
-def _apply_security_headers(self):
+def _apply_security_headers(engine):
     """
     Apply default HTTP security headers for browser hardening.
     """
-    if not self.get_response_header(b"x-content-type-options"):
-        self.set_response_header(b"x-content-type-options", b"nosniff")
+    if engine.get_response_header(b"content-type") is None:
+        return
 
-    if not self.get_response_header(b"content-security-policy"):
-        self.set_response_header(
+    if not engine.get_response_header(b"x-content-type-options"):
+        engine.set_response_header(b"x-content-type-options", b"nosniff")
+
+    if not engine.get_response_header(b"content-security-policy"):
+        engine.set_response_header(
             b"content-security-policy",
-            b"default-src 'self';"
-            b"script-src 'self';"
-            b"style-src 'self' 'unsafe-inline';"
-            b"object-src 'none';"
-            b"base-uri 'self';"
+            b"default-src 'self'; "
+            b"script-src 'self'; "
+            b"style-src 'self' 'unsafe-inline'; "
+            b"object-src 'none'; "
+            b"base-uri 'self'; "
             b"frame-ancestors 'none'",
         )
 
-    if not self.get_response_header(b"referrer-policy"):
-        self.set_response_header(
+    if not engine.get_response_header(b"referrer-policy"):
+        engine.set_response_header(
             b"referrer-policy",
             b"no-referrer",
         )
 
 
-def apply_patches(cls):
+def apply_patches(cls, *_):
     """
     Apply patches for security headers.
     """
-    add_method(cls, _apply_security_headers)
+    cls.POST_HOOKS.append(_apply_security_headers)

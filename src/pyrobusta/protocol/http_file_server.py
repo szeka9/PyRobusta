@@ -7,15 +7,17 @@ Module for extended file serving features, registered at the /files route.
 from os import stat, listdir, rmdir, remove, rename, mkdir
 from json import dumps
 
+from pyrobusta import WORKING_DIR
 from pyrobusta.utils.lexpath import (
     normalize_path,
     is_file_path_valid,
     is_path_segment_valid,
+    iterate_segments,
 )
 from pyrobusta.utils.assets import iterate_fs, FS_ITER_FILE
 
-_UPLOAD_ROOT = normalize_path("/www/user_data")
-_TMP_DIR = normalize_path("/tmp")
+_UPLOAD_ROOT = None
+_TMP_DIR = None
 
 
 #################################################
@@ -33,7 +35,7 @@ def fs_retrieve(http_ctx, _):
     norm_path = normalize_path(target_path)
 
     try:
-        if not http_ctx.is_norm_path_served(norm_path):
+        if not http_ctx.is_path_served(norm_path):
             stat(norm_path)
             http_ctx.terminate(403)
             return "text/plain", "Forbidden"
@@ -259,15 +261,15 @@ def _traverse_dir_factory(path):
     return _traverse_dir
 
 
-def setup_directories():
+def setup_directories(working_dir):
     """
     Set up the required directories for file uploads.
     """
     for http_dir in (_UPLOAD_ROOT, _TMP_DIR):
-        base_dir = normalize_path("/")
+        base_dir = working_dir + "/"
         sub_dirs = http_dir[len(base_dir) :].lstrip("/")
 
-        for subdir in sub_dirs.split("/"):
+        for subdir in iterate_segments(sub_dirs, "/"):
             current_dir = base_dir + "/" + subdir
             if not subdir in listdir(base_dir):
                 mkdir(current_dir)
@@ -277,13 +279,14 @@ def setup_directories():
         remove(_TMP_DIR + "/" + file)
 
 
-def apply_patches(cls, upload_root=None):
+def apply_patches(cls, *_):
     """
     Apply patches to class attributes for file serving.
     """
-    if upload_root:
-        global _UPLOAD_ROOT  # pylint: disable=W0603
-        _UPLOAD_ROOT = upload_root
+    global _UPLOAD_ROOT  # pylint: disable=W0603
+    global _TMP_DIR  # pylint: disable=W0603
+    _UPLOAD_ROOT = cls.USER_DIRECTORY
+    _TMP_DIR = WORKING_DIR + "/tmp"
 
     cls.deregister("/files/{fs_path:path}", "GET")
     cls.deregister("/files/{fs_path:path}", "DELETE")
@@ -295,4 +298,4 @@ def apply_patches(cls, upload_root=None):
     cls.register("/files/{fs_path:path}", upload_file, "PUT")
     cls.register("/files", bulk_upload_file, "POST")
 
-    setup_directories()
+    setup_directories(WORKING_DIR)

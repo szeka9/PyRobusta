@@ -1,162 +1,129 @@
 """
 .env-style configuration reader,
-configuration is read from /pyrobusta.env.
 Values can be encapsulated by single or double quotes.
 """
 
-try:
-    from micropython import const
-except ImportError:
+# pylint: disable = R0902,R0903
 
-    def const(n):  # pylint: disable=C0116
-        return n
+import gc
 
-
+from pyrobusta import WORKING_DIR
 from pyrobusta.utils.lexpath import normalize_path
 
-PYROBUSTA_VERSION = "v0.8.0"
-CONFIG_LOCATION = normalize_path("/pyrobusta.env")
 
-# -------------------------------------------
-# Global runtime configuration keys.
-# Provide these keys when using get_config().
-# -------------------------------------------
-CONF_WIFI_SSID = const(0)
-CONF_WIFI_PASSWORD = const(1)
-CONF_HTTP_PORT = const(2)
-CONF_HTTPS_PORT = const(3)
-CONF_HTTP_MULTIPART = const(4)
-CONF_HTTP_MEM_CAP = const(5)
-CONF_HTTP_SERVED_PATHS = const(6)
-CONF_HTTP_FILES_API = const(7)
-CONF_HTTP_AUTH = const(8)
-CONF_HTTP_BROWSER_SECURITY = const(9)
-CONF_HTTP_INSECURE_AUTH = const(10)
-CONF_HTTP_SESSIONS = const(11)
-CONF_HTTP_SESSION_TTL_SEC = const(12)
-CONF_SOCKET_MAX_CON = const(13)
-CONF_TLS = const(14)
-CONF_TLS_CERT_FILE = const(15)
-CONF_TLS_KEY_FILE = const(16)
-CONF_PASSWD_FILE = const(17)
-CONF_ROLES_FILE = const(18)
-CONF_LOG_LEVEL = const(19)
-
-# -------------------
-# Configuration state
-# -------------------
-_CONFIG_LOADED = False
-_CONFIG_CACHE = [
-    None,  # CONF_WIFI_SSID
-    None,  # CONF_WIFI_PASSWORD
-    80,  # CONF_HTTP_PORT
-    443,  # CONF_HTTPS_PORT
-    False,  # CONF_HTTP_MULTIPART
-    0.1,  # CONF_HTTP_MEM_CAP
-    [
-        normalize_path("/www"),
-    ],  # CONF_HTTP_SERVED_PATHS
-    False,  # CONF_HTTP_FILES_API
-    None,  # CONF_HTTP_AUTH
-    True,  # CONF_HTTP_BROWSER_SECURITY
-    False,  # CONF_HTTP_INSECURE_AUTH
-    False,  # CONF_HTTP_SESSIONS
-    900,  # CONF_HTTP_SESSION_TTL_SEC
-    2,  # CONF_SOCKET_MAX_CON
-    False,  # CONF_TLS
-    normalize_path("/cert.der"),  # CONF_TLS_CERT_FILE
-    normalize_path("/key.der"),  # CONF_TLS_KEY_FILE
-    normalize_path("/pyrobusta.passwd"),  # CONF_PASSWD_FILE
-    normalize_path("/pyrobusta.roles"),  # CONF_ROLES_FILE
-    "info",  # CONF_LOG_LEVEL
-]
-
-
-# --------------
-# Public helpers
-# --------------
-# pylint: disable=R0911
-def parse_config(key, value):
+class Config:
     """
-    Normalize a configuration value depending on the key.
+    Configuration class with predefined defaults,
+    configuration reader, and normalization method.
     """
-    if key in (
-        CONF_HTTP_MULTIPART,
-        CONF_HTTP_FILES_API,
-        CONF_HTTP_INSECURE_AUTH,
-        CONF_HTTP_SESSIONS,
-        CONF_HTTP_BROWSER_SECURITY,
-        CONF_TLS,
-    ):
-        return value.lower() == "true"
-    if key in (
-        CONF_HTTP_PORT,
-        CONF_HTTPS_PORT,
-        CONF_SOCKET_MAX_CON,
-        CONF_HTTP_SESSION_TTL_SEC,
-    ):
-        return int(value)
-    if key == CONF_HTTP_MEM_CAP:
-        return float(value)
-    if key == CONF_HTTP_SERVED_PATHS:
-        return [normalize_path(p) for p in value.split()]
-    if key in (
-        CONF_PASSWD_FILE,
-        CONF_ROLES_FILE,
-        CONF_TLS_CERT_FILE,
-        CONF_TLS_KEY_FILE,
-    ):
-        return normalize_path(value)
-    if key in (CONF_WIFI_SSID, CONF_WIFI_PASSWORD):
-        return value
-    return value.lower()
 
-
-def read_config(config=CONFIG_LOCATION):
-    """
-    Read configuration from a file and update _CONFIG_CACHE.
-    :param config: path to configuration.
-    """
-    try:
-        with open(config, encoding="utf-8") as conf:
-            for line in conf:
-                line = line.rstrip("\r\n").split("#")[0]
-                if not line.strip():
-                    continue
-
-                key_name, value = line.split("=", 1)
-                key = globals().get("CONF_" + key_name.strip().upper())
-                if key is None:
-                    continue
-
-                value = value.strip().strip("'").strip('"')
-                _CONFIG_CACHE[key] = parse_config(key, value)
-
-    except OSError:
-        pass
-
-
-def is_protected_file(norm_path: str):
-    """
-    Determines if a file path is required for core configuration
-    and is not meant to be served or handled by the server.
-    """
-    return norm_path in (
-        CONFIG_LOCATION,
-        get_config(CONF_PASSWD_FILE),
-        get_config(CONF_ROLES_FILE),
-        get_config(CONF_TLS_CERT_FILE),
-        get_config(CONF_TLS_KEY_FILE),
+    __slots__ = (
+        "path",
+        "wifi_ssid",
+        "wifi_password",
+        "tls",
+        "tls_cert_file",
+        "tls_key_file",
+        "passwd_file",
+        "roles_file",
+        "log_level",
+        "socket_max_con",
+        "http_served_paths",
+        "http_mem_cap",
+        "http_port",
+        "https_port",
+        "http_multipart",
+        "http_files_api",
+        "http_auth",
+        "http_browser_security",
+        "http_insecure_auth",
+        "http_sessions",
+        "http_session_ttl_sec",
     )
 
+    def __init__(self, path):
+        self.path = path
 
-def get_config(key):
-    """
-    Read configuration by key.
-    The cache is reloaded during the first read.
-    """
-    global _CONFIG_LOADED  # pylint: disable=W0603
-    if not _CONFIG_LOADED:
-        read_config()
-        _CONFIG_LOADED = True
-    return _CONFIG_CACHE[key]
+        self.wifi_ssid = None
+        self.wifi_password = None
+        self.tls = False
+        self.tls_cert_file = WORKING_DIR + "/cert.der"
+        self.tls_key_file = WORKING_DIR + "/key.der"
+        self.passwd_file = WORKING_DIR + "/pyrobusta.passwd"
+        self.roles_file = WORKING_DIR + "/pyrobusta.roles"
+        self.log_level = "info"
+        self.socket_max_con = 2
+
+        self.http_served_paths = ((WORKING_DIR + "/www"),)
+        self.http_mem_cap = 0.1
+        self.http_port = 80
+        self.https_port = 443
+        self.http_multipart = False
+        self.http_files_api = False
+        self.http_auth = None
+        self.http_browser_security = False
+        self.http_insecure_auth = False
+        self.http_sessions = False
+        self.http_session_ttl_sec = 900
+        self._read()
+
+    def _read(self):
+        try:
+            with open(self.path, encoding="utf-8") as conf:
+                for line in conf:
+                    line = line.rstrip("\r\n")
+                    if not line:
+                        continue
+                    comment = line.find("#")
+                    if comment >= 0:
+                        line = line[:comment]
+                    if not line.strip():
+                        continue
+                    key, value = line.split("=", 1)
+                    key = key.strip().lower()
+                    if key in self.__slots__:
+                        value = value.strip()
+                        if value[:1] in ("'", '"') and value[-1:] == value[:1]:
+                            value = value[1:-1]
+                        setattr(self, key, self._normalize(key, value))
+                    gc.collect()
+        except OSError:
+            pass
+
+    @staticmethod
+    def _normalize(key, value):
+        """
+        Normalize a configuration value depending on the key.
+        """
+        if key in (
+            "http_multipart",
+            "http_files_api",
+            "http_insecure_auth",
+            "http_sessions",
+            "http_browser_security",
+            "tls",
+        ):
+            normalized = value.lower() == "true"
+        elif key in (
+            "http_port",
+            "https_port",
+            "socket_max_con",
+            "http_session_ttl_sec",
+        ):
+            normalized = int(value)
+        elif key == "http_mem_cap":
+            normalized = float(value)
+        elif key == "http_served_paths":
+            normalized = tuple(normalize_path(p) for p in value.split())
+        elif key in (
+            "passwd_file",
+            "roles_file",
+            "tls_cert_file",
+            "tls_key_file",
+        ):
+            normalized = normalize_path(value)
+        elif key in ("wifi_ssid", "wifi_password"):
+            normalized = value
+        else:
+            normalized = value.lower()
+        return normalized

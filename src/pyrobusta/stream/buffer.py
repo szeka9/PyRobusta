@@ -2,9 +2,17 @@
 Data structures for buffered processing & streaming
 """
 
+import gc
 
-class BufferFullError(RuntimeError):
-    """Custom exception for writes exceeding buffer capacity"""
+
+class BufferOverflowError(ValueError):
+    """Raised when writing more data than the buffer can hold."""
+
+    pass
+
+
+class BufferUnderflowError(ValueError):
+    """Raised when consuming more data than the buffer currently contains."""
 
     pass
 
@@ -15,7 +23,7 @@ class MemoryPool:
     for coroutine-based streaming without additional heap allocation.
     """
 
-    __slots__ = ("_pool", "_blocks", "free")
+    __slots__ = ("_pool", "free")
 
     def __init__(self, block_size, block_count, wrapper=None):
         """
@@ -25,17 +33,17 @@ class MemoryPool:
         :param wrapper: wrapper class (abstraction layer) to access the memory, e.g. SlidingBuffer
         """
         self._pool = bytearray(block_size * block_count)
-        self._blocks = [
-            (
+        self.free = []
+
+        for i in range(block_count):
+            self.free.append(
                 memoryview(self._pool)[i * block_size : (i + 1) * block_size]
                 if wrapper is None
                 else wrapper(
                     memoryview(self._pool)[i * block_size : (i + 1) * block_size]
                 )
             )
-            for i in range(block_count)
-        ]
-        self.free = list(self._blocks)
+            gc.collect()
 
     def reserve(self):
         """
@@ -70,13 +78,12 @@ class SlidingBuffer:
     - Bounded memory usage; no dynamic reallocation
     """
 
-    __slots__ = ("_buffer", "_start", "_end", "_mv", "capacity")
+    __slots__ = ("_start", "_end", "_mv", "capacity")
 
-    def __init__(self, buffer: bytearray | memoryview):
-        self._buffer = buffer
+    def __init__(self, buffer: memoryview):
         self._start = 0
         self._end = 0
-        self._mv = memoryview(self._buffer)
+        self._mv = buffer
         self.capacity = len(buffer)
 
     def size(self) -> int:
@@ -110,10 +117,9 @@ class SlidingBuffer:
         """
         if self._start == 0:
             return
-        buf = self._buffer
         n = self._end - self._start
         for i in range(n):
-            buf[i] = buf[self._start + i]
+            self._mv[i] = self._mv[self._start + i]
         self._start = 0
         self._end = n
 
@@ -132,16 +138,17 @@ class SlidingBuffer:
         """
         Write new data into the writable region and advance the 'end' index.
         """
+        if len(data) > self.capacity:
+            raise BufferOverflowError()
         if not isinstance(data, (bytes, bytearray, memoryview)):
-            raise TypeError("write() expects bytes or bytearray")
+            raise TypeError()
         needed = len(data)
         if needed > self.capacity - self._end:
             self._compact()
             if needed > self.capacity - self._end:
-                raise BufferFullError()
-        buf = self._buffer
+                raise BufferOverflowError()
         for i in range(needed):
-            buf[self._end + i] = data[i]
+            self._mv[self._end + i] = data[i]
         self._end += needed
 
     def consume(self, n: int = None):
@@ -151,7 +158,7 @@ class SlidingBuffer:
         if n is None:
             n = self.size()
         if n > self.size():
-            raise ValueError("Buffer underflow")
+            raise BufferUnderflowError()
         self._start += n
         if self._start == self._end:
             self._start = 0
@@ -163,19 +170,19 @@ class SlidingBuffer:
         otherwise attempt to compact the buffer.
         """
         if n > self.capacity:
-            raise ValueError("Capacity exceeded")
+            raise BufferOverflowError()
 
         if n > self.writable():
             self._compact()
             if n > self.writable():
-                raise ValueError("Capacity exceeded")
+                raise BufferOverflowError()
 
     def commit(self, n):
         """
         Increase the window size by n bytes by incrementing the 'end' index.
         """
         if self._end + n > self.capacity:
-            raise ValueError("Capacity exceeded")
+            raise BufferOverflowError()
         self._end += n
 
     def find(self, term: bytes) -> int:

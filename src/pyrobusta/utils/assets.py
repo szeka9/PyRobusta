@@ -4,7 +4,7 @@ Helper functions to install assets.
 
 from os import mkdir, listdir, stat
 
-from pyrobusta.utils.lexpath import normalize_path
+from pyrobusta import WORKING_DIR
 
 FS_ITER_ABS = 0
 FS_ITER_REL = 1
@@ -64,9 +64,9 @@ def install_www():
     """
     Install default web server assets under /www.
     """
-    source_dir = normalize_path("/lib/pyrobusta/assets/www")
-    target_dir = normalize_path("/www")
-    if "www" not in listdir(normalize_path("/")):
+    source_dir = WORKING_DIR + "/lib/pyrobusta/assets/www"
+    target_dir = WORKING_DIR + "/www"
+    if "www" not in listdir(WORKING_DIR + "/"):
         mkdir(target_dir)
 
     for asset_dir in iterate_fs(source_dir, FS_ITER_DIR, FS_ITER_ABS):

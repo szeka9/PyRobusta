@@ -5,8 +5,7 @@ HTTP session management for authentication.
 import os
 import binascii
 
-from pyrobusta.utils.clock import ticks_add, ticks_diff, ticks_ms
-from pyrobusta.utils.config import get_config, CONF_TLS
+from time import ticks_add, ticks_diff, ticks_ms
 from pyrobusta.utils.iam import IAMDatabase, USER_SECRET
 from pyrobusta.utils.crypto import (
     HmacSha256,
@@ -18,7 +17,7 @@ _NONCE_SIZE = 16
 _SESSION_INFO = b"session"
 
 
-def create_cookie(username: str, secret: bytes, ttl_sec: int):
+def create_session_cookie(username: str, secret: bytes, ttl_sec: int, secure: bool):
     """
     Create a signed session cookie for a user with a given TTL (time-to-live).
     """
@@ -39,12 +38,12 @@ def create_cookie(username: str, secret: bytes, ttl_sec: int):
         + str(ttl_sec).encode()
         + b"; path=/; samesite=strict; httponly"
     )
-    if get_config(CONF_TLS):
+    if secure:
         cookie += b"; secure"
     return cookie
 
 
-def verify_cookie(session_cookie: bytes, auth_provider: IAMDatabase):
+def verify_session_cookie(session_cookie: bytes, auth_provider: IAMDatabase):
     """
     Verify a session cookie and return user credentials if valid.
     """

@@ -6,7 +6,7 @@ and member variables for the socket server to use.
 import asyncio
 from time import ticks_ms
 
-from pyrobusta.utils import logging
+from pyrobusta.utils.logging import warning, debug
 
 
 class BaseConnection:
@@ -48,7 +48,7 @@ class BaseConnection:
         if not self.connected:
             raise OSError(f"{self.id} already closed")
 
-        logging.debug("%s: read from client=[%s]", __name__, self.id)
+        debug("%s: read from client=[%s]", __name__, self.id)
         self.last_event = ticks_ms()
         if timeout_seconds:
             request = await asyncio.wait_for(
@@ -68,7 +68,7 @@ class BaseConnection:
         if not self.connected:
             raise OSError(f"{self.id} already closed")
 
-        logging.debug("%s: write to client=[%s]", __name__, self.id)
+        debug("%s: write to client=[%s]", __name__, self.id)
         self._writer.write(data)
         await self._writer.drain()
         self.last_event = ticks_ms()
@@ -78,13 +78,13 @@ class BaseConnection:
         Close the connection, update the internal state accordingly.
         """
         if not self.connected:
-            logging.warning("%s: client=[%s] already closed", __name__, self.id)
+            warning("%s: client=[%s] already closed", __name__, self.id)
             return
 
         self.connected = False
-        logging.debug("%s: close connection to client=[%s]", __name__, self.id)
+        debug("%s: close connection to client=[%s]", __name__, self.id)
         try:
             self._writer.close()
             await self._writer.wait_closed()
         except OSError as e:
-            logging.warning("%s: client=[%s] error=[%s]", __name__, self.id, e)
+            warning("%s: client=[%s] error=[%s]", __name__, self.id, e)

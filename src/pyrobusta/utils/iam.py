@@ -6,10 +6,10 @@ import os
 import binascii
 import gc
 
-from pyrobusta.utils.config import PYROBUSTA_VERSION
 from pyrobusta.utils.crypto import pbkdf2_sha256, validate_password
 from pyrobusta.utils.lexpath import iterate_segments
-from pyrobusta.utils import logging
+from pyrobusta.utils.logging import error
+from pyrobusta import PYROBUSTA_VERSION
 
 MAX_ROLES = 32
 NO_POLICY = 2**MAX_ROLES
@@ -66,7 +66,7 @@ class IAMDatabase:
             self._users = users
             self._attribute_tree = attribute_tree
         except OSError as e:
-            logging.error("%s: unable to open config: error=[%s]", __name__, e)
+            error("%s: unable to open config: error=[%s]", __name__, e)
             return False
         finally:
             # Clean up temporary data structures

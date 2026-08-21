@@ -5,10 +5,10 @@ HTTP application-layer interface for socket connections.
 import asyncio
 from asyncio import sleep_ms  # pylint: disable=E1101
 
-from pyrobusta.stream.buffer import BufferFullError
+from pyrobusta.stream.buffer import BufferOverflowError
 from pyrobusta.transport.connection import BaseConnection
 from pyrobusta.protocol.http import HttpEngine
-from pyrobusta.utils import logging
+from pyrobusta.utils.logging import warning, debug
 
 
 class HttpConnection(BaseConnection):
@@ -25,7 +25,7 @@ class HttpConnection(BaseConnection):
 
     def __init__(self, reader, writer, recv_buf, send_buf):
         super().__init__(reader, writer)
-        self._engine = HttpEngine()
+        self._engine = None
         self._prev_state = None
         self._recv_buf = recv_buf
         self._send_buf = send_buf
@@ -34,7 +34,7 @@ class HttpConnection(BaseConnection):
         """
         Handle socket connection with HTTP state machine parser.
         """
-        self._prev_state = None
+        self._engine = HttpEngine()
         while not self._engine.is_terminated():
             await self._run_state_machine()
             await sleep_ms(self.STATE_MACHINE_SLEEP_MS)
@@ -51,14 +51,14 @@ class HttpConnection(BaseConnection):
     async def _read_to_buf(self):
         buf_free = self._recv_buf.capacity - self._recv_buf.size()
         if not buf_free:
-            raise BufferFullError()
+            raise BufferOverflowError()
         request = await self.read(
             read_bytes=buf_free,
             decoding=None,
             timeout_seconds=self.RECV_TIMEOUT_SECONDS,
         )
         self._recv_buf.write(request)
-        logging.debug("%s: request=[%s]", __name__, request)
+        debug("%s: request=[%s]", __name__, request)
         return len(request)
 
     async def _run_state_machine(self):
@@ -71,12 +71,12 @@ class HttpConnection(BaseConnection):
                 if not num_read:
                     self._engine.abort(400)
                     self._engine.set_response_body(b"Incomplete request")
-            except BufferFullError:
+            except BufferOverflowError:
                 self._engine.abort(413)
             except asyncio.TimeoutError:
                 self._engine.abort(408)
             except Exception as e:  # pylint: disable=W0718
-                logging.warning("%s: error=[%s]", __name__, e)
+                warning("%s: error=[%s]", __name__, e)
                 self._engine.abort(500)
                 self._engine.set_response_body(b"Internal Server Error")
 
