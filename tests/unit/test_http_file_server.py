@@ -25,8 +25,8 @@ class TestFileServerRetrieve(TestHttpBase):
     @classmethod
     def setUpClass(cls):
         cls.base_config = {
-            "http_multipart": "False",
-            "http_files_api": "True",
+            "http_multipart": False,
+            "http_files_api": True,
             "http_served_paths": "/www",
         }
         # Simplify file-open assertions by treating resources
@@ -142,7 +142,9 @@ class TestFileServerRetrieve(TestHttpBase):
             "pyrobusta.protocol.http_file_server.iterate_fs",
             lambda *_: directory_content,
         ):
-            traversal_function = self.fs_module._traverse_dir_factory("/www")
+            from pyrobusta.protocol.http_file_server import _traverse_dir_factory
+
+            traversal_function = _traverse_dir_factory("/www")
             for is_finished in traversal_function(self.tx):
                 if is_finished:
                     break
@@ -160,8 +162,8 @@ class TestFileServerDelete(TestHttpBase):
     @classmethod
     def setUpClass(cls):
         cls.base_config = {
-            "http_multipart": "False",
-            "http_files_api": "True",
+            "http_multipart": False,
+            "http_files_api": True,
             "http_served_paths": "/www",
         }
         # Simplify file-open assertions by treating resources
@@ -230,8 +232,8 @@ class TestFileServerUpload(TestHttpBase):
     @classmethod
     def setUpClass(cls):
         cls.base_config = {
-            "http_multipart": "False",
-            "http_files_api": "True",
+            "http_multipart": False,
+            "http_files_api": True,
             "http_served_paths": "/www",
         }
         # Simplify file-open assertions by treating resources
@@ -355,8 +357,8 @@ class TestFileServerBulkUpload(TestHttpBase):
     def setUpClass(cls):
         cls.base_config = {
             # Bulk upload requires multipart handling
-            "http_multipart": "True",
-            "http_files_api": "True",
+            "http_multipart": True,
+            "http_files_api": True,
             "http_served_paths": "/www",
         }
         # Simplify file-open assertions by treating resources

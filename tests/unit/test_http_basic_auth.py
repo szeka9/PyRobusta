@@ -1,7 +1,16 @@
 import os
 import base64
+import sys
+
+from pathlib import Path
 
 from http_base import TestHttpBase
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
+
+from pyrobusta.protocol import http_session, http_csrf
+from pyrobusta.utils import crypto
+from pyrobusta.utils import iam
 
 
 class TestBasicAuthPolicyStateMachine(TestHttpBase):
@@ -21,9 +30,7 @@ class TestBasicAuthPolicyStateMachine(TestHttpBase):
         }
 
     def test_basic_auth_public_resource(self):
-        self.iam_db._attribute_tree.insert_path(
-            "/app/public", {"GET": self.iam_module.NO_POLICY}
-        )
+        self.iam_db._attribute_tree.insert_path("/app/public", {"GET": iam.NO_POLICY})
         self.engine.state = self.engine._handle_auth_st
         self.engine.url = b"/app/public"
         self.engine.method = b"GET"
@@ -62,7 +69,7 @@ class TestBasicAuthStateMachine(TestHttpBase):
         cls.cwd = os.getcwd()
         cls.base_config = {
             "http_auth": "basic",
-            "http_session": "false",
+            "http_sessions": False,
             "passwd_file": "/tmp/pyrobusta.passwd",
             "roles_file": "/tmp/pyrobusta.roles",
             # For disbaling authentication related warning messages
@@ -254,7 +261,8 @@ class TestBasicAuthCSRFStateMachine(TestHttpBase):
         cls.cwd = os.getcwd()
         cls.base_config = {
             "http_auth": "basic",
-            "http_session": "false",
+            "http_sessions": False,
+            "http_browser_security": True,
             "passwd_file": "/tmp/pyrobusta.passwd",
             "roles_file": "/tmp/pyrobusta.roles",
             # For disbaling authentication related warning messages
@@ -286,15 +294,15 @@ class TestBasicAuthCSRFStateMachine(TestHttpBase):
         self.engine.state(self.rx)
 
         user_secret = self.iam_db.get_user_info("alice")[-1]
-        csrf_key = self.crypto_module.HmacSha256(user_secret)
-        csrf_secret = csrf_key.digest(self.csrf_module._CSRF_INFO)
+        csrf_key = crypto.HmacSha256(user_secret)
+        csrf_secret = csrf_key.digest(http_csrf._CSRF_INFO)
         cookie_name, csrf_token = (
             self.engine._lookup(self.engine.resp_headers, b"set-cookie")
             .split(b";")[0]
             .split(b"=")
         )
-        is_token_valid = self.crypto_module.verify_signed_token(
-            csrf_secret, csrf_token, self.csrf_module._NONCE_SIZE
+        is_token_valid = crypto.verify_signed_token(
+            csrf_secret, csrf_token, http_csrf._NONCE_SIZE
         )
 
         self.assertEqual(cookie_name, b"csrf-token")
@@ -310,8 +318,8 @@ class TestBasicAuthCSRFStateMachine(TestHttpBase):
         self.engine.method = b"GET"
 
         user_secret = self.iam_db.get_user_info("alice")[-1]
-        csrf_token = self.crypto_module.create_signed_token(
-            user_secret, os.urandom(self.csrf_module._NONCE_SIZE)
+        csrf_token = crypto.create_signed_token(
+            user_secret, os.urandom(http_csrf._NONCE_SIZE)
         )
         self.engine.headers["cookie"] = "csrf-token=" + csrf_token.decode("ascii")
         self.engine.headers["x-csrf-token"] = csrf_token.decode("ascii")
@@ -332,10 +340,10 @@ class TestBasicAuthCSRFStateMachine(TestHttpBase):
         self.engine.method = b"POST"
 
         user_secret = self.iam_db.get_user_info("alice")[-1]
-        csrf_key = self.crypto_module.HmacSha256(user_secret)
-        csrf_secret = csrf_key.digest(self.csrf_module._CSRF_INFO)
-        csrf_token = self.crypto_module.create_signed_token(
-            csrf_secret, os.urandom(self.csrf_module._NONCE_SIZE)
+        csrf_key = crypto.HmacSha256(user_secret)
+        csrf_secret = csrf_key.digest(http_csrf._CSRF_INFO)
+        csrf_token = crypto.create_signed_token(
+            csrf_secret, os.urandom(http_csrf._NONCE_SIZE)
         )
         self.engine.headers["cookie"] = "csrf-token=" + csrf_token.decode("ascii")
         self.engine.headers["x-csrf-token"] = csrf_token.decode("ascii")
@@ -352,9 +360,9 @@ class TestBasicAuthCSRFStateMachine(TestHttpBase):
         )
         self.engine.method = b"POST"
 
-        forged_user_secret = os.urandom(self.csrf_module._NONCE_SIZE)
-        csrf_token = self.crypto_module.create_signed_token(
-            forged_user_secret, os.urandom(self.csrf_module._NONCE_SIZE)
+        forged_user_secret = os.urandom(http_csrf._NONCE_SIZE)
+        csrf_token = crypto.create_signed_token(
+            forged_user_secret, os.urandom(http_csrf._NONCE_SIZE)
         )
         self.engine.headers["cookie"] = "csrf-token=" + csrf_token.decode("ascii")
         self.engine.headers["x-csrf-token"] = csrf_token.decode("ascii")
@@ -384,8 +392,8 @@ class TestBasicAuthCSRFStateMachine(TestHttpBase):
         self.engine.method = b"POST"
 
         user_secret = self.iam_db.get_user_info("alice")[-1]
-        csrf_token = self.crypto_module.create_signed_token(
-            user_secret, os.urandom(self.csrf_module._NONCE_SIZE)
+        csrf_token = crypto.create_signed_token(
+            user_secret, os.urandom(http_csrf._NONCE_SIZE)
         )
         self.engine.headers["x-csrf-token"] = csrf_token.decode("ascii")
 
@@ -402,8 +410,8 @@ class TestBasicAuthCSRFStateMachine(TestHttpBase):
         self.engine.method = b"POST"
 
         user_secret = self.iam_db.get_user_info("alice")[-1]
-        csrf_token = self.crypto_module.create_signed_token(
-            user_secret, os.urandom(self.csrf_module._NONCE_SIZE)
+        csrf_token = crypto.create_signed_token(
+            user_secret, os.urandom(http_csrf._NONCE_SIZE)
         )
         self.engine.headers["cookie"] = "csrf-token=" + csrf_token.decode("ascii")
 
@@ -424,7 +432,7 @@ class TestBasicAuthSessionStateMachine(TestHttpBase):
         cls.base_config = {
             "http_auth": "basic",
             "http_browser_security": False,  # Disabling CSRF for session tests
-            "http_sessions": "true",
+            "http_sessions": True,
             "http_session_ttl_sec": 5,
             "passwd_file": "/tmp/pyrobusta.passwd",
             "roles_file": "/tmp/pyrobusta.roles",
@@ -461,10 +469,11 @@ class TestBasicAuthSessionStateMachine(TestHttpBase):
 
     def create_session_cookie(self, username, ttl=None):
         user_secret = self.iam_db.get_user_info(username)[-1]
-        session_cookie = self.session_module.create_cookie(
+        session_cookie = http_session.create_session_cookie(
             username,
             user_secret,
             ttl if ttl is not None else self.base_config["http_session_ttl_sec"],
+            False,
         )
         return session_cookie.split(b";")[0].split(b"=")[1]
 
@@ -478,7 +487,7 @@ class TestBasicAuthSessionStateMachine(TestHttpBase):
         self.engine.state(self.rx)
 
         session_cookie = self.get_cookie_data("session")
-        credentials = self.session_module.verify_cookie(session_cookie, self.iam_db)
+        credentials = http_session.verify_session_cookie(session_cookie, self.iam_db)
 
         self.assertNotEqual(credentials, None)
         self.assertEqual(self.engine.state, self.engine._route_request_st)
@@ -538,12 +547,13 @@ class TestBasicAuthSessionStateMachine(TestHttpBase):
         self.engine.method = b"GET"
 
         # Create a valid session cookie for a non-existent user
-        fake_user_secret = os.urandom(self.iam_module.RUNTIME_SECRET_SIZE)
+        fake_user_secret = os.urandom(iam.RUNTIME_SECRET_SIZE)
         session_cookie = (
-            self.session_module.create_cookie(
+            http_session.create_session_cookie(
                 "nonexistentuser",
                 fake_user_secret,
                 self.base_config["http_session_ttl_sec"],
+                False,
             )
             .split(b";")[0]
             .split(b"=")[1]
@@ -569,7 +579,7 @@ class TestBasicAuthSessionStateMachine(TestHttpBase):
         self.engine.state(self.rx)
 
         session_cookie = self.get_cookie_data("session")
-        credentials = self.session_module.verify_cookie(session_cookie, self.iam_db)
+        credentials = http_session.verify_session_cookie(session_cookie, self.iam_db)
 
         self.assertNotEqual(credentials, None)
         self.assertNotEqual(session_cookie, expired_session_cookie)

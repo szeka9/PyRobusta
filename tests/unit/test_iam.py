@@ -1,8 +1,13 @@
 import os
 import unittest
 import binascii
+import sys
 
-from tests.unit.utils import load_module
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
+
+from pyrobusta.utils.iam import AttributeNode, IAMDatabase, NO_POLICY
 
 
 class TestPrefixTree(unittest.TestCase):
@@ -10,11 +15,8 @@ class TestPrefixTree(unittest.TestCase):
     Tests for authorization based on prefix tree.
     """
 
-    def setUp(self):
-        self.iam_module = load_module("pyrobusta/utils/iam.py")
-
     def setup_roles(self, roles: dict):
-        self.attr_tree = self.iam_module.AttributeNode("")
+        self.attr_tree = AttributeNode("")
         for path, attributes in roles.items():
             self.attr_tree.insert_path(path, attributes)
 
@@ -160,8 +162,7 @@ class TestUserConfigReader(unittest.TestCase):
         with open(self.roles_file, "w", encoding="utf-8"):
             pass
 
-        self.iam_module = load_module("pyrobusta/utils/iam.py")
-        self.iam_db = self.iam_module.IAMDatabase(self.passwd_file, self.roles_file)
+        self.iam_db = IAMDatabase(self.passwd_file, self.roles_file)
 
     def tearDown(self):
         try:
@@ -271,8 +272,7 @@ class TestRoleConfigReader(unittest.TestCase):
         with open(self.roles_file, "w", encoding="utf-8"):
             pass
 
-        self.iam_module = load_module("pyrobusta/utils/iam.py")
-        self.iam_db = self.iam_module.IAMDatabase(self.passwd_file, self.roles_file)
+        self.iam_db = IAMDatabase(self.passwd_file, self.roles_file)
 
     def tearDown(self):
         try:
@@ -299,13 +299,13 @@ class TestRoleConfigReader(unittest.TestCase):
         )
 
         with open(self.roles_file, "w", encoding="utf-8") as roles:
-            self.iam_db._attribute_tree = self.iam_module.AttributeNode("")
+            self.iam_db._attribute_tree = AttributeNode("")
             roles.write(file_content)
 
         self.iam_db.load()
 
         attributes = self.iam_db.get_access_policies("/index.html")
-        self.assertEqual(attributes, {"*": self.iam_module.NO_POLICY})
+        self.assertEqual(attributes, {"*": NO_POLICY})
 
         attributes = self.iam_db.get_access_policies("/app/resource")
         self.assertEqual(
@@ -315,7 +315,7 @@ class TestRoleConfigReader(unittest.TestCase):
                 "POST": 0b110,
                 "PUT": 0b110,
                 "DELETE": 0b000,
-                "OPTIONS": self.iam_module.NO_POLICY,
+                "OPTIONS": NO_POLICY,
             },
         )
 
@@ -333,7 +333,7 @@ class TestRoleConfigReader(unittest.TestCase):
         file_content = "   *:*\n"
 
         with open(self.roles_file, "w", encoding="utf-8") as roles:
-            self.iam_db._attribute_tree = self.iam_module.AttributeNode("")
+            self.iam_db._attribute_tree = AttributeNode("")
             roles.write(file_content)
 
         with self.assertRaises(ValueError):
@@ -343,7 +343,7 @@ class TestRoleConfigReader(unittest.TestCase):
         file_content = "/app/resource\n" + "    GET: role_1\n" + "    GET: role_2\n"
 
         with open(self.roles_file, "w", encoding="utf-8") as roles:
-            self.iam_db._attribute_tree = self.iam_module.AttributeNode("")
+            self.iam_db._attribute_tree = AttributeNode("")
             roles.write(file_content)
 
         with self.assertRaises(ValueError):
