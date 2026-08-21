@@ -322,9 +322,6 @@ test-device: stage-test #clean-device upload
 .PHONY: perf-test-http-soak
 perf-test-http-soak:
 	@mpremote $(DEVICE) soft-reset
-	mpremote $(DEVICE) cp $(PT_DIR)/app_base.py :app_base.py
-	mpremote $(DEVICE) cp $(PT_DIR)/app_multipart.py :app_multipart.py
-	mpremote $(DEVICE) cp $(PT_DIR)/http_soak/boot.py :boot.py
 	cd $(PT_DIR) && python -m http_soak.test \
 		"$(DEVICE)" "$(DEVICE_IP)" "$(DEVICE_NAME)" \
 		"$(PROJECT_ROOT)/$(DOCS_DIR)/soak" "$(PT_TEST_ID)"
@@ -335,9 +332,6 @@ perf-test-http-soak:
 .PHONY: perf-test-http-dimensioning
 perf-test-http-dimensioning:
 	@mpremote $(DEVICE) soft-reset
-	mpremote $(DEVICE) cp $(PT_DIR)/app_base.py :app_base.py
-	mpremote $(DEVICE) cp $(PT_DIR)/app_multipart.py :app_multipart.py
-	mpremote $(DEVICE) cp $(PT_DIR)/http_dimensioning/boot.py :boot.py
 	cd $(PT_DIR) && python -m http_dimensioning.test \
 		"$(DEVICE)" "$(DEVICE_IP)" "$(DEVICE_NAME)" \
 		"$(PROJECT_ROOT)/$(DOCS_DIR)/dimensioning" "$(PT_TEST_ID)"

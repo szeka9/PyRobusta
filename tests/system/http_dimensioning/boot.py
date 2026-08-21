@@ -1,20 +1,18 @@
 # pylint: disable=E0401,C0415,E1101,E0611
-# This file is executed on every boot (including wake-boot from deepsleep)
 import asyncio
 import os
 import time
 from gc import mem_alloc, collect
-import machine
 
-from pyrobusta.server import http_server
-from pyrobusta.connectivity import wifi
-
-from pyrobusta.utils.config import get_config, CONF_HTTP_MULTIPART
+from pyrobusta import application
 
 LOG_FILE = "heap_usage.csv"
 
 SAMPLE_PERIOD = 5  # seconds
 FLUSH_PERIOD = 12  # Flush every minute
+
+
+# <PLACEHOLDER>
 
 
 async def mem_usage():
@@ -45,23 +43,11 @@ async def mem_usage():
 
 
 async def main():
-    server = http_server.HttpServer()
-    connected = wifi.initialize()
-    if connected and not machine.reset_cause() == machine.SOFT_RESET:
-        import app_base
+    await application.run()
+    asyncio.create_task(mem_usage())
 
-        app_base.load()
-
-        if get_config(CONF_HTTP_MULTIPART):
-            import app_multipart
-
-            app_multipart.load()
-
-        await server.start_socket_server()
-        asyncio.create_task(mem_usage())
-
-        while True:
-            await asyncio.sleep(1)
+    while True:
+        await asyncio.sleep(1)
 
 
 asyncio.run(main())

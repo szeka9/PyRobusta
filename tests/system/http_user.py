@@ -1,6 +1,7 @@
 from locust import HttpUser, task, constant
 
 TLS_VERIFY = False
+AUTH = None # ("username", "password")
 
 
 class DefaultUser(HttpUser):
@@ -19,6 +20,7 @@ class DefaultUser(HttpUser):
         response = self.client.get(
             "/index.html",
             name="/index.html",
+            auth=AUTH,
         )
         print(
             self.client.base_url + "/index.html",
@@ -48,6 +50,7 @@ class DefaultUser(HttpUser):
                 "Transfer-Encoding": "chunked",
             },
             name="/test/stream",
+            auth=AUTH,
         )
         print(
             self.client.base_url
@@ -75,6 +78,7 @@ class MultipartUser(HttpUser):
             "/test/multipart",
             headers={"x-part-count": str(part_count), "x-part-size": str(part_size)},
             name="/test/multipart",
+            auth=AUTH,
         )
         print(
             self.client.base_url
@@ -107,6 +111,7 @@ class MultipartUser(HttpUser):
             data=multipart_data,
             headers={"Content-Type": "multipart/form-data; boundary=boundary"},
             name="/test/multipart",
+            auth=AUTH,
         )
         print(
             self.client.base_url
@@ -130,8 +135,7 @@ class FilesApiUser(HttpUser):
     @task(2)
     def get_index(self):
         response = self.client.get(
-            "/files/www/index.html",
-            name="/files/www/index.html",
+            "/files/www/index.html", name="/files/www/index.html", auth=AUTH
         )
         print(
             self.client.base_url + "/files/www/index.html",
@@ -141,10 +145,7 @@ class FilesApiUser(HttpUser):
 
     @task(2)
     def get_dir(self):
-        response = self.client.get(
-            "/files/www/",
-            name="/files/www/",
-        )
+        response = self.client.get("/files/www/", name="/files/www/", auth=AUTH)
         print(
             self.client.base_url + "/files/www/",
             response.status_code,

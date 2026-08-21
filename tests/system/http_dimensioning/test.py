@@ -36,15 +36,16 @@ from device import Device
 TEST_DURATION_MINUTES = 5
 
 base_config = {
-    "socket_max_con": 1,
-    "http_mem_cap": 0.05,
-    "http_multipart": False,
-    "http_files_api": False,
     "tls": False,
+    "socket_max_con": 1,
+    "http_mem_cap": 0.1,
     "http_port": 8080,
     "https_port": 4443,
-    "log_level": "info",
-    "http_served_paths": "/lib/pyrobusta /www",
+    "http_multipart": False,
+    "http_files_api": False,
+    "http_browser_security": False,
+    "http_auth": "",
+    "http_sessions": False,
 }
 
 
@@ -63,41 +64,59 @@ def get_test_config(sram_bytes: int, buffer_small: int, buffer_large: int):
         return math.ceil(x * factor) / factor
 
     test_config = {
+        "tls": [
+            {
+                "tls": True,
+                "socket_max_con": max_con,
+                "http_mem_cap": round_up_sig((buffer_small / sram_bytes) * max_con, 3),
+            }
+            for max_con in socket_counts
+        ],
         "low_mem_cap": [
             {
-                "http_mem_cap": round_up_sig((buffer_small / sram_bytes) * max_con, 3),
                 "socket_max_con": max_con,
+                "http_mem_cap": round_up_sig((buffer_small / sram_bytes) * max_con, 3),
             }
             for max_con in socket_counts
         ],
         "high_mem_cap": [
             {
-                "http_mem_cap": round_up_sig((buffer_large / sram_bytes) * max_con, 3),
                 "socket_max_con": max_con,
+                "http_mem_cap": round_up_sig((buffer_large / sram_bytes) * max_con, 3),
             }
             for max_con in socket_counts
         ],
         "multipart": [
             {
+                "socket_max_con": max_con,
                 "http_mem_cap": round_up_sig((buffer_small / sram_bytes) * max_con, 3),
                 "http_multipart": True,
-                "socket_max_con": max_con,
             }
             for max_con in socket_counts
         ],
         "files_api": [
             {
+                "socket_max_con": max_con,
                 "http_mem_cap": round_up_sig((buffer_small / sram_bytes) * max_con, 3),
                 "http_files_api": True,
-                "socket_max_con": max_con,
             }
             for max_con in socket_counts
         ],
-        "tls": [
+        "browser_security": [
             {
+                "socket_max_con": max_con,
                 "http_mem_cap": round_up_sig((buffer_small / sram_bytes) * max_con, 3),
+                "http_browser_security": True,
+            }
+            for max_con in socket_counts
+        ],
+        "auth": [
+            {
                 "tls": True,
                 "socket_max_con": max_con,
+                "http_mem_cap": round_up_sig((buffer_small / sram_bytes) * max_con, 3),
+                "http_auth": "basic",
+                "http_sessions": True,
             }
             for max_con in socket_counts
         ],
@@ -118,7 +137,9 @@ def main():
             "Invalid arguments.\nUsage: test.py device_id device_ip device_name output_path"
         )
 
-    dev = Device(device_id, device_ip, device_name, base_config)
+    dev = Device(
+        device_id, device_ip, device_name, base_config, "http_dimensioning/boot.py"
+    )
 
     run_test(
         output_path, dev, get_test_config, None, TEST_DURATION_MINUTES, testcase_id

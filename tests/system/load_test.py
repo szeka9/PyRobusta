@@ -10,8 +10,8 @@ from time import monotonic
 
 from locust.env import Environment
 
+import http_user
 from device import Device
-from http_user import DefaultUser, FilesApiUser, MultipartUser
 from summary import generate_measurement_table, generate_plot
 
 import urllib3
@@ -69,12 +69,15 @@ def load_test(config: dict, device: Device, user_classes: list, duration_minutes
     host = device.get_host()
     max_con = config.get("socket_max_con", 1)
 
+    if config.get("http_auth"):
+        http_user.AUTH = ("alice", "alice's-secret-password")
+
     if not user_classes:
-        user_classes = [DefaultUser]
+        user_classes = [http_user.DefaultUser]
         if config.get("http_multipart", False):
-            user_classes = [MultipartUser]
+            user_classes = [http_user.MultipartUser]
         if config.get("http_files_api", False):
-            user_classes = [FilesApiUser]
+            user_classes = [http_user.FilesApiUser]
 
     env = Environment(
         user_classes=user_classes,
@@ -120,6 +123,7 @@ def load_test(config: dict, device: Device, user_classes: list, duration_minutes
     }
 
     try:
+        device.terminate()
         usage_ts = device.read_file("heap_usage.csv")
         usage = interpolate_time_series(
             [
@@ -159,7 +163,9 @@ def test_config_delta(
     else:
         print(f"Measure with target config: {target_config}")
 
+    device.terminate()
     device.apply_config(target_config)
+    device.run()
     idle, usage, stats = load_test(
         target_config, device, user_classes, duration_minutes
     )
@@ -181,8 +187,6 @@ def run_test(
     measurements = []
 
     if not testcase_selector or testcase_selector == "base":
-        device.apply_base_config()
-
         idle, usage, stats = test_config_delta(
             device,
             {},
@@ -270,6 +274,7 @@ def run_test(
                 "http_port",
                 "https_port",
                 "http_served_paths",
+                "http_insecure_auth",
                 "log_level",
             },
         )
