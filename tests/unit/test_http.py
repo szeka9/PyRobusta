@@ -4,8 +4,8 @@ import unittest
 from unittest import mock
 from unittest.mock import patch, mock_open
 
-from utils import stat_factory
-from http_base import TestHttpBase
+from tests.unit.utils import stat_factory
+from tests.unit.http_base import TestHttpBase
 
 
 class TestWebStateMachineHelpers(TestHttpBase):
@@ -316,27 +316,25 @@ class TestWebStateMachine(TestHttpBase):
             # Incomplete escapes.
             ("%", "%"),
             ("%2", "%2"),
-
             # Invalid hexadecimal digits.
             ("%GG", "%GG"),
             ("%2G", "%2G"),
             ("%G2", "%G2"),
-
             # Valid and invalid escapes mixed together.
             ("%2F%", "/%"),
             ("%2G%2F", "%2G/"),
             ("%20%GG%41", " %GGA"),
             ("abc%2Fdef", "abc/def"),
-
             # Adjacent percent signs.
             ("%%", "%%"),
             ("%%2F", "%/"),
-
         ]
 
         for encoded, expected in test_cases:
             with self.subTest(encoded=encoded):
-                request = b"GET /api/test?key=" + encoded.encode("ascii") + b" HTTP/1.1\r\n"
+                request = (
+                    b"GET /api/test?key=" + encoded.encode("ascii") + b" HTTP/1.1\r\n"
+                )
 
                 for i in range(len(request)):
                     self.rx.write(request[i : i + 1])
@@ -362,9 +360,7 @@ class TestWebStateMachine(TestHttpBase):
         for encoded, expected in test_cases:
             with self.subTest(encoded=encoded):
                 request = (
-                    b"GET /api/test?key="
-                    + encoded.encode("ascii")
-                    + b" HTTP/1.1\r\n"
+                    b"GET /api/test?key=" + encoded.encode("ascii") + b" HTTP/1.1\r\n"
                 )
 
                 for i in range(len(request)):
@@ -467,7 +463,9 @@ class TestWebStateMachine(TestHttpBase):
             ),
         ):
             with self.subTest(url_path=case):
-                self.assertEqual(self.engine._is_matching_url_path(case[0], case[1]), True)
+                self.assertEqual(
+                    self.engine._is_matching_url_path(case[0], case[1]), True
+                )
 
     def test_url_path_matching_mismatch(self):
         for case in (
@@ -481,7 +479,9 @@ class TestWebStateMachine(TestHttpBase):
             (b"path/to/resource/subresource/subsubresource", b"path/to/{wildcard}"),
         ):
             with self.subTest(url_path=case):
-                self.assertEqual(self.engine._is_matching_url_path(case[0], case[1]), False)
+                self.assertEqual(
+                    self.engine._is_matching_url_path(case[0], case[1]), False
+                )
 
     def test_chunked_transfer_encoding_valid(self):
         self.engine.url = b"/api/test"

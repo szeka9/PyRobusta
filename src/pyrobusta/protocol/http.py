@@ -134,8 +134,8 @@ class HttpEngine:
     SUPPORTED_VERSIONS = (b"HTTP/1.1", b"HTTP/1.0")
     SESSION_COUNTER = 0
 
-    SERVED_PATHS = None
-    PROTECTED_PATHS = None
+    SERVED_PATHS = []
+    PROTECTED_PATHS = []
     USER_DIRECTORY = None
     TLS = False
     POST_HOOKS = []
@@ -357,6 +357,7 @@ class HttpEngine:
         for e in cls.ROUTES:
             if cls._is_matching_url_path(route, e[0]) and method == e[2]:
                 return e[1]
+        return None
 
     @classmethod
     def _has_route(cls, route: bytes):
@@ -459,6 +460,7 @@ class HttpEngine:
             and (index := self.resp_headers.index(key)) % 2 == 0
         ):
             return self.resp_headers[index + 1]
+        return None
 
     def write_response_head(self, tx):
         """

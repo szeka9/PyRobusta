@@ -3,7 +3,7 @@ import unittest
 
 from unittest import mock
 
-from http_base import TestHttpBase
+from tests.unit.http_base import TestHttpBase
 
 from pyrobusta.protocol import (
     InvalidHeaders,

@@ -207,6 +207,7 @@ def apply_patches(cls, config, auth_provider: IAMDatabase):
     add_method(cls, get_policy, "static")
     add_method(cls, _authenticate)
 
+    # pylint: disable=W0603
     global _BROWSER_SECURITY, _SESSIONS, _SESSION_TTL_SEC
     _BROWSER_SECURITY = config.http_browser_security
     _SESSIONS = config.http_sessions

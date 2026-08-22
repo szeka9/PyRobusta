@@ -1,12 +1,7 @@
 import os
 import base64
-import sys
 
-from pathlib import Path
-
-from http_base import TestHttpBase
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
+from tests.unit.http_base import TestHttpBase
 
 from pyrobusta.protocol import http_cookie
 from pyrobusta.utils import crypto

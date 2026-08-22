@@ -341,5 +341,5 @@ class AttributeNode:
                 return glob.attributes
             if parent_glob:
                 return parent_glob.attributes
-            return
+            return None
         return current_node.attributes

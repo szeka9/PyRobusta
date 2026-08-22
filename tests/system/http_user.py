@@ -1,7 +1,7 @@
 from locust import HttpUser, task, constant
 
 TLS_VERIFY = False
-AUTH = None # ("username", "password")
+AUTH = None  # ("username", "password")
 
 
 class DefaultUser(HttpUser):

@@ -1,11 +1,6 @@
 import os
 import unittest
 import binascii
-import sys
-
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
 
 from pyrobusta.utils.iam import AttributeNode, IAMDatabase, NO_POLICY
 

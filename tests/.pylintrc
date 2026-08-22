@@ -4,9 +4,12 @@ disable=W0201,
         C0114,
         C0115,
         C0116,
+        C0413,
+        C0415,
         R0904,
         R0902,
-        R0801
+        R0801,
+        E0401
 
 init-hook='import os, sys; tests = os.path.join(os.getcwd(), "tests"); [sys.path.append(d) for d, _, _ in os.walk(tests)];'
 

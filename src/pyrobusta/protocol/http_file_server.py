@@ -46,7 +46,7 @@ def fs_retrieve(http_ctx, _):
             http_ctx.set_response_header(b"transfer-encoding", b"chunked")
             http_ctx.terminate(200)
             http_ctx.resp_handler = _traverse_dir_factory(norm_path)
-            return
+            return None
 
         # Retrieve file
         try:
@@ -68,6 +68,7 @@ def fs_retrieve(http_ctx, _):
     except OSError:
         http_ctx.terminate(404)
         return "text/plain", "Not found"
+    return None
 
 
 def delete_file(http_ctx, _):
@@ -130,7 +131,7 @@ def upload_file(http_ctx, payload: bytes):
             if payload:  # Wait for more chunks before setting response status
                 with open(tmp_path, "ab") as f:
                     f.write(payload)
-                return
+                return None
             # Last chunk received, finalize upload
             rename(tmp_path, normalize_path(target_path))
         else:
@@ -188,6 +189,7 @@ def bulk_upload_file(http_ctx, payload: tuple):
 
         http_ctx.terminate(201)
         return "text/plain", "OK"
+    return None
 
 
 #################################################

@@ -52,6 +52,7 @@ class MemoryPool:
         """
         if self.free:
             return self.free.pop()
+        return None
 
     def release(self, block):
         """

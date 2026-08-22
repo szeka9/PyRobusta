@@ -177,14 +177,14 @@ class Device:
     def run(self):
         app_script = ""
 
-        with open("app_base.py") as app:
+        with open("app_base.py", encoding="utf-8") as app:
             app_script += "\n" + app.read()
 
         if self.current_config["http_multipart"]:
-            with open("app_multipart.py") as o:
+            with open("app_multipart.py", encoding="utf-8") as o:
                 app_script += "\n" + o.read()
 
-        with open(self.boot_script) as b:
+        with open(self.boot_script, encoding="utf-8") as b:
             content = b.read().replace("# <PLACEHOLDER>", app_script)
 
         fd, boot_path = tempfile.mkstemp(suffix=".py")
@@ -193,6 +193,7 @@ class Device:
         with open(boot_path, "w", encoding="utf-8") as boot:
             boot.write(content)
 
+        # pylint: disable=R1732
         self.server_process = subprocess.Popen(
             ["mpremote", self.device_id, "run", boot_path],
             stdout=subprocess.PIPE,

@@ -1,17 +1,14 @@
 import os
-import sys
 import unittest
+import sys
 
 from pathlib import Path
-
 from unittest.mock import patch, mock_open
-from tests.unit.utils import load_module
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
-
-from utils import patch_time
+from tests.unit.utils import load_module, patch_time
 
 patch_time()
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
 
 from pyrobusta.utils import logging
 from pyrobusta.stream import buffer
