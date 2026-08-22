@@ -251,7 +251,11 @@ class HttpEngine:
         out = []
         i = 0
         while i < len(s):
-            if s[i] == "%" and i + 2 < len(s):
+            if (
+                s[i] == "%"
+                and i + 2 < len(s)
+                and all(c in "0123456789abcdefABCDEF" for c in s[i + 1 : i + 3])
+            ):
                 out.append(chr(int(s[i + 1 : i + 3], 16)))
                 i += 3
             else:

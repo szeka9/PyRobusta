@@ -190,8 +190,9 @@ class TestWebStateMachine(TestHttpBase):
             b"space in header name: value",
             b"new-line-in-header:\nvalue",
         ):
-            with self.assertRaises(self.http_module.InvalidHeaders):
-                self.engine._parse_headers(case)
+            with self.subTest(headers=case):
+                with self.assertRaises(self.http_module.InvalidHeaders):
+                    self.engine._parse_headers(case)
 
     def test_header_parsing_combined(self):
         for case in (
@@ -204,7 +205,8 @@ class TestWebStateMachine(TestHttpBase):
                 {"field-name": "value1, value2"},
             ),
         ):
-            self.assertEqual(self.engine._parse_headers(case[0]), case[1])
+            with self.subTest(headers=case):
+                self.assertEqual(self.engine._parse_headers(case[0]), case[1])
 
     def test_routing_unsupported_method(self):
         self.engine.state = self.engine._route_request_st
@@ -309,6 +311,71 @@ class TestWebStateMachine(TestHttpBase):
 
         self.assertEqual(self.engine.query, f"safe_chars.{unsafe_chars}")
 
+    def test_pct_encoded_query_parameter_with_invalid_encoding(self):
+        test_cases = [
+            # Incomplete escapes.
+            ("%", "%"),
+            ("%2", "%2"),
+
+            # Invalid hexadecimal digits.
+            ("%GG", "%GG"),
+            ("%2G", "%2G"),
+            ("%G2", "%G2"),
+
+            # Valid and invalid escapes mixed together.
+            ("%2F%", "/%"),
+            ("%2G%2F", "%2G/"),
+            ("%20%GG%41", " %GGA"),
+            ("abc%2Fdef", "abc/def"),
+
+            # Adjacent percent signs.
+            ("%%", "%%"),
+            ("%%2F", "%/"),
+
+        ]
+
+        for encoded, expected in test_cases:
+            with self.subTest(encoded=encoded):
+                request = b"GET /api/test?key=" + encoded.encode("ascii") + b" HTTP/1.1\r\n"
+
+                for i in range(len(request)):
+                    self.rx.write(request[i : i + 1])
+                    self.engine.state(self.rx)
+
+                self.assertEqual(self.engine.query, f"key={expected}")
+                self.engine.reset()
+                self.rx.consume()
+                self.tx.consume()
+
+    def test_pct_encoded_query_parameter_hex_digits(self):
+        test_cases = [
+            ("%2f", "/"),
+            ("%2F", "/"),
+            ("%aB", "\xab"),
+            ("%Ab", "\xab"),
+            ("%AB", "\xab"),
+            ("%00", "\x00"),
+            ("%ff", "\xff"),
+            ("%FF", "\xff"),
+        ]
+
+        for encoded, expected in test_cases:
+            with self.subTest(encoded=encoded):
+                request = (
+                    b"GET /api/test?key="
+                    + encoded.encode("ascii")
+                    + b" HTTP/1.1\r\n"
+                )
+
+                for i in range(len(request)):
+                    self.rx.write(request[i : i + 1])
+                    self.engine.state(self.rx)
+
+                self.assertEqual(self.engine.query, f"key={expected}")
+                self.engine.reset()
+                self.rx.consume()
+                self.tx.consume()
+
     def test_single_url_encoded_query_parameter(self):
         request = b"GET /api/test?param=value HTTP/1.1\r\n"
 
@@ -399,7 +466,8 @@ class TestWebStateMachine(TestHttpBase):
                 b"path/to/{wildcard:path}",
             ),
         ):
-            self.assertEqual(self.engine._is_matching_url_path(case[0], case[1]), True)
+            with self.subTest(url_path=case):
+                self.assertEqual(self.engine._is_matching_url_path(case[0], case[1]), True)
 
     def test_url_path_matching_mismatch(self):
         for case in (
@@ -412,7 +480,8 @@ class TestWebStateMachine(TestHttpBase):
             (b"/to/resource", b"{wildcard}/to/resource"),
             (b"path/to/resource/subresource/subsubresource", b"path/to/{wildcard}"),
         ):
-            self.assertEqual(self.engine._is_matching_url_path(case[0], case[1]), False)
+            with self.subTest(url_path=case):
+                self.assertEqual(self.engine._is_matching_url_path(case[0], case[1]), False)
 
     def test_chunked_transfer_encoding_valid(self):
         self.engine.url = b"/api/test"
