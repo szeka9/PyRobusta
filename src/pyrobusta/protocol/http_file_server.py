@@ -7,7 +7,7 @@ Module for extended file serving features, registered at the /files route.
 from os import stat, listdir, rmdir, remove, rename, mkdir
 from json import dumps
 
-from pyrobusta import WORKING_DIR
+import pyrobusta
 from pyrobusta.utils.lexpath import (
     normalize_path,
     is_file_path_valid,
@@ -261,17 +261,17 @@ def _traverse_dir_factory(path):
     return _traverse_dir
 
 
-def setup_directories(working_dir):
+def setup_directories():
     """
     Set up the required directories for file uploads.
     """
     for http_dir in (_UPLOAD_ROOT, _TMP_DIR):
-        base_dir = working_dir + "/"
-        sub_dirs = http_dir[len(base_dir) :].lstrip("/")
+        base_dir = ""
+        sub_dirs = http_dir.lstrip("/")
 
         for subdir in iterate_segments(sub_dirs, "/"):
             current_dir = base_dir + "/" + subdir
-            if not subdir in listdir(base_dir):
+            if not subdir in listdir(base_dir or "/"):
                 mkdir(current_dir)
             base_dir = current_dir
 
@@ -286,7 +286,7 @@ def apply_patches(cls, *_):
     global _UPLOAD_ROOT  # pylint: disable=W0603
     global _TMP_DIR  # pylint: disable=W0603
     _UPLOAD_ROOT = cls.USER_DIRECTORY
-    _TMP_DIR = WORKING_DIR + "/tmp"
+    _TMP_DIR = pyrobusta.WORKING_DIR + "/tmp"
 
     cls.deregister("/files/{fs_path:path}", "GET")
     cls.deregister("/files/{fs_path:path}", "DELETE")
@@ -298,4 +298,4 @@ def apply_patches(cls, *_):
     cls.register("/files/{fs_path:path}", upload_file, "PUT")
     cls.register("/files", bulk_upload_file, "POST")
 
-    setup_directories(WORKING_DIR)
+    setup_directories()
