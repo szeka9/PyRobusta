@@ -1,25 +1,23 @@
-import asyncio
+import os
 import json
+import sys
 
-from env_utils import (
-    garbage_collect,
-    test_assert,
-    send_request,
-    setup_config,
-    start_server,
-    fmkdir,
-    delete_path,
-)
+from server import Server, LocalServer, DeviceServer
+
+from utils import test_assert, send_request
+
+BOOT_SCRIPT = """
+import asyncio
+import machine
 
 from pyrobusta.protocol.http import HttpEngine
-from pyrobusta.utils.assets import install_www, iterate_fs
-from pyrobusta.utils.lexpath import normalize_path
+from pyrobusta import application
 
 
 @HttpEngine.route("/test/simple", "GET")
 def simple_handler(http_ctx, _):
     if http_ctx.headers["accept"] == "text/plain":
-        return "text/plain", "Test response\n"
+        return "text/plain", "Test response"
     elif http_ctx.headers["accept"] == "application/json":
         return "application/json", '{"response": "Test response"}'
     raise ValueError("Unhandled content-type")
@@ -30,30 +28,37 @@ def busy_handler(http_ctx, _):
     http_ctx.terminate(503)
     return "text/plain", "Unavailable"
 
+recv_chunks = []
 
-def create_chunked_route_handler(route):
-    recv_chunks = []
+@HttpEngine.route("/test/chunked", "POST")
+def chunked_handler(http_ctx, chunk):
+    global recv_chunks
+    if not chunk:  # Received terminating chunk
+        return "application/json", recv_chunks
+    recv_chunks.append(chunk.decode("utf8"))
 
-    @HttpEngine.route(route, "POST")
-    def chunked_handler(http_ctx, chunk):
-        if not chunk:  # Received terminating chunk
-            return "application/json", recv_chunks
-        recv_chunks.append(chunk.decode("utf8"))
+async def main():
+    await application.run()
+    while True:
+        await asyncio.sleep(1)
+
+asyncio.run(main())
+"""
 
 
-@garbage_collect
-async def test_simple_response(tls_enabled):
-    setup_config(tls_enabled=tls_enabled)
-    server = await start_server()
+def test_simple_response(srv: Server, tls_enabled):
+    srv.setup_config(tls=tls_enabled)
+    srv.start(BOOT_SCRIPT)
 
     try:
         # Test: text/plain
-        plain_response = await send_request(
+        plain_response = send_request(
+            srv,
             b"GET /test/simple HTTP/1.1\r\n"
             b"Host: localhost\r\n"
             b"Connection: close\r\n"
             b"Accept:text/plain\r\n"
-            b"\r\n"
+            b"\r\n",
         )
         test_assert(
             f"http{"s" if tls_enabled else ""} response contains text/plain header",
@@ -67,12 +72,13 @@ async def test_simple_response(tls_enabled):
         )
 
         # Test: application/json
-        json_response = await send_request(
+        json_response = send_request(
+            srv,
             b"GET /test/simple HTTP/1.1\r\n"
             b"Host: localhost\r\n"
             b"Connection: close\r\n"
             b"Accept: application/json\r\n"
-            b"\r\n"
+            b"\r\n",
         )
         test_assert(
             f"http{"s" if tls_enabled else ""} response contains application/json header",
@@ -85,19 +91,19 @@ async def test_simple_response(tls_enabled):
             True,
         )
     finally:
-        await server.terminate()
+        srv.terminate()
 
 
-@garbage_collect
-async def test_server_busy():
-    setup_config()
-    server = await start_server()
+def test_server_busy(srv: Server):
+    srv.setup_config()
+    srv.start(BOOT_SCRIPT)
 
     try:
-        plain_response = await send_request(
+        plain_response = send_request(
+            srv,
             b"POST /test/busy HTTP/1.1\r\n"
             b"Connection:close\r\n"
-            b"Host: localhost\r\n\r\n"
+            b"Host: localhost\r\n\r\n",
         )
         test_assert(
             f"response is rejected by busy service with 503",
@@ -105,17 +111,16 @@ async def test_server_busy():
             True,
         )
     finally:
-        await server.terminate()
+        srv.terminate()
 
 
-@garbage_collect
-async def test_chunked_transfer_encoding():
-    setup_config()
-    create_chunked_route_handler("/test/chunked")
-    server = await start_server()
+def test_chunked_transfer_encoding(srv: Server):
+    srv.setup_config()
+    srv.start(BOOT_SCRIPT)
 
     try:
-        json_response = await send_request(
+        json_response = send_request(
+            srv,
             b"POST /test/chunked HTTP/1.1\r\n"
             b"Host: localhost\r\n"
             b"Connection: close\r\n"
@@ -123,7 +128,7 @@ async def test_chunked_transfer_encoding():
             b"14\r\nchunking\r\ntest\r\ncase\r\n"
             b"E\r\nchunking\r\ntest\r\n"
             b"8\r\nchunking\r\n"
-            b"0\r\n\r\n"
+            b"0\r\n\r\n",
         )
         response_body = json.loads(json_response.split(b"\r\n\r\n")[1])
         test_assert(
@@ -132,38 +137,31 @@ async def test_chunked_transfer_encoding():
             ["chunking\r\ntest\r\ncase", "chunking\r\ntest", "chunking"],
         )
     finally:
-        await server.terminate()
+        srv.terminate()
 
 
-@garbage_collect
-async def test_fs_access_control():
-    setup_config(served_paths="/www/test/allowed")
-    server = await start_server()
-    www_root = normalize_path("/www")
-    test_root = normalize_path("/www/test")
-    fmkdir(www_root)
-    fmkdir(test_root)
+def test_fs_access_control(srv: Server):
+    srv.setup_config(http_served_paths="/www/test/allowed")
 
-    # Index page under /test -> accepted
-    allowed_workdir = normalize_path("/www/test/allowed")
-    allowed_index_html = normalize_path("/www/test/allowed/index.html")
-    fmkdir(allowed_workdir)
-    with open(allowed_index_html, "w") as f:
-        f.write("<html>PyRobusta Home</html>")
+    srv.mkdir("/www/test")
 
-    # Index page under / -> rejected
-    rejected_workdir = normalize_path("/www/test/rejected")
-    rejected_index_html = normalize_path("/www/test/rejected/index.html")
-    fmkdir(rejected_workdir)
-    with open(rejected_index_html, "w") as f:
-        f.write("<html>PyRobusta Home</html>")
+    # Index page under /test/allowed -> accepted
+    srv.mkdir("/www/test/allowed")
+    srv.write_file("/www/test/allowed/index.html", "<html>PyRobusta Home</html>")
+
+    # Index page under /test/rejected -> rejected
+    srv.mkdir("/www/test/rejected")
+    srv.write_file("/www/test/rejected/index.html", "<html>PyRobusta Home</html>")
+
+    srv.start(BOOT_SCRIPT)
 
     try:
         # Case #1: /test/allowed/index.html
-        response = await send_request(
+        response = send_request(
+            srv,
             b"GET /test/allowed/index.html HTTP/1.1\r\n"
             b"Connection: close\r\n"
-            b"Host: localhost\r\n\r\n"
+            b"Host: localhost\r\n\r\n",
         )
 
         response_body = response.split(b"\r\n\r\n")[1]
@@ -174,10 +172,11 @@ async def test_fs_access_control():
         )
 
         # Case #2: /test/rejected/index.html
-        response = await send_request(
+        response = send_request(
+            srv,
             b"GET /test/rejected/index.html HTTP/1.1\r\n"
             b"Connection: close\r\n"
-            b"Host: localhost\r\n\r\n"
+            b"Host: localhost\r\n\r\n",
         )
 
         test_assert(
@@ -186,20 +185,20 @@ async def test_fs_access_control():
             True,
         )
     finally:
-        delete_path(www_root)
-        await server.terminate()
+        srv.terminate()
+        srv.rmdir("/www/test")
 
 
-@garbage_collect
-async def test_keepalive():
-    setup_config()
-    server = await start_server()
+def test_keepalive(srv: Server):
+    srv.setup_config()
+    srv.start(BOOT_SCRIPT)
 
     try:
         # ----------------------------------
         # Case 1: all requests are processed
         # ----------------------------------
-        plain_responses = await send_request(
+        plain_responses = send_request(
+            srv,
             b"GET /test/simple HTTP/1.1\r\n"
             b"Host: localhost\r\n"
             b"Accept:text/plain\r\n"
@@ -212,7 +211,7 @@ async def test_keepalive():
             b"Host: localhost\r\n"
             b"Connection: close\r\n"
             b"Accept:text/plain\r\n"
-            b"\r\n"
+            b"\r\n",
         )
 
         test_assert(
@@ -224,7 +223,8 @@ async def test_keepalive():
         # -------------------------------------------------------------------
         # Case 2: close connection after the second request (invalid framing)
         # -------------------------------------------------------------------
-        plain_responses = await send_request(
+        plain_responses = send_request(
+            srv,
             b"GET /test/simple HTTP/1.1\r\n"
             b"Host: localhost\r\n"
             b"Accept:text/plain\r\n"
@@ -237,7 +237,7 @@ async def test_keepalive():
             b"GET /test/simple HTTP/1.1\r\n"
             b"Host: localhost\r\n"
             b"Accept:text/plain\r\n"
-            b"\r\n"
+            b"\r\n",
         )
 
         test_assert(
@@ -249,7 +249,8 @@ async def test_keepalive():
         # ------------------------------------------------
         # Case 3: close connection after the first request
         # ------------------------------------------------
-        plain_response = await send_request(
+        plain_response = send_request(
+            srv,
             b"GET /test/simple HTTP/1.1\r\n"
             b"Host: localhost\r\n"
             b"Connection: close\r\n"
@@ -262,7 +263,7 @@ async def test_keepalive():
             b"GET /test/simple HTTP/1.1\r\n"
             b"Host: localhost\r\n"
             b"Accept:text/plain\r\n"
-            b"\r\n"
+            b"\r\n",
         )
 
         test_assert(
@@ -271,49 +272,27 @@ async def test_keepalive():
             1,
         )
     finally:
-        await server.terminate()
+        srv.terminate()
 
 
-def test_www_install():
-    www_root = normalize_path("/www")
-
-    try:
-        install_www()
-        origin_files = set(
-            file.split("/")[-1]
-            for file in iterate_fs(normalize_path("/lib/pyrobusta/assets/www"))
-        )
-        target_files = set(
-            file.split("/")[-1] for file in iterate_fs(normalize_path("/www"))
-        )
-        test_assert("all assets are installed to /www", origin_files, target_files)
-    finally:
-        delete_path(www_root)
+def test_main(srv: Server):
+    test_simple_response(srv, tls_enabled=False)
+    test_simple_response(srv, tls_enabled=True)
+    test_server_busy(srv)
+    test_chunked_transfer_encoding(srv)
+    test_fs_access_control(srv)
+    test_keepalive(srv)
 
 
-def test_registration():
-    test_assert(
-        "simple route registration",
-        simple_handler,
-        HttpEngine._get_handler(b"/test/simple", b"GET"),
-    )
+if __name__ == "__main__":
+    server_ip = sys.argv[1]
+    server_id = sys.argv[
+        2
+    ]  # mpremote id e.g. a1 (/dev/ttyACM1), or 'local' for the unix port
 
-    test_assert(
-        "busy route registration",
-        busy_handler,
-        HttpEngine._get_handler(b"/test/busy", b"POST"),
-    )
+    if server_id == "local":
+        srv = LocalServer(server_ip, os.getcwd(), os.getenv("MICROPYTHON"))
+    else:
+        srv = DeviceServer(server_ip, server_id)
 
-
-async def test_main():
-    test_registration()
-    await test_simple_response(tls_enabled=False)
-    await test_simple_response(tls_enabled=True)
-    await test_server_busy()
-    await test_chunked_transfer_encoding()
-    await test_fs_access_control()
-    await test_keepalive()
-    test_www_install()
-
-
-asyncio.run(test_main())
+    test_main(srv)

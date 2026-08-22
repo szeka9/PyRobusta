@@ -1,6 +1,11 @@
 import unittest
+import sys
 
-from tests.unit.utils import load_module
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
+
+from pyrobusta.stream.buffer import SlidingBuffer, BufferOverflowError
 
 
 class BufferTestBase(unittest.TestCase):
@@ -13,12 +18,8 @@ class BufferTestBase(unittest.TestCase):
     def make_buffer(self, data):
         return self.buffer_type(data)
 
-    @classmethod
-    def setUpClass(cls):
-        cls.buffer_module = load_module("pyrobusta/stream/buffer.py")
-
     def setUp(self):
-        self.buf = self.buffer_module.SlidingBuffer(self.make_buffer(8))
+        self.buf = SlidingBuffer(self.make_buffer(8))
 
     def test_empty_buffer(self):
         self.assertEqual(self.buf.size(), 0)
@@ -69,7 +70,7 @@ class BufferTestBase(unittest.TestCase):
     def test_overflow(self):
         self.buf.write(b"a" * 8)
         self.assertEqual(self.buf.size(), 8)
-        with self.assertRaises(self.buffer_module.BufferFullError):
+        with self.assertRaises(BufferOverflowError):
             self.buf.write(b"a")
 
     def test_compaction(self):

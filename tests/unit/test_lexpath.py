@@ -1,8 +1,10 @@
 import unittest
+
 from unittest.mock import patch
 from os import getcwd
 
-from tests.unit.utils import load_module
+import pyrobusta
+from pyrobusta.utils import lexpath
 
 
 class TestLexPath(unittest.TestCase):
@@ -13,9 +15,6 @@ class TestLexPath(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.config = {}
-
-    def setUp(self):
-        self.lexpath_module = load_module("pyrobusta/utils/lexpath.py")
 
     def test_path_normalization_virtual_root(self):
         """
@@ -35,10 +34,10 @@ class TestLexPath(unittest.TestCase):
             ("/path/../../resource", f"{cwd}/resource"),
             ("/path/../../resource/..", f"{cwd}"),
         ):
-            self.assertEqual(self.lexpath_module.normalize_path(case[0]), case[1])
+            self.assertEqual(lexpath.normalize_path(case[0]), case[1])
 
-    @patch("pyrobusta.utils.lexpath.getcwd", return_value="/")
-    def test_path_normalization_host_root(self, _):
+    @patch.object(pyrobusta, "WORKING_DIR", "")
+    def test_path_normalization_host_root(self):
         """
         Test lexical path normalization assuming the working directory
         is the device root ("/"). This simulates the target device environment
@@ -55,10 +54,10 @@ class TestLexPath(unittest.TestCase):
             ("/path/../../resource", "/resource"),
             ("/path/../../resource/..", "/"),
         ):
-            self.assertEqual(self.lexpath_module.normalize_path(case[0]), case[1])
+            self.assertEqual(lexpath.normalize_path(case[0]), case[1])
 
-    @patch("pyrobusta.utils.lexpath.getcwd", return_value="/")
-    def test_path_serving_list(self, _):
+    @patch.object(pyrobusta, "WORKING_DIR", "")
+    def test_path_serving_list(self):
         served_paths = ["/path/to/dir1", "/path/to/dir2"]
 
         for case in (
@@ -72,12 +71,10 @@ class TestLexPath(unittest.TestCase):
             ("/path/to/other", False),
             ("/path/to", False),
         ):
-            self.assertEqual(
-                self.lexpath_module.is_child_path_of(case[0], served_paths), case[1]
-            )
+            self.assertEqual(lexpath.is_child_path_of(case[0], served_paths), case[1])
 
-    @patch("pyrobusta.utils.lexpath.getcwd", return_value="/")
-    def test_path_serving_root(self, _):
+    @patch.object(pyrobusta, "WORKING_DIR", "")
+    def test_path_serving_root(self):
         served_paths = ["/"]
 
         for case in (
@@ -85,12 +82,10 @@ class TestLexPath(unittest.TestCase):
             ("/", True),
             ("/path/to/served", True),
         ):
-            self.assertEqual(
-                self.lexpath_module.is_child_path_of(case[0], served_paths), case[1]
-            )
+            self.assertEqual(lexpath.is_child_path_of(case[0], served_paths), case[1])
 
-    @patch("pyrobusta.utils.lexpath.getcwd", return_value="/")
-    def test_path_serving_none(self, _):
+    @patch.object(pyrobusta, "WORKING_DIR", "")
+    def test_path_serving_none(self):
         served_paths = []
 
         for case in (
@@ -98,9 +93,7 @@ class TestLexPath(unittest.TestCase):
             ("/", False),
             ("/path/to/served", False),
         ):
-            self.assertEqual(
-                self.lexpath_module.is_child_path_of(case[0], served_paths), case[1]
-            )
+            self.assertEqual(lexpath.is_child_path_of(case[0], served_paths), case[1])
 
     def test_path_segment_validation(self):
         valid_segments = ["file", "dir1", "dir-2", "dir_3", "file.ext", "a"]
@@ -114,10 +107,10 @@ class TestLexPath(unittest.TestCase):
         ]
 
         for segment in valid_segments:
-            self.assertTrue(self.lexpath_module.is_path_segment_valid(segment))
+            self.assertTrue(lexpath.is_path_segment_valid(segment))
 
         for segment in invalid_segments:
-            self.assertFalse(self.lexpath_module.is_path_segment_valid(segment))
+            self.assertFalse(lexpath.is_path_segment_valid(segment))
 
     def test_file_path_validation(self):
         valid_paths = ["/file", "/dir1/file", "/dir-2/file", "/dir_3/file"]
@@ -131,7 +124,7 @@ class TestLexPath(unittest.TestCase):
         ]
 
         for path in valid_paths:
-            self.assertTrue(self.lexpath_module.is_file_path_valid(path))
+            self.assertTrue(lexpath.is_file_path_valid(path))
 
         for path in invalid_paths:
-            self.assertFalse(self.lexpath_module.is_file_path_valid(path))
+            self.assertFalse(lexpath.is_file_path_valid(path))

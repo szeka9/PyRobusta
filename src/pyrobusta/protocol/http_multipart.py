@@ -11,7 +11,7 @@ delimiter.
 
 # pylint: disable=W0212,R0401
 
-from pyrobusta.protocol.http import (
+from pyrobusta.protocol import (
     InvalidHeaders,
     MalformedRequest,
     InvalidContentLength,
@@ -215,7 +215,7 @@ def _parse_complete_part_st(self, rx):
     self._handle_route_response(handler_response)
 
 
-def apply_patches(cls):
+def apply_patches(cls, *_):
     """
     Apply patches to class attributes for multipart parsing.
     """

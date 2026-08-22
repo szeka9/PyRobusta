@@ -15,12 +15,14 @@ def multipart_response(num_responses: int, part_size: int):
     return response_generator
 
 
+@HttpEngine.route("/test/multipart", "GET")
 def multipart_producer(http_ctx: HttpEngine, _):
     part_count = int(http_ctx.headers.get("x-part-count", 1))
     part_size = int(http_ctx.headers.get("x-part-size", 1024))
     return "multipart/form-data", multipart_response(part_count, part_size)
 
 
+@HttpEngine.route("/test/multipart", "POST")
 def multipart_handler(http_ctx: HttpEngine, _):
     if (
         http_ctx.headers.get("content-type", "").startswith("multipart/form-data")
@@ -29,8 +31,3 @@ def multipart_handler(http_ctx: HttpEngine, _):
         return "text/plain", "OK"
     # <process part data>
     return None
-
-
-def load():
-    HttpEngine.register("/test/multipart", multipart_producer, "GET")
-    HttpEngine.register("/test/multipart", multipart_handler, "POST")

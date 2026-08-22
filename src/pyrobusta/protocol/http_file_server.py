@@ -7,15 +7,17 @@ Module for extended file serving features, registered at the /files route.
 from os import stat, listdir, rmdir, remove, rename, mkdir
 from json import dumps
 
+import pyrobusta
 from pyrobusta.utils.lexpath import (
     normalize_path,
     is_file_path_valid,
     is_path_segment_valid,
+    iterate_segments,
 )
 from pyrobusta.utils.assets import iterate_fs, FS_ITER_FILE
 
-_UPLOAD_ROOT = normalize_path("/www/user_data")
-_TMP_DIR = normalize_path("/tmp")
+_UPLOAD_ROOT = None
+_TMP_DIR = None
 
 
 #################################################
@@ -33,7 +35,7 @@ def fs_retrieve(http_ctx, _):
     norm_path = normalize_path(target_path)
 
     try:
-        if not http_ctx.is_norm_path_served(norm_path):
+        if not http_ctx.is_path_served(norm_path):
             stat(norm_path)
             http_ctx.terminate(403)
             return "text/plain", "Forbidden"
@@ -44,7 +46,7 @@ def fs_retrieve(http_ctx, _):
             http_ctx.set_response_header(b"transfer-encoding", b"chunked")
             http_ctx.terminate(200)
             http_ctx.resp_handler = _traverse_dir_factory(norm_path)
-            return
+            return None
 
         # Retrieve file
         try:
@@ -66,6 +68,7 @@ def fs_retrieve(http_ctx, _):
     except OSError:
         http_ctx.terminate(404)
         return "text/plain", "Not found"
+    return None
 
 
 def delete_file(http_ctx, _):
@@ -128,7 +131,7 @@ def upload_file(http_ctx, payload: bytes):
             if payload:  # Wait for more chunks before setting response status
                 with open(tmp_path, "ab") as f:
                     f.write(payload)
-                return
+                return None
             # Last chunk received, finalize upload
             rename(tmp_path, normalize_path(target_path))
         else:
@@ -186,6 +189,7 @@ def bulk_upload_file(http_ctx, payload: tuple):
 
         http_ctx.terminate(201)
         return "text/plain", "OK"
+    return None
 
 
 #################################################
@@ -264,12 +268,12 @@ def setup_directories():
     Set up the required directories for file uploads.
     """
     for http_dir in (_UPLOAD_ROOT, _TMP_DIR):
-        base_dir = normalize_path("/")
-        sub_dirs = http_dir[len(base_dir) :].lstrip("/")
+        base_dir = ""
+        sub_dirs = http_dir.lstrip("/")
 
-        for subdir in sub_dirs.split("/"):
+        for subdir in iterate_segments(sub_dirs, "/"):
             current_dir = base_dir + "/" + subdir
-            if not subdir in listdir(base_dir):
+            if not subdir in listdir(base_dir or "/"):
                 mkdir(current_dir)
             base_dir = current_dir
 
@@ -277,13 +281,14 @@ def setup_directories():
         remove(_TMP_DIR + "/" + file)
 
 
-def apply_patches(cls, upload_root=None):
+def apply_patches(cls, *_):
     """
     Apply patches to class attributes for file serving.
     """
-    if upload_root:
-        global _UPLOAD_ROOT  # pylint: disable=W0603
-        _UPLOAD_ROOT = upload_root
+    global _UPLOAD_ROOT  # pylint: disable=W0603
+    global _TMP_DIR  # pylint: disable=W0603
+    _UPLOAD_ROOT = cls.USER_DIRECTORY
+    _TMP_DIR = pyrobusta.WORKING_DIR + "/tmp"
 
     cls.deregister("/files/{fs_path:path}", "GET")
     cls.deregister("/files/{fs_path:path}", "DELETE")

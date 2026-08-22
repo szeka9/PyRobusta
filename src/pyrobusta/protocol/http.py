@@ -6,37 +6,14 @@ from json import dumps
 from io import BytesIO
 from os import stat
 
-from pyrobusta.utils.config import (
-    get_config,
-    is_protected_file,
-    CONF_HTTP_MULTIPART,
-    CONF_HTTP_FILES_API,
-    CONF_HTTP_SERVED_PATHS,
-    CONF_HTTP_AUTH,
-    CONF_HTTP_SESSIONS,
-    CONF_HTTP_BROWSER_SECURITY,
+from pyrobusta import WORKING_DIR
+from pyrobusta.stream.buffer import BufferOverflowError
+from pyrobusta.utils.lexpath import is_child_path_of, normalize_path, iterate_segments
+from pyrobusta.protocol import (
+    InvalidHeaders,
+    MalformedRequest,
+    InvalidContentLength,
 )
-from pyrobusta.utils import logging, lexpath
-from pyrobusta.stream.buffer import BufferFullError
-from pyrobusta.utils.lexpath import is_child_path_of, normalize_path
-
-
-class InvalidHeaders(ValueError):
-    """Exception for errors occurring while parsing HTTP/MIME headers."""
-
-    pass
-
-
-class InvalidContentLength(ValueError):
-    """Exception for content-length related erros."""
-
-    pass
-
-
-class MalformedRequest(ValueError):
-    """Exception for malformed requests."""
-
-    pass
 
 
 class HttpEngine:
@@ -49,7 +26,7 @@ class HttpEngine:
     - http_files_api: serve files at the /files API, with support for CRUD methods
     - http_multipart: support for multipart requests/responses
     - http_auth: authenticate and authorize users
-    - browser_security: enable security features like CSRF protection and hardening headers
+    - http_browser_security: enable security features like CSRF protection and hardening headers
     """
 
     __slots__ = (
@@ -124,7 +101,7 @@ class HttpEngine:
         b"png",
         b"image/png",
         b"svg",
-        b"image/svg",
+        b"image/svg+xml",
         b"gif",
         b"image/gif",
         b"webp",
@@ -146,8 +123,6 @@ class HttpEngine:
         b"text/plain",
     )
 
-    USER_DIRECTORY = normalize_path("/www/user_data")
-
     DELETE = b"DELETE"
     GET = b"GET"
     HEAD = b"HEAD"
@@ -159,17 +134,23 @@ class HttpEngine:
     SUPPORTED_VERSIONS = (b"HTTP/1.1", b"HTTP/1.0")
     SESSION_COUNTER = 0
 
+    SERVED_PATHS = []
+    PROTECTED_PATHS = []
+    USER_DIRECTORY = None
+    TLS = False
+    POST_HOOKS = []
+
     @classmethod
-    def new_session_id(cls):
+    def new_statemachine_id(cls):
         """
-        Create a new unique ID for the HTTP session.
+        Create a new unique ID for the HTTP statemachine.
         """
         cls.SESSION_COUNTER = (cls.SESSION_COUNTER + 1) & 0xFFFFFFFF
         return cls.SESSION_COUNTER
 
     def __init__(self):
         # [State machine]
-        self.id = self.new_session_id()
+        self.id = self.new_statemachine_id()
         self.state = self._start_parser
         self.status_code = None
         self.resp_headers = []
@@ -193,7 +174,7 @@ class HttpEngine:
         """
         Reset internal state to reuse a state machine object.
         """
-        self.id = self.new_session_id()
+        self.id = self.new_statemachine_id()
         self.state = self._start_parser
         self.status_code = None
         self.resp_headers.clear()
@@ -259,23 +240,6 @@ class HttpEngine:
         return decorator
 
     # =========================================
-    # Authentication / authorization
-    # =========================================
-
-    @staticmethod
-    def get_policy(route: str):  # pylint: disable=W0613
-        """
-        Placeholder for retriving a role mask of for a specific resource (route).
-        """
-        return 0b0
-
-    def _authenticate(self):
-        """
-        Placeholder for authentication.
-        """
-        return None
-
-    # =========================================
     # Helpers for parsing
     # =========================================
 
@@ -287,7 +251,11 @@ class HttpEngine:
         out = []
         i = 0
         while i < len(s):
-            if s[i] == "%" and i + 2 < len(s):
+            if (
+                s[i] == "%"
+                and i + 2 < len(s)
+                and all(c in "0123456789abcdefABCDEF" for c in s[i + 1 : i + 3])
+            ):
                 out.append(chr(int(s[i + 1 : i + 3], 16)))
                 i += 3
             else:
@@ -334,7 +302,7 @@ class HttpEngine:
         """
         cookie_header = self.headers.get("cookie", "")
         name = name.lower()
-        for part in lexpath.iterate_segments(cookie_header, ";"):
+        for part in iterate_segments(cookie_header, ";"):
             cookie_sep = part.find("=")
             if cookie_sep == -1:
                 continue
@@ -346,11 +314,10 @@ class HttpEngine:
     @staticmethod
     def _is_matching_url_path(path: bytes, pattern: bytes) -> bool:
         """
-        Match a URL path against a pattern that can contain wildcard segments
-        e.g. /path/{wildcard}/resource where {wildcard} matches any non-empty
-        string in that segment. /path/to/{wildcard:path} matches multiple path
-        segments, only allowed for trailing segments.
-        (e.g. "/{wildcard:path}/resource" is forbidden)
+        Match a URL path against a pattern that can contain wildcard segments e.g.
+        /path/{wildcard}/resource where {wildcard} matches any non-empty string in
+        that segment. /path/to/{wildcard:path} matches multiple path segments, only
+        allowed for trailing segments. (e.g. "/{wildcard:path}/resource" is forbidden)
         """
         if path == pattern:
             return True
@@ -390,6 +357,7 @@ class HttpEngine:
         for e in cls.ROUTES:
             if cls._is_matching_url_path(route, e[0]) and method == e[2]:
                 return e[1]
+        return None
 
     @classmethod
     def _has_route(cls, route: bytes):
@@ -492,6 +460,7 @@ class HttpEngine:
             and (index := self.resp_headers.index(key)) % 2 == 0
         ):
             return self.resp_headers[index + 1]
+        return None
 
     def write_response_head(self, tx):
         """
@@ -619,14 +588,13 @@ class HttpEngine:
         """
         Run the state machine, consuming the content of a request buffer (rx).
         Unlike individual states, this method does not raise an exception.
-        This method returns on every state transition allowing the calling side
-        to flush the response buffer.
+        This method returns on every state transition.
         """
         if self.is_terminated():
             return
         try:
             self.state(rx)
-        except BufferFullError:
+        except BufferOverflowError:
             self.abort(500)
             self.set_response_body(b"Buffer full")
         except InvalidHeaders:
@@ -639,6 +607,8 @@ class HttpEngine:
             self.abort(400)
             self.set_response_body(b"Malformed request")
         except Exception as e:  # pylint: disable=W0718
+            from pyrobusta.utils import logging
+
             logging.warning("%s.run: error=[%s]", __name__, e)
             self.abort(500)
             self.set_response_body(b"Internal Server Error")
@@ -744,11 +714,11 @@ class HttpEngine:
         if self.version == b"HTTP/1.1" and "host" not in self.headers:
             raise InvalidHeaders()
         rx.consume(blank_idx + 4)
-        self.state = self._handle_auth_st
-
-    def _handle_auth_st(self, _):
-        # This a placeholder for authentication & authorization.
-        self.state = self._route_request_st
+        if hasattr(self, "_handle_auth_st"):
+            # Authenticate & authorize if enabled
+            self.state = getattr(self, "_handle_auth_st")
+        else:
+            self.state = self._route_request_st
 
     def _route_request_st(self, _):
         """
@@ -772,9 +742,12 @@ class HttpEngine:
                 if self.method in (self.GET, self.HEAD):
                     raise MalformedRequest()
                 if self.is_multipart():
-                    self.state = self._start_multipart_parser_st
+                    if hasattr(self, "_start_multipart_parser_st"):
+                        self.state = getattr(self, "_start_multipart_parser_st")
+                    else:
+                        self.abort(503)
+                        return
                 elif self.is_chunked():
-                    # Request body is chunked
                     if "content-length" in self.headers:
                         # Ignore content-length as per RFC 9112,
                         # chunked transfer-encoding takes precedence
@@ -789,7 +762,7 @@ class HttpEngine:
         # Request does not have a registered route
         if (
             self._has_route(self.url)
-            and self._get_handler(self.method, self.url) is None
+            and self._get_handler(self.url, self.method) is None
         ):
             supported_methods = self._supported_methods(self.url)
             self.set_response_header(b"allow", b", ".join(supported_methods))
@@ -867,14 +840,14 @@ class HttpEngine:
 
         self._handle_route_response(handler_response)
 
-    @staticmethod
-    def is_norm_path_served(norm_path: str):
+    def is_path_served(self, norm_path: str):
         """
-        Returns true if a directory is configured to be served.
+        Returns true if a normalized path is configured to be served.
         """
-        return lexpath.is_child_path_of(
-            norm_path, get_config(CONF_HTTP_SERVED_PATHS)
-        ) and not is_protected_file(norm_path)
+        return (
+            is_child_path_of(norm_path, self.SERVED_PATHS)  # pylint: disable=E1101
+            and not norm_path in self.PROTECTED_PATHS  # pylint: disable=E1101
+        )
 
     def _fs_retrieve_st(self, _):
         """
@@ -885,10 +858,10 @@ class HttpEngine:
             target_path = "/www/index.html"
         else:
             target_path = "/www" + self.url.decode("ascii")
-        norm_path = lexpath.normalize_path(target_path)
+        norm_path = normalize_path(target_path)
 
         try:
-            if not self.is_norm_path_served(norm_path):
+            if not self.is_path_served(norm_path):
                 stat(norm_path)
                 self.terminate(403)
                 return
@@ -899,12 +872,11 @@ class HttpEngine:
             except ValueError:
                 content_type = b"application/octet-stream"
 
-            if get_config(CONF_HTTP_FILES_API):
-                if (
-                    is_child_path_of(target_path, [self.USER_DIRECTORY])
-                    and content_type not in self.SAFE_CONTENT_TYPES
-                ):
-                    self.set_response_header(b"content-disposition", b"attachment")
+            if (
+                is_child_path_of(target_path, (self.USER_DIRECTORY,))
+                and content_type not in self.SAFE_CONTENT_TYPES
+            ):
+                self.set_response_header(b"content-disposition", b"attachment")
 
             self.set_response_header(
                 b"content-length", str(stat(norm_path)[6]).encode("ascii")
@@ -916,12 +888,6 @@ class HttpEngine:
             return
         except OSError:
             self.terminate(404)
-
-    def _start_multipart_parser_st(self, rx):  # pylint: disable=W0613
-        """
-        Initial state for processing multipart requests (placeholder).
-        """
-        self.abort(503)
 
     def generate_multipart_response(self, callback, dtype):  # pylint: disable=W0613
         """
@@ -944,12 +910,6 @@ class HttpEngine:
         ):
             self.set_response_header(b"connection", b"close")
 
-    def _apply_security_headers(self):
-        """
-        Placeholder for security hardenings.
-        """
-        pass
-
     def _terminal_st(self, rx):  # pylint: disable=W0613
         """
         Terminal state for finalizing request/response processing.
@@ -959,41 +919,33 @@ class HttpEngine:
         if not self.get_response_header(b"cache-control"):
             self.set_response_header(b"cache-control", b"no-store")
 
-        if self.get_response_header(b"content-type") and get_config(
-            CONF_HTTP_BROWSER_SECURITY
-        ):
-            self._apply_security_headers()
-
         if (
             self.get_response_header(b"transfer-encoding") != b"chunked"
             and self.get_response_header(b"content-length") is None
         ):
             self.set_response_header(b"content-length", b"0")
 
+        for clb in self.POST_HOOKS:
+            clb(self)
+
         self.state = None
 
 
-def enable_optional_features(auth_provider=None):
+def apply_patches(config, *_):
     """
-    Enable related optional features, set in the config.
+    Apply patches to class attributes.
     """
-    if get_config(CONF_HTTP_MULTIPART):
-        from pyrobusta.protocol import http_multipart
-
-        http_multipart.apply_patches(HttpEngine)
-
-    if get_config(CONF_HTTP_FILES_API):
-        from pyrobusta.protocol import http_file_server
-
-        http_file_server.apply_patches(HttpEngine, HttpEngine.USER_DIRECTORY)
-
-    if get_config(CONF_HTTP_AUTH) == "basic":
-        from pyrobusta.protocol import http_basic_auth
-
-        allow_sessions = get_config(CONF_HTTP_SESSIONS)
-        http_basic_auth.apply_patches(HttpEngine, auth_provider, allow_sessions)
-
-    if get_config(CONF_HTTP_BROWSER_SECURITY):
-        from pyrobusta.protocol import http_security
-
-        http_security.apply_patches(HttpEngine)
+    setattr(HttpEngine, "TLS", config.tls)
+    setattr(HttpEngine, "USER_DIRECTORY", WORKING_DIR + "/www/user_data")
+    setattr(HttpEngine, "SERVED_PATHS", config.http_served_paths)
+    setattr(
+        HttpEngine,
+        "PROTECTED_PATHS",
+        (
+            config.path,
+            config.passwd_file,
+            config.roles_file,
+            config.tls_cert_file,
+            config.tls_key_file,
+        ),
+    )

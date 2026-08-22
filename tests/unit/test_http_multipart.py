@@ -3,7 +3,13 @@ import unittest
 
 from unittest import mock
 
-from http_base import TestHttpBase
+from tests.unit.http_base import TestHttpBase
+
+from pyrobusta.protocol import (
+    InvalidHeaders,
+    MalformedRequest,
+    InvalidContentLength,
+)
 
 
 class TestMultipartStateMachine(TestHttpBase):
@@ -13,7 +19,7 @@ class TestMultipartStateMachine(TestHttpBase):
 
     @classmethod
     def setUpClass(cls):
-        cls.base_config = {"http_multipart": "True", "http_files_api": "False"}
+        cls.base_config = {"http_multipart": True, "http_files_api": False}
         cls.cwd = os.getcwd()
 
     def feed_body_part(self, body_part):
@@ -52,7 +58,7 @@ class TestMultipartStateMachine(TestHttpBase):
             {"content-type": 'multipart/form-data;boundary=missing-quote"'},
         ]:
             with self.subTest(headers=case):
-                with self.assertRaises(self.http_module.InvalidHeaders):
+                with self.assertRaises(InvalidHeaders):
                     self.engine._get_mp_boundary(case)
 
     def test_multipart_receiver_valid(self):
@@ -79,7 +85,7 @@ class TestMultipartStateMachine(TestHttpBase):
 
         body_part = b"--test-boundary-delimiter\r\nContent-Type:text/plain"
 
-        with self.assertRaises(self.http_module.MalformedRequest):
+        with self.assertRaises(MalformedRequest):
             self.feed_body_part(body_part)
 
     def test_multipart_receiver_complete_part(self):
@@ -252,7 +258,7 @@ class TestMultipartStateMachine(TestHttpBase):
 
         self.feed_body_part(body_part)
 
-        with self.assertRaises(self.http_module.InvalidContentLength):
+        with self.assertRaises(InvalidContentLength):
             while self.engine.state is not None:
                 self.engine.state(self.rx)
 
@@ -315,7 +321,7 @@ class TestMultipartStateMachine(TestHttpBase):
 
         self.feed_body_part(body_part)
 
-        with self.assertRaises(self.http_module.InvalidContentLength):
+        with self.assertRaises(InvalidContentLength):
             while self.engine.state is not None:
                 self.engine.state(self.rx)
 

@@ -69,7 +69,7 @@ The following mapping between extensions and content types is maintained by the 
 | .log | text/plain |
 | .png | image/png |
 | .raw | application/octet-stream |
-| .svg | image/svg |
+| .svg | image/svg+xml |
 | .txt | text/plain |
 | .webp | image/webp |
 | unknown extensions | application/octet-stream |

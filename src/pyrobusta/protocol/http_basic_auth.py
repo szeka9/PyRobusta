@@ -10,21 +10,16 @@ and applies the basic authentication scheme with CSRF protection.
 import binascii
 import os
 
-from pyrobusta.protocol import http_session
-from pyrobusta.protocol import http_csrf
+from pyrobusta.protocol.http_cookie import (
+    create_session_cookie,
+    verify_session_cookie,
+    create_csrf_cookie,
+    verify_csrf_cookie,
+)
 from pyrobusta.utils.patch import add_method
 from pyrobusta.utils.crypto import (
     constant_time_equal,
     pbkdf2_sha256,
-)
-from pyrobusta.utils.config import (
-    get_config,
-    CONF_HTTP_AUTH,
-    CONF_HTTP_BROWSER_SECURITY,
-    CONF_HTTP_INSECURE_AUTH,
-    CONF_HTTP_SESSIONS,
-    CONF_HTTP_SESSION_TTL_SEC,
-    CONF_TLS,
 )
 from pyrobusta.utils.iam import (
     NO_POLICY,
@@ -41,11 +36,15 @@ _DUMMY_ITER = 5000
 _DUMMY_SALT = os.urandom(16)
 _DUMMY_HASH = pbkdf2_sha256(os.urandom(20), _DUMMY_SALT, _DUMMY_ITER)
 
+_BROWSER_SECURITY = None
+_SESSIONS = None
+_SESSION_TTL_SEC = None
+
 
 def _auth_user(self, auth_provider: IAMDatabase, sessions=False):
     # Session validation
     if sessions and (session_cookie := self.get_cookie("session")):
-        if credentials := http_session.verify_cookie(
+        if credentials := verify_session_cookie(
             session_cookie.encode("ascii"), auth_provider
         ):
             username, user_info = credentials
@@ -133,13 +132,13 @@ def _handle_auth_header_st(self, _):
     username, user_info, is_session = credentials
 
     # CSRF validation, cookie setting
-    if get_config(CONF_HTTP_BROWSER_SECURITY) and not is_session:
+    if _BROWSER_SECURITY and not is_session:
         if self.method not in (
             self.GET,
             self.HEAD,
             self.OPTIONS,
         ):
-            if not http_csrf.verify_cookie(
+            if not verify_csrf_cookie(
                 self.get_cookie("csrf-token", "").encode("ascii"),
                 self.headers.get("x-csrf-token", "").encode("ascii"),
                 user_info[USER_SECRET],
@@ -148,13 +147,13 @@ def _handle_auth_header_st(self, _):
                 return
         elif self.method in (self.GET, self.HEAD):
             if self.get_cookie("csrf-token") is None:
-                cookie = http_csrf.create_cookie(user_info[USER_SECRET])
+                cookie = create_csrf_cookie(user_info[USER_SECRET], self.TLS)
                 self.set_response_header(b"set-cookie", cookie, override=False)
 
     # Session creation
-    if not is_session and get_config(CONF_HTTP_SESSIONS):
-        session_cookie = http_session.create_cookie(
-            username, user_info[USER_SECRET], get_config(CONF_HTTP_SESSION_TTL_SEC)
+    if not is_session and _SESSIONS:
+        session_cookie = create_session_cookie(
+            username, user_info[USER_SECRET], _SESSION_TTL_SEC, self.TLS
         )
         self.set_response_header(b"set-cookie", session_cookie, override=False)
 
@@ -175,21 +174,21 @@ def _handle_auth_header_st(self, _):
     self.state = self._route_request_st
 
 
-def apply_patches(cls, auth_provider: IAMDatabase, sessions=False):
+def apply_patches(cls, config, auth_provider: IAMDatabase):
     """
     Apply patches to class attributes for HTTP basic authentication.
     """
     if auth_provider is None:
         raise ValueError
 
-    if not get_config(CONF_TLS) and get_config(CONF_HTTP_AUTH):
+    if not config.tls and config.http_auth:
         insecure_auth_msg = "authentication turned on without TLS"
-        if get_config(CONF_HTTP_INSECURE_AUTH):
+        if config.http_insecure_auth:
             logging.warning(insecure_auth_msg)
         else:
             raise ValueError(insecure_auth_msg)
 
-    if not get_config(CONF_HTTP_BROWSER_SECURITY):
+    if not config.http_browser_security:
         logging.warning(
             "CSRF protection is disabled; "
             "authenticated clients are vulnerable to CSRF attacks"
@@ -198,10 +197,18 @@ def apply_patches(cls, auth_provider: IAMDatabase, sessions=False):
     def get_policy(route: str):
         return auth_provider.get_access_policies(route)
 
+    allow_sessions = config.http_sessions
+
     def _authenticate(self):
-        return _auth_user(self, auth_provider, sessions)
+        return _auth_user(self, auth_provider, allow_sessions)
 
     add_method(cls, _handle_auth_st)
     add_method(cls, _handle_auth_header_st)
     add_method(cls, get_policy, "static")
     add_method(cls, _authenticate)
+
+    # pylint: disable=W0603
+    global _BROWSER_SECURITY, _SESSIONS, _SESSION_TTL_SEC
+    _BROWSER_SECURITY = config.http_browser_security
+    _SESSIONS = config.http_sessions
+    _SESSION_TTL_SEC = config.http_session_ttl_sec

@@ -1,23 +1,28 @@
 import subprocess
 import tempfile
 import socket
+import os
 import time
 
 
 class Device:
     def __init__(
-        self, device_id: str, device_ip: str, device_name: str, base_config: dict
+        self,
+        device_id: str,
+        device_ip: str,
+        device_name: str,
+        base_config: dict,
+        boot_script: str,
     ):
         self.device_id = device_id
         self.device_ip = device_ip
         self.device_name = device_name
         self.base_config = base_config
+        self.boot_script = boot_script
         self.current_config = {}
+        self.server_process = None
 
         self.validate_device_ip()
-
-    def apply_base_config(self):
-        self.apply_config(self.base_config)
 
     def apply_config(self, config: dict):
         """
@@ -58,8 +63,20 @@ class Device:
                 ["mpremote", self.device_id, "cp", tmp.name, ":/pyrobusta.env"],
                 check=True,
             )
-            subprocess.run(["mpremote", self.device_id, "reset"], check=True)
-            time.sleep(5)  # Allow the device to initialize
+
+        if config["http_auth"]:
+            self.write_file(
+                "/pyrobusta.passwd",
+                "alice:role-1:mKmmf5wBEtlkty7LEcphieciOd3Pl0yY7r3WmDiZnzg=:XTQgg3Has79lDTNYVW+aPw=="
+                ":5000:PBKDF2-HMAC-SHA256:v1.2.3\n",
+            )
+            self.write_file(
+                "/pyrobusta.roles",
+                "/\n/**\n*: role-1\n",
+            )
+
+        subprocess.run(["mpremote", self.device_id, "reset"], check=True)
+        time.sleep(5)  # Allow the device to initialize
 
     def get_mem_params(self):
         """
@@ -133,3 +150,55 @@ class Device:
             stdout=subprocess.PIPE,
             text=True,
         ).stdout
+
+    def write_file(self, file_path, content):
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as file:
+            file.write(content)
+            file.flush()
+
+            subprocess.run(
+                ["mpremote", self.device_id, "cp", file.name, f":{file_path}"],
+                check=True,
+                stdout=subprocess.DEVNULL,
+            )
+        return f"{file_path}"
+
+    def terminate(self):
+        if self.server_process is not None:
+            self.server_process.terminate()
+            try:
+                self.server_process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self.server_process.kill()
+                self.server_process.wait()
+
+            self.server_process = None
+
+    def run(self):
+        app_script = ""
+
+        with open("app_base.py", encoding="utf-8") as app:
+            app_script += "\n" + app.read()
+
+        if self.current_config["http_multipart"]:
+            with open("app_multipart.py", encoding="utf-8") as o:
+                app_script += "\n" + o.read()
+
+        with open(self.boot_script, encoding="utf-8") as b:
+            content = b.read().replace("# <PLACEHOLDER>", app_script)
+
+        fd, boot_path = tempfile.mkstemp(suffix=".py")
+        os.close(fd)
+
+        with open(boot_path, "w", encoding="utf-8") as boot:
+            boot.write(content)
+
+        # pylint: disable=R1732
+        self.server_process = subprocess.Popen(
+            ["mpremote", self.device_id, "run", boot_path],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+
+        self.boot_path = boot_path

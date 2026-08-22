@@ -1,15 +1,18 @@
-import asyncio
+import os
+import sys
 
-from env_utils import (
-    garbage_collect,
+from server import Server, LocalServer, DeviceServer
+from utils import (
     test_assert,
     send_request,
-    setup_config,
-    start_server,
 )
 
-from pyrobusta.protocol import http_multipart
+BOOT_SCRIPT = """
+import asyncio
+import machine
+
 from pyrobusta.protocol.http import HttpEngine
+from pyrobusta import application
 
 
 def multipart_response(num_responses):
@@ -24,72 +27,73 @@ def multipart_response(num_responses):
 
     return response_generator
 
-
 @HttpEngine.route("/test/multipart", "GET")
 def multipart_handler(http_ctx, _):
     part_count = int(http_ctx.headers["x-part-count"])
     return "multipart/form-data", multipart_response(part_count)
 
+async def main():
+    await application.run()
+    while True:
+        await asyncio.sleep(1)
 
-@garbage_collect
-async def test_multipart_response():
-    setup_config(http_multipart_enabled=True)
-    server = await start_server()
-
-    # Test: 1 part
-    plain_response = await send_request(
-        b"GET /test/multipart HTTP/1.1\r\n"
-        b"Host: localhost\r\n"
-        b"Content-Length: 0\r\n"
-        b"Connection: close\r\n"
-        b"X-Part-Count: 1\r\n\r\n"
-    )
-
-    test_assert(
-        f"multipart response contains 1 part",
-        b"Response 1" in plain_response,
-        True,
-    )
-
-    # Test: 10 parts
-    plain_response = await send_request(
-        b"GET /test/multipart HTTP/1.1\r\n"
-        b"Host: localhost\r\n"
-        b"Content-Length: 0\r\n"
-        b"Connection: close\r\n"
-        b"X-Part-Count: 10\r\n\r\n"
-    )
-
-    test_assert(
-        f"multipart response contains 10 parts",
-        [b"Response %s" % i in plain_response for i in range(1, 11)],
-        [True] * 10,
-    )
-
-    await server.terminate()
+asyncio.run(main())
+"""
 
 
-def test_registration():
-    test_assert(
-        "multipart route registration",
-        multipart_handler,
-        HttpEngine._get_handler(b"/test/multipart", b"GET"),
-    )
+def test_multipart_response(srv: Server):
+    srv.setup_config(http_multipart=True)
+    srv.start(BOOT_SCRIPT)
+
+    try:
+        # Test: 1 part
+        plain_response = send_request(
+            srv,
+            b"GET /test/multipart HTTP/1.1\r\n"
+            b"Host: localhost\r\n"
+            b"Content-Length: 0\r\n"
+            b"Connection: close\r\n"
+            b"X-Part-Count: 1\r\n\r\n",
+        )
+
+        test_assert(
+            f"multipart response contains 1 part",
+            b"Response 1" in plain_response,
+            True,
+        )
+
+        # Test: 10 parts
+        plain_response = send_request(
+            srv,
+            b"GET /test/multipart HTTP/1.1\r\n"
+            b"Host: localhost\r\n"
+            b"Content-Length: 0\r\n"
+            b"Connection: close\r\n"
+            b"X-Part-Count: 10\r\n\r\n",
+        )
+
+        test_assert(
+            f"multipart response contains 10 parts",
+            [b"Response %d" % i in plain_response for i in range(1, 11)],
+            [True] * 10,
+        )
+    finally:
+        srv.terminate()
 
 
-def test_multipart_patches():
-    setup_config(http_multipart_enabled=True)
-    test_assert(
-        "multipart state machine patches",
-        http_multipart._start_multipart_parser_st,
-        HttpEngine._start_multipart_parser_st,
-    )
+def test_main(srv: Server):
+    test_multipart_response(srv)
 
 
-async def test_main():
-    test_registration()
-    test_multipart_patches()
-    await test_multipart_response()
+if __name__ == "__main__":
+    server_ip = sys.argv[1]
+    server_id = sys.argv[
+        2
+    ]  # mpremote id e.g. a1 (/dev/ttyACM1), or 'local' for the unix port
 
+    if server_id == "local":
+        srv = LocalServer(server_ip, os.getcwd(), os.getenv("MICROPYTHON"))
+    else:
+        srv = DeviceServer(server_ip, server_id)
 
-asyncio.run(test_main())
+    test_main(srv)

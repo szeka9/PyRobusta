@@ -36,15 +36,16 @@ from device import Device
 TEST_DURATION_MINUTES = 60
 
 base_config = {
+    "tls": False,
     "socket_max_con": 4,
     "http_mem_cap": 1.0,
-    "http_multipart": True,
-    "http_files_api": True,
-    "tls": False,
     "http_port": 8080,
     "https_port": 4443,
-    "log_level": "info",
-    "http_served_paths": "/lib/pyrobusta /www",
+    "http_multipart": True,
+    "http_files_api": True,
+    "http_browser_security": True,
+    "http_auth": "",
+    "http_sessions": False,
 }
 
 
@@ -53,9 +54,10 @@ def test_config_factory(max_con):
         test_config = {
             "tls": [
                 {
-                    "http_mem_cap": 1.0,
                     "tls": True,
                     "socket_max_con": max_con,
+                    "http_auth": "basic",
+                    "http_sessions": True,
                 }
             ],
         }
@@ -83,7 +85,7 @@ def main():
     else:
         max_con = 4
 
-    dev = Device(device_id, device_ip, device_name, base_config)
+    dev = Device(device_id, device_ip, device_name, base_config, "http_soak/boot.py")
 
     run_test(
         output_path,

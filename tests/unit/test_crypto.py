@@ -3,8 +3,13 @@ import unittest
 import hashlib
 import hmac
 import random
+import sys
 
-from tests.unit.utils import load_module
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
+
+from pyrobusta.utils import crypto
 
 
 class TestCryptoHmacSha256(unittest.TestCase):
@@ -15,9 +20,6 @@ class TestCryptoHmacSha256(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.config = {}
-
-    def setUp(self):
-        self.crypto_module = load_module("pyrobusta/utils/crypto.py")
 
     def test_hmac_sha256_valid(self):
         for test_vector in (
@@ -78,7 +80,7 @@ class TestCryptoHmacSha256(unittest.TestCase):
             else:
                 key, msg, expected, truncate = test_vector
 
-            hs = self.crypto_module.HmacSha256(key)
+            hs = crypto.HmacSha256(key)
             actual = hs.digest(msg)
             reference = hmac.new(key, msg, hashlib.sha256).digest()
 
@@ -98,9 +100,6 @@ class TestCryptoPbkdf2(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.config = {}
-
-    def setUp(self):
-        self.crypto_module = load_module("pyrobusta/utils/crypto.py")
 
     def test_pbkdf2_sha256_rfc(self):
         for password, salt, iterations, dklen, expected in (
@@ -147,7 +146,7 @@ class TestCryptoPbkdf2(unittest.TestCase):
                 iterations,
                 dklen,
             )
-            actual = self.crypto_module.pbkdf2_sha256(
+            actual = crypto.pbkdf2_sha256(
                 password,
                 salt,
                 iterations,
@@ -170,7 +169,7 @@ class TestCryptoPbkdf2(unittest.TestCase):
                 iterations,
                 dklen,
             )
-            actual = self.crypto_module.pbkdf2_sha256(
+            actual = crypto.pbkdf2_sha256(
                 password,
                 salt,
                 iterations,
@@ -187,7 +186,7 @@ class TestCryptoPbkdf2(unittest.TestCase):
         ):
             password, salt, iterations, dklen = test_vector
             with self.assertRaises(ValueError):
-                self.crypto_module.pbkdf2_sha256(
+                crypto.pbkdf2_sha256(
                     password,
                     salt,
                     iterations,
@@ -212,7 +211,7 @@ class TestCryptoPbkdf2(unittest.TestCase):
                 dklen,
             )
 
-            actual = self.crypto_module.pbkdf2_sha256(
+            actual = crypto.pbkdf2_sha256(
                 password,
                 salt,
                 iterations,
@@ -235,7 +234,7 @@ class TestCryptoPbkdf2(unittest.TestCase):
                 dklen,
             )
 
-            actual = self.crypto_module.pbkdf2_sha256(
+            actual = crypto.pbkdf2_sha256(
                 password,
                 salt,
                 iterations,

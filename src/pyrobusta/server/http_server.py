@@ -6,24 +6,10 @@ from gc import collect, mem_free, mem_alloc
 from asyncio import sleep_ms, start_server  # pylint: disable=E1101
 from time import ticks_ms, ticks_diff
 
-from pyrobusta.protocol import http
+from pyrobusta.protocol.http import HttpEngine
 from pyrobusta.bindings.http_connection import HttpConnection
 from pyrobusta.stream.buffer import MemoryPool, SlidingBuffer
-from pyrobusta.utils.iam import IAMDatabase
-from pyrobusta.utils.config import (
-    get_config,
-    CONF_HTTP_PORT,
-    CONF_HTTPS_PORT,
-    CONF_HTTP_MEM_CAP,
-    CONF_HTTP_AUTH,
-    CONF_TLS,
-    CONF_TLS_CERT_FILE,
-    CONF_TLS_KEY_FILE,
-    CONF_SOCKET_MAX_CON,
-    CONF_PASSWD_FILE,
-    CONF_ROLES_FILE,
-)
-from pyrobusta.utils import logging
+from pyrobusta.utils.logging import error, warning, info, debug
 
 
 class HttpServer:
@@ -32,26 +18,23 @@ class HttpServer:
     and managing active clients.
     """
 
-    __slots__ = ["_host", "_port", "_server", "_max_clients", "_iam_db"]
+    __slots__ = ["_server"]
 
     ACTIVE_CLIENTS = []
 
     # ---------------
     # Server settings
     # ---------------
+
     CON_ACCEPT_TIMEOUT_MS = 5000  # Timeout value for accepting new connection
     CON_ACCEPT_SLEEP_MS = (
         100  # Duration of sleep between attempts to accept new connection
     )
-    LISTEN_PORT_HTTP = get_config(CONF_HTTP_PORT)
-    LISTEN_PORT_HTTPS = get_config(CONF_HTTPS_PORT)
-    CON_TIMEOUT_S = 30
 
     # -----------------------------------------
     # Constants for controlled memory footprint
     # -----------------------------------------
 
-    MEM_CAP = get_config(CONF_HTTP_MEM_CAP)  # Default memory cap (percentage / 100)
     SEND_BUF_MIN_BYTES = 512  # Minimum buffer size for responses
     SEND_BUF_MAX_BYTES = 4096  # Max buffer size for responses
     RECV_BUF_MIN_BYTES = 512  # Minimum buffer size for requests
@@ -66,19 +49,20 @@ class HttpServer:
     SEND_POOL = None
 
     @classmethod
-    def _init_pools(cls, max_clients):
+    def _init_pools(cls, max_clients, mem_cap):
         """
         Initialize pool of buffers for sending/receiving based on different profiles.
         :param max_clients: maximum number of HTTP clients
+        :param mem_cap: fraction of heap reserved for stream buffers
         """
         mem_available = mem_free() + mem_alloc()
         con_limit = max_clients
-        usable = int(cls.MEM_CAP * mem_available)
+        usable = int(mem_cap * mem_available)
         is_low_memory = (usable / con_limit) < (
             cls.RECV_BUF_MAX_BYTES + cls.SEND_BUF_MAX_BYTES + cls.CON_OVERHEAD_BYTES
         )
         if is_low_memory:
-            logging.warning("%s: low-memory mode with reduced buffer size", __name__)
+            warning("%s: low-memory mode with reduced buffer size", __name__)
         recv_size = cls.RECV_BUF_MIN_BYTES if is_low_memory else cls.RECV_BUF_MAX_BYTES
         send_size = cls.SEND_BUF_MIN_BYTES if is_low_memory else cls.SEND_BUF_MAX_BYTES
         per_con = recv_size + send_size + cls.CON_OVERHEAD_BYTES
@@ -86,12 +70,12 @@ class HttpServer:
             raise MemoryError(
                 (
                     f"Insufficient memory: {mem_available // 1024} KB "
-                    f"at {cls.MEM_CAP*100}% cap, "
+                    f"at {mem_cap*100}% cap, "
                     f"at least {per_con // 1024} KB required"
                 )
             )
         con_limit = min(usable // per_con, con_limit)
-        logging.info("%s: %s connection(s) allowed", __name__, con_limit)
+        info("%s: %s connection(s) allowed", __name__, con_limit)
         cls.RECV_POOL = MemoryPool(recv_size, con_limit, wrapper=SlidingBuffer)
         cls.SEND_POOL = MemoryPool(send_size, con_limit, wrapper=SlidingBuffer)
 
@@ -100,15 +84,7 @@ class HttpServer:
     # ----------------
 
     def __init__(self):
-        self._host = "0.0.0.0"
-        self._port = (
-            HttpServer.LISTEN_PORT_HTTPS
-            if get_config(CONF_TLS)
-            else HttpServer.LISTEN_PORT_HTTP
-        )
         self._server = None
-        self._max_clients = 0
-        self._iam_db = None
 
     async def _reserve_buffers(self):
         """
@@ -142,7 +118,7 @@ class HttpServer:
             recv_buf, send_buf = await self._reserve_buffers()
 
             if recv_buf is None or send_buf is None:
-                logging.debug(
+                debug(
                     "%s: connection from %s rejected (server at capacity)",
                     __name__,
                     writer.get_extra_info("peername")[0],
@@ -152,12 +128,12 @@ class HttpServer:
                 return
 
             client = HttpConnection(reader, writer, recv_buf, send_buf)
-            logging.debug("%s: accept client=[%s]", __name__, client.id)
+            debug("%s: accept client=[%s]", __name__, client.id)
             self.ACTIVE_CLIENTS.append(client)
             async with client:
                 await client.run()
         except Exception as e:  # pylint: disable=W0718
-            logging.warning(
+            warning(
                 "%s: client=[%s] error=[%s]",
                 __name__,
                 writer.get_extra_info("peername")[0],
@@ -174,53 +150,36 @@ class HttpServer:
                 self.ACTIVE_CLIENTS.remove(client)
             collect()
 
-    async def start_socket_server(self):
+    async def start_socket_server(self, host, port, max_clients, mem_cap, ssl_ctx=None):
         """
         Start asyncio socket server on the specified port.
         """
+        if self._server is not None:
+            raise RuntimeError("Socket server already started")
+
         try:
             collect()
-            if get_config(CONF_HTTP_AUTH):
-                self._iam_db = IAMDatabase(
-                    get_config(CONF_PASSWD_FILE), get_config(CONF_ROLES_FILE)
-                )
-                if not self._iam_db.load():
-                    raise RuntimeError("Unable to initialize IAM")
-
-            http.enable_optional_features(auth_provider=self._iam_db)
-            logging.debug("%s: registered routes: %s", __name__, http.HttpEngine.ROUTES)
-            self._max_clients = get_config(CONF_SOCKET_MAX_CON)
-            self._init_pools(self._max_clients)
-            ssl_ctx = None
-
-            if get_config(CONF_TLS):
-                import ssl
-
-                ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-                ssl_ctx.load_cert_chain(
-                    get_config(CONF_TLS_CERT_FILE),
-                    get_config(CONF_TLS_KEY_FILE),
-                )
-
+            debug("%s: registered routes: %s", __name__, HttpEngine.ROUTES)
+            self._init_pools(max_clients, mem_cap)
             self._server = await start_server(
                 self._accept_socket,
-                self._host,
-                self._port,
-                backlog=max(1, self._max_clients),
+                host,
+                port,
+                backlog=max(1, max_clients),
                 ssl=ssl_ctx,
             )
-            logging.info("%s: started", __name__)
+            info("%s: started", __name__)
         except MemoryError as e:
-            logging.error("%s: allocation error=[%s]", __name__, e)
+            error("%s: allocation error=[%s]", __name__, e)
 
     async def terminate(self):
         """
         Terminate HTTP server and drop clients.
         """
-        logging.info("%s: terminated", __name__)
+        info("%s: terminated", __name__)
         while self.ACTIVE_CLIENTS:
             client = self.ACTIVE_CLIENTS[0]
-            logging.debug("%s: client=[%s] dropped", __name__, client.id)
+            debug("%s: client=[%s] dropped", __name__, client.id)
             self.ACTIVE_CLIENTS.remove(client)
             await client.close()
         if self._server:

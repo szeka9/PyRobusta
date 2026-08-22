@@ -9,14 +9,12 @@ def add_method(cls, func: callable, method_type="instance"):
     """
     Helper to patch/extend classes with additional methods and states.
     :param func: function to add
-    :param method_type: type of the method (instance, static, class)
+    :param method_type: type of the method (instance, static)
     """
     if method_type == "instance":
         setattr(cls, func.__name__, func)
     elif method_type == "static":
         setattr(cls, func.__name__, staticmethod(func))
-    elif method_type == "class":
-        setattr(cls, func.__name__, classmethod(func))
     else:
         raise ValueError("Invalid type")
 
@@ -28,7 +26,7 @@ def add_property(cls, getter: callable, setter: callable = None):
     setattr(cls, getter.__name__, property(getter, setter))
 
 
-def patch_extra_property(cls, name):
+def patch_extra_property(cls, name, default_value=None):
     """
     Add a property to 'cls' that stores its value in the instance's
     '_extras' dictionary. Intended for '__slots__' classes that cannot
@@ -36,7 +34,9 @@ def patch_extra_property(cls, name):
     """
 
     def getter(self):
-        return self._extras.get(name) if self._extras else None
+        if not self._extras:
+            return default_value
+        return self._extras.get(name, default_value) if self._extras else None
 
     def setter(self, value):
         if self._extras is None:

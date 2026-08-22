@@ -294,7 +294,7 @@ test-unix: stage-test tls-cert
 		echo "\n==================================="; \
 		echo "Running $$test"; \
 		echo "==================================="; \
-		MICROPYPATH=":.frozen:lib" ../$(MICROPYTHON) $$(basename $$test) || exit 1; \
+		MICROPYTHON="../$(MICROPYTHON)" python3 $$(basename $$test) 127.0.0.1 local || exit 1; \
 	done
 
 # -----------------------------
@@ -303,13 +303,12 @@ test-unix: stage-test tls-cert
 .PHONY: test-device
 test-device: stage-test #clean-device upload
 	@mpremote $(DEVICE) soft-reset
-	@mpremote $(DEVICE) cp $(TEST_RUNTIME)/env_utils.py :/env_utils.py
 	@cd $(TEST_RUNTIME); \
 	for test in test_*.py; do \
 		echo "\n==================================="; \
 		echo "Running $$test"; \
 		echo "==================================="; \
-		mpremote $(DEVICE) run $$(basename $$test) || exit 1; \
+		python3 $$(basename $$test) "$(DEVICE_IP)" "$(DEVICE)" || exit 1; \
 	done
 	@mpremote $(DEVICE) reset
 
@@ -323,9 +322,6 @@ test-device: stage-test #clean-device upload
 .PHONY: perf-test-http-soak
 perf-test-http-soak:
 	@mpremote $(DEVICE) soft-reset
-	mpremote $(DEVICE) cp $(PT_DIR)/app_base.py :app_base.py
-	mpremote $(DEVICE) cp $(PT_DIR)/app_multipart.py :app_multipart.py
-	mpremote $(DEVICE) cp $(PT_DIR)/http_soak/boot.py :boot.py
 	cd $(PT_DIR) && python -m http_soak.test \
 		"$(DEVICE)" "$(DEVICE_IP)" "$(DEVICE_NAME)" \
 		"$(PROJECT_ROOT)/$(DOCS_DIR)/soak" "$(PT_TEST_ID)"
@@ -336,9 +332,6 @@ perf-test-http-soak:
 .PHONY: perf-test-http-dimensioning
 perf-test-http-dimensioning:
 	@mpremote $(DEVICE) soft-reset
-	mpremote $(DEVICE) cp $(PT_DIR)/app_base.py :app_base.py
-	mpremote $(DEVICE) cp $(PT_DIR)/app_multipart.py :app_multipart.py
-	mpremote $(DEVICE) cp $(PT_DIR)/http_dimensioning/boot.py :boot.py
 	cd $(PT_DIR) && python -m http_dimensioning.test \
 		"$(DEVICE)" "$(DEVICE_IP)" "$(DEVICE_NAME)" \
 		"$(PROJECT_ROOT)/$(DOCS_DIR)/dimensioning" "$(PT_TEST_ID)"
