@@ -101,7 +101,7 @@ class HttpEngine:
         b"png",
         b"image/png",
         b"svg",
-        b"image/svg",
+        b"image/svg+xml",
         b"gif",
         b"image/gif",
         b"webp",
