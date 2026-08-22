@@ -8,7 +8,7 @@ from http_base import TestHttpBase
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
 
-from pyrobusta.protocol import http_session, http_csrf
+from pyrobusta.protocol import http_cookie
 from pyrobusta.utils import crypto
 from pyrobusta.utils import iam
 
@@ -295,14 +295,14 @@ class TestBasicAuthCSRFStateMachine(TestHttpBase):
 
         user_secret = self.iam_db.get_user_info("alice")[-1]
         csrf_key = crypto.HmacSha256(user_secret)
-        csrf_secret = csrf_key.digest(http_csrf._CSRF_INFO)
+        csrf_secret = csrf_key.digest(http_cookie._CSRF_INFO)
         cookie_name, csrf_token = (
             self.engine._lookup(self.engine.resp_headers, b"set-cookie")
             .split(b";")[0]
             .split(b"=")
         )
         is_token_valid = crypto.verify_signed_token(
-            csrf_secret, csrf_token, http_csrf._NONCE_SIZE
+            csrf_secret, csrf_token, http_cookie._NONCE_SIZE
         )
 
         self.assertEqual(cookie_name, b"csrf-token")
@@ -319,7 +319,7 @@ class TestBasicAuthCSRFStateMachine(TestHttpBase):
 
         user_secret = self.iam_db.get_user_info("alice")[-1]
         csrf_token = crypto.create_signed_token(
-            user_secret, os.urandom(http_csrf._NONCE_SIZE)
+            user_secret, os.urandom(http_cookie._NONCE_SIZE)
         )
         self.engine.headers["cookie"] = "csrf-token=" + csrf_token.decode("ascii")
         self.engine.headers["x-csrf-token"] = csrf_token.decode("ascii")
@@ -341,9 +341,9 @@ class TestBasicAuthCSRFStateMachine(TestHttpBase):
 
         user_secret = self.iam_db.get_user_info("alice")[-1]
         csrf_key = crypto.HmacSha256(user_secret)
-        csrf_secret = csrf_key.digest(http_csrf._CSRF_INFO)
+        csrf_secret = csrf_key.digest(http_cookie._CSRF_INFO)
         csrf_token = crypto.create_signed_token(
-            csrf_secret, os.urandom(http_csrf._NONCE_SIZE)
+            csrf_secret, os.urandom(http_cookie._NONCE_SIZE)
         )
         self.engine.headers["cookie"] = "csrf-token=" + csrf_token.decode("ascii")
         self.engine.headers["x-csrf-token"] = csrf_token.decode("ascii")
@@ -360,9 +360,9 @@ class TestBasicAuthCSRFStateMachine(TestHttpBase):
         )
         self.engine.method = b"POST"
 
-        forged_user_secret = os.urandom(http_csrf._NONCE_SIZE)
+        forged_user_secret = os.urandom(http_cookie._NONCE_SIZE)
         csrf_token = crypto.create_signed_token(
-            forged_user_secret, os.urandom(http_csrf._NONCE_SIZE)
+            forged_user_secret, os.urandom(http_cookie._NONCE_SIZE)
         )
         self.engine.headers["cookie"] = "csrf-token=" + csrf_token.decode("ascii")
         self.engine.headers["x-csrf-token"] = csrf_token.decode("ascii")
@@ -393,7 +393,7 @@ class TestBasicAuthCSRFStateMachine(TestHttpBase):
 
         user_secret = self.iam_db.get_user_info("alice")[-1]
         csrf_token = crypto.create_signed_token(
-            user_secret, os.urandom(http_csrf._NONCE_SIZE)
+            user_secret, os.urandom(http_cookie._NONCE_SIZE)
         )
         self.engine.headers["x-csrf-token"] = csrf_token.decode("ascii")
 
@@ -411,7 +411,7 @@ class TestBasicAuthCSRFStateMachine(TestHttpBase):
 
         user_secret = self.iam_db.get_user_info("alice")[-1]
         csrf_token = crypto.create_signed_token(
-            user_secret, os.urandom(http_csrf._NONCE_SIZE)
+            user_secret, os.urandom(http_cookie._NONCE_SIZE)
         )
         self.engine.headers["cookie"] = "csrf-token=" + csrf_token.decode("ascii")
 
@@ -469,7 +469,7 @@ class TestBasicAuthSessionStateMachine(TestHttpBase):
 
     def create_session_cookie(self, username, ttl=None):
         user_secret = self.iam_db.get_user_info(username)[-1]
-        session_cookie = http_session.create_session_cookie(
+        session_cookie = http_cookie.create_session_cookie(
             username,
             user_secret,
             ttl if ttl is not None else self.base_config["http_session_ttl_sec"],
@@ -487,7 +487,7 @@ class TestBasicAuthSessionStateMachine(TestHttpBase):
         self.engine.state(self.rx)
 
         session_cookie = self.get_cookie_data("session")
-        credentials = http_session.verify_session_cookie(session_cookie, self.iam_db)
+        credentials = http_cookie.verify_session_cookie(session_cookie, self.iam_db)
 
         self.assertNotEqual(credentials, None)
         self.assertEqual(self.engine.state, self.engine._route_request_st)
@@ -549,7 +549,7 @@ class TestBasicAuthSessionStateMachine(TestHttpBase):
         # Create a valid session cookie for a non-existent user
         fake_user_secret = os.urandom(iam.RUNTIME_SECRET_SIZE)
         session_cookie = (
-            http_session.create_session_cookie(
+            http_cookie.create_session_cookie(
                 "nonexistentuser",
                 fake_user_secret,
                 self.base_config["http_session_ttl_sec"],
@@ -579,7 +579,7 @@ class TestBasicAuthSessionStateMachine(TestHttpBase):
         self.engine.state(self.rx)
 
         session_cookie = self.get_cookie_data("session")
-        credentials = http_session.verify_session_cookie(session_cookie, self.iam_db)
+        credentials = http_cookie.verify_session_cookie(session_cookie, self.iam_db)
 
         self.assertNotEqual(credentials, None)
         self.assertNotEqual(session_cookie, expired_session_cookie)

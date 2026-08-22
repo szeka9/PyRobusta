@@ -9,7 +9,6 @@ from os import stat
 from pyrobusta import WORKING_DIR
 from pyrobusta.stream.buffer import BufferOverflowError
 from pyrobusta.utils.lexpath import is_child_path_of, normalize_path, iterate_segments
-from pyrobusta.utils.patch import patch_extra_property
 from pyrobusta.protocol import (
     InvalidHeaders,
     MalformedRequest,
@@ -134,7 +133,11 @@ class HttpEngine:
     METHODS = (DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT)
     SUPPORTED_VERSIONS = (b"HTTP/1.1", b"HTTP/1.0")
     SESSION_COUNTER = 0
+
+    SERVED_PATHS = None
+    PROTECTED_PATHS = None
     USER_DIRECTORY = None
+    TLS = False
     POST_HOOKS = []
 
     @classmethod
@@ -836,8 +839,8 @@ class HttpEngine:
         Returns true if a normalized path is configured to be served.
         """
         return (
-            is_child_path_of(norm_path, self.served_paths)  # pylint: disable=E1101
-            and not norm_path in self.protected_paths  # pylint: disable=E1101
+            is_child_path_of(norm_path, self.SERVED_PATHS)  # pylint: disable=E1101
+            and not norm_path in self.PROTECTED_PATHS  # pylint: disable=E1101
         )
 
     def _fs_retrieve_st(self, _):
@@ -926,12 +929,12 @@ def apply_patches(config, *_):
     """
     Apply patches to class attributes.
     """
+    setattr(HttpEngine, "TLS", config.tls)
     setattr(HttpEngine, "USER_DIRECTORY", WORKING_DIR + "/www/user_data")
-    patch_extra_property(HttpEngine, "tls", config.tls)
-    patch_extra_property(HttpEngine, "served_paths", config.http_served_paths)
-    patch_extra_property(
+    setattr(HttpEngine, "SERVED_PATHS", config.http_served_paths)
+    setattr(
         HttpEngine,
-        "protected_paths",
+        "PROTECTED_PATHS",
         (
             config.path,
             config.passwd_file,

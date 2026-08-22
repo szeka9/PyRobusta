@@ -10,9 +10,13 @@ and applies the basic authentication scheme with CSRF protection.
 import binascii
 import os
 
-from pyrobusta.protocol.http_session import create_session_cookie, verify_session_cookie
-from pyrobusta.protocol.http_csrf import create_csrf_cookie, verify_csrf_cookie
-from pyrobusta.utils.patch import add_method, patch_extra_property
+from pyrobusta.protocol.http_cookie import (
+    create_session_cookie,
+    verify_session_cookie,
+    create_csrf_cookie,
+    verify_csrf_cookie,
+)
+from pyrobusta.utils.patch import add_method
 from pyrobusta.utils.crypto import (
     constant_time_equal,
     pbkdf2_sha256,
@@ -31,6 +35,10 @@ from pyrobusta.utils import logging
 _DUMMY_ITER = 5000
 _DUMMY_SALT = os.urandom(16)
 _DUMMY_HASH = pbkdf2_sha256(os.urandom(20), _DUMMY_SALT, _DUMMY_ITER)
+
+_BROWSER_SECURITY = None
+_SESSIONS = None
+_SESSION_TTL_SEC = None
 
 
 def _auth_user(self, auth_provider: IAMDatabase, sessions=False):
@@ -124,7 +132,7 @@ def _handle_auth_header_st(self, _):
     username, user_info, is_session = credentials
 
     # CSRF validation, cookie setting
-    if self.browser_security and not is_session:
+    if _BROWSER_SECURITY and not is_session:
         if self.method not in (
             self.GET,
             self.HEAD,
@@ -139,13 +147,13 @@ def _handle_auth_header_st(self, _):
                 return
         elif self.method in (self.GET, self.HEAD):
             if self.get_cookie("csrf-token") is None:
-                cookie = create_csrf_cookie(user_info[USER_SECRET], self.tls)
+                cookie = create_csrf_cookie(user_info[USER_SECRET], self.TLS)
                 self.set_response_header(b"set-cookie", cookie, override=False)
 
     # Session creation
-    if not is_session and self.sessions:
+    if not is_session and _SESSIONS:
         session_cookie = create_session_cookie(
-            username, user_info[USER_SECRET], self.session_ttl_sec, self.tls
+            username, user_info[USER_SECRET], _SESSION_TTL_SEC, self.TLS
         )
         self.set_response_header(b"set-cookie", session_cookie, override=False)
 
@@ -199,6 +207,7 @@ def apply_patches(cls, config, auth_provider: IAMDatabase):
     add_method(cls, get_policy, "static")
     add_method(cls, _authenticate)
 
-    patch_extra_property(cls, "browser_security", config.http_browser_security)
-    patch_extra_property(cls, "sessions", config.http_sessions)
-    patch_extra_property(cls, "session_ttl_sec", config.http_session_ttl_sec)
+    global _BROWSER_SECURITY, _SESSIONS, _SESSION_TTL_SEC
+    _BROWSER_SECURITY = config.http_browser_security
+    _SESSIONS = config.http_sessions
+    _SESSION_TTL_SEC = config.http_session_ttl_sec
