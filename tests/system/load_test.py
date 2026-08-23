@@ -270,12 +270,13 @@ def run_test(
     print(
         generate_measurement_table(
             measurements,
-            excluded_keys={
+            {
                 "http_port",
                 "https_port",
                 "http_served_paths",
                 "http_insecure_auth",
                 "log_level",
             },
+            target_dir,
         )
     )

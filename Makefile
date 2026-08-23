@@ -351,8 +351,10 @@ perf-test-device: perf-test-http-dimensioning perf-test-http-soak
 perf-test-regenerate-plots:
 	@for type in dimensioning soak; do \
 		[ -d docs/$$type/esp32_c3 ] && \
+			echo "\n======================\nESP32-C3: $$type\n======================\n"; \
 			python3 tests/system/summary.py ESP32-C3 docs/$$type; \
 		[ -d docs/$$type/esp32_s3 ] && \
+			echo "\n======================\nESP32-S3: $$type\n======================\n"; \
 			python3 tests/system/summary.py ESP32-S3 docs/$$type; \
 	done
 
