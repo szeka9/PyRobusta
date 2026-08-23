@@ -50,7 +50,8 @@ make run-unix           # Run example application on the UNIX port of MicroPytho
 make toolchain          # Setup mpy-cross and micropython
 make build              # Cross-compile, create build artifacts
 make deploy             # Upload build artifacts to the device using mpremote
-make tls-cert           # Optional: generate self-signed certificate for the device
+make tls-ca             # Optional: regenerate the key and certificate for the CA (certificate authority)
+make tls-cert           # Optional: generate CA-signed certificate for the device
 make deploy-cert        # Optional: upload generated certificate to the device
 make deploy-app         # Deploy the selected example application using mpremote
 make run-device         # Reset the device and connect through REPL
