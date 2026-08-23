@@ -14,7 +14,7 @@ configuration API.
 * [Configuration](#configuration)
   + [Configuration Format & Deployment](#configuration-format-deployment)
   + [Parameter Description](#parameter-description)
-  + [Configuration API](#configuration-api)
+  + [Configuration Loading](#configuration-loading)
 
 ---
 
@@ -44,53 +44,54 @@ $ mpremote a0 cp pyrobusta.env :/pyrobusta.env
 | Name | Description | Default |
 | --- | --- | --- |
 | `wifi_ssid` | Name of the Wi-Fi network. When empty, Wi-Fi is not initialized by the built-in `wifi.py` module. | None |
-| `wifi_password` | Password of the Wi-Fi network. When empty, Wi-Fi is not initialized by the built-in `wifi.py` module. | None |
-| `http_port` | Port number for HTTP. | 80 |
-| `https_port` | Port number for HTTPS. | 443 |
-| `http_multipart` | Enables or disables multipart request and response processing. Enabling multipart support increases memory usage. | False |
-| `http_mem_cap` | Fraction of available heap memory reserved for stream buffers. Valid range: (0, 1]. | 0.1 |
-| `http_served_paths` | Space-separated list of filesystem paths that may be served over HTTP. | `/www` |
-| `http_files_api` | Enables or disables the file management API endpoint (`/files`), allowing upload, download, and listing of files. | False |
-| `http_auth` | Selects the type of authentication method enforced by the server. Currently, basic authentication (`basic`) is supported. | None |
-| `http_browser_security` | Enables or disables browser security features, including CSRF protection, and browser security headers (Content Security Policy, referrer policy). Disabling browser security is only recommended when using non-browser clients or during local development and testing. | True |
-| `http_insecure_auth` | Allows clients to authenticate over unsecured HTTP (without TLS). This may expose credentials or authentication tokens in transit. | False |
-| `http_sessions` | Allow the creation of session cookies after successful authentication requests. | False |
-| `http_session_ttl_sec` | Duration of validity of session cookies in seconds. | 900 |
-| `socket_max_con` | Maximum number of simultaneous socket connections. | 2 |
+| `wifi_password` | Password of the Wi-Fi network. | None |
 | `tls` | Enables or disables TLS. When enabled, `cert.der` and `key.der` must be installed at the server root. | False |
-| `tls_cert_file` | Path to the TLS certificate. | `/cert.der` |
-| `tls_key_file` | Path to the TLS private key. | `/key.der` |
+| `tls_cert_file` | Alternative path to the TLS certificate. | `/cert.der` |
+| `tls_key_file` | Alternative path to the TLS private key. | `/key.der` |
 | `passwd_file` | Path to the file containing user credentials used for authentication. | `/pyrobusta.passwd` |
 | `roles_file` | Path to the file containing RBAC role definitions used for authorization. | `/pyrobusta.roles` |
 | `log_level` | Logging level. Can be one of: `error`, `warning`, `info`, `debug`. | `info` |
+| `socket_max_con` | Maximum number of simultaneous socket connections. | 2 |
+| `http_served_paths` | Space-separated list of filesystem paths that may be served over HTTP. | `/www` |
+| `http_mem_cap` | Fraction of available heap memory reserved for stream buffers. Valid range: (0, 1]. | 0.1 |
+| `http_port` | Port number for HTTP. | 80 |
+| `https_port` | Port number for HTTPS. | 443 |
+| `http_multipart` | Enables or disables multipart request and response processing (`Content-Type: multipart/*`). | False |
+| `http_files_api` | Enables or disables the file management API endpoint (`/files`), allowing upload, download, and listing of files. | False |
+| `http_auth` | Selects the type of authentication method enforced by the server. Currently, basic authentication (`basic`) is supported. | None |
+| `http_browser_security` | Enables or disables browser security features including browser security headers (Content Security Policy, referrer policy) and CSRF protection (if authentication is enabled). Disabling browser security is only recommended when using non-browser clients or during local development and testing. | True |
+| `http_insecure_auth` | Allows clients to authenticate over unsecured HTTP (without TLS). This may expose credentials or authentication tokens in transit. | False |
+| `http_sessions` | Enables browser session cookies for authenticated clients. When enabled, successful authentication establishes a session that can be reused without resending authentication credentials. | True |
+| `http_session_ttl_sec` | Duration of validity of session cookies in seconds. | 900 |
 
-## Configuration API
+## Configuration Loading
 
-Configuration values can be accessed through the
-`pyrobusta.utils.config` module.
-Values are loaded from `pyrobusta.env` during server initialization.
-Configuration values can be retrieved using
-`get_config()` together with one of the
-predefined `CONF_*` constants.
+Configuration is represented by the `Config` class in
+`pyrobusta.utils.config`. During application initialization,
+`pyrobusta.application` creates and loads a `Config` instance from
+`pyrobusta.env`, converting values to their expected runtime types.
 
-After initialization, configuration values are retrieved from an internal cache.
-The cached values are normalized to their expected runtime types to avoid repeated
-parsing of environment strings.
+Configuration values are exposed as attributes on the `Config` instance:
 
-Configuration values are treated as immutable during runtime.
-Changes are applied only when the configuration cache is reloaded.
-The configuration cache can be reloaded by calling
-`read_config()`, which re-reads `pyrobusta.env`
-and rebuilds the internal normalized cache.
 
 ```
-from pyrobusta.utils.config import get_config, CONF_TLS
+config = Config("/pyrobusta.env")
 
-@HttpEngine.route("/tls", "GET")
-def tls_status(http_ctx, _):
-    enabled = get_config(CONF_TLS)
-    return "text/plain", f"TLS enabled: {enabled}"
+if config.tls:
+    ...
 ```
+
+The application uses the configuration to initialize and specialize the
+relevant subsystems during startup. The `Config` instance is then discarded;
+runtime components do not access configuration directly.
+
+Configuration is **immutable for the lifetime of an application**. Changes
+to `pyrobusta.env` therefore require a new application instance and, under
+normal operation, an application restart.
+
+The `pyrobusta.utils.config` module does not maintain a global configuration
+object or runtime configuration cache. It provides the `Config` definition
+and configuration-loading functionality.
 
 ---
 
