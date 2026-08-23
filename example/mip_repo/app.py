@@ -1,8 +1,9 @@
 import asyncio
 
-import pyrobusta.server.http_server as http_server
+from pyrobusta import application
 from pyrobusta.protocol.http import HttpEngine
-from pyrobusta.utils import logging, config, assets, lexpath
+from pyrobusta.utils import logging, assets, lexpath
+from pyrobusta import PYROBUSTA_VERSION
 
 
 def append_package_files(dir, package_files, host_name, protocol):
@@ -22,19 +23,9 @@ def append_package_files(dir, package_files, host_name, protocol):
 
 @HttpEngine.route("/pyrobusta/package.json", "GET")
 def self_serve_mip_package(http_ctx, _):
-    package_files = {"version": config.PYROBUSTA_VERSION, "deps": [], "urls": []}
-    tls_enabled = config.get_config(config.CONF_TLS)
+    package_files = {"version": PYROBUSTA_VERSION, "deps": [], "urls": []}
     server_addr = http_ctx.headers["host"]
-    if ":" not in server_addr:
-        port = (
-            http_server.HttpServer.LISTEN_PORT_HTTPS
-            if tls_enabled
-            else http_server.HttpServer.LISTEN_PORT_HTTP
-        )
-        if not server_addr in (80, 443):
-            server_addr += f":{port}"
-
-    protocol = "https" if tls_enabled else "http"
+    protocol = "https" if http_ctx.tls else "http"
 
     logging.debug("mip_repo addr=[%s]", server_addr)
     append_package_files("/lib/pyrobusta", package_files, server_addr, protocol)
@@ -42,8 +33,8 @@ def self_serve_mip_package(http_ctx, _):
 
 
 async def main():
-    server = http_server.HttpServer()
-    await server.start_socket_server()
+    await application.run()
+
     while True:
         await asyncio.sleep(1)
 

@@ -50,7 +50,8 @@ make run-unix           # Run example application on the UNIX port of MicroPytho
 make toolchain          # Setup mpy-cross and micropython
 make build              # Cross-compile, create build artifacts
 make deploy             # Upload build artifacts to the device using mpremote
-make tls-cert           # Optional: generate self-signed certificate for the device
+make tls-ca             # Optional: regenerate the key and certificate for the CA (certificate authority)
+make tls-cert           # Optional: generate CA-signed certificate for the device
 make deploy-cert        # Optional: upload generated certificate to the device
 make deploy-app         # Deploy the selected example application using mpremote
 make run-device         # Reset the device and connect through REPL
@@ -63,7 +64,7 @@ make APP_DIR=example/demo_app deploy-app
 ```
 
 Make targets that communicate with a device (`deploy`, `deploy-cert`, `deploy-app`, `run-device`) use the `DEVICE`
-variable, which defaults to `u0` (/dev/ttyUSB0).
+variable, which defaults to `u0` (`/dev/ttyUSB0`).
 
 Override `DEVICE` to select a different serial device, for example:
 
@@ -96,5 +97,5 @@ Performance tests must be run on a physical device. Results are exported to a di
 
 ```bash
 # Run performance tests and export results to docs/dimensioning/esp32_c3
-make DEVICE=a1 DEVICE_IP=192.168.0.100 DEVICE_NAME=ESP32-C3 perf-test-device
+make DEVICE=a1 DEVICE_IP=192.168.1.101 DEVICE_NAME=ESP32-C3 perf-test-device
 ```

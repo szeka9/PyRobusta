@@ -54,11 +54,10 @@ install_www()
 
 # Start the HTTP server
 import asyncio
-from pyrobusta.server.http_server import HttpServer
+from pyrobusta import application
 
 async def main():
-    server = HttpServer()
-    await server.start_socket_server()
+    await application.run()
     while True:
         await asyncio.sleep(1)
 
@@ -79,9 +78,10 @@ payloads, and advanced HTTP features.
 
 ```python
 import asyncio
+import machine
 from gc import mem_free, mem_alloc, collect
 
-import pyrobusta.server.http_server as http_server
+from pyrobusta import application
 from pyrobusta.protocol.http import HttpEngine
 
 @HttpEngine.route("/mem-usage", "GET")
@@ -98,12 +98,12 @@ def mem_usage(http_ctx, _):
     )
 
 async def main():
-    server = http_server.HttpServer()
-    await server.start_socket_server()
+    await application.run()
     while True:
         await asyncio.sleep(1)
 
-asyncio.run(main())
+if machine.reset_cause() != machine.SOFT_RESET:
+    asyncio.run(main())
 ```
 
 Check the [Application Development](./docs/application_development/index.md) guide for

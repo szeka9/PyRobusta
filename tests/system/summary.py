@@ -14,7 +14,9 @@ from matplotlib.ticker import FuncFormatter
 # -----------------------------------
 
 
-def generate_measurement_table(measurements: list, excluded_keys: list):
+def generate_measurement_table(
+    measurements: list, excluded_keys: list, target_dir: str
+):
     """
     Generate a table in markdown format for measurement data.
     """
@@ -30,21 +32,24 @@ def generate_measurement_table(measurements: list, excluded_keys: list):
     config_keys = sorted(k for k in config_keys if k not in excluded_keys)
     headers = ["id"] + config_keys + ["footprint_bytes"]
     rows = []
-    base_cfg = dict(base["config"])
-    base_row = [base["id"]]
+    base_row = [f"[{base["id"]}](./{target_dir}/{base["id"]}.png)"]
 
     # Base config
     for key in config_keys:
-        base_row.append(base_cfg.get(key, ""))
+        value = base["config"].get(key, "N/A")
+        value = value if value not in ("", None) else "N/A"
+        base_row.append(value)
 
     base_row.append(base["idle"])
     rows.append(base_row)
 
     # Measurements
     for m in measurements[1:]:
-        row = [m["id"]]
+        row = [f"[{m["id"]}](./{target_dir}/{m["id"]}.png)"]
         for key in config_keys:
-            row.append(m["config"].get(key, ""))
+            value = m["config"].get(key, "N/A")
+            value = value if value not in ("", None) else "N/A"
+            row.append(value)
 
         row.append(m["idle"])
         rows.append(row)
@@ -296,12 +301,13 @@ def main():
 
     table = generate_measurement_table(
         measurements,
-        excluded_keys={
+        {
             "http_port",
             "https_port",
             "http_served_paths",
             "log_level",
         },
+        target_dir,
     )
     print(table)
 

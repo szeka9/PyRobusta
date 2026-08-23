@@ -121,7 +121,7 @@ The following requirements must be fulfilled by the generator:
 # /app.py
 import asyncio
 
-from pyrobusta.server import http_server
+from pyrobusta import application
 from pyrobusta.protocol.http import HttpEngine
 
 @HttpEngine.route("/stream", "GET")
@@ -146,8 +146,7 @@ def stream_handler(http_ctx, _):
     http_ctx.resp_handler = generate_chunks
 
 async def main():
-    server = http_server.HttpServer()
-    await server.start_socket_server()
+    await application.run()
     while True:
         await asyncio.sleep(1)
 ```
@@ -183,7 +182,7 @@ Routes producing streamed multipart responses must satisfy the following require
 # /app.py
 import asyncio
 
-from pyrobusta.server import http_server
+from pyrobusta import application
 from pyrobusta.protocol.http import HttpEngine
 
 def multipart_response(num_responses, part_size):
@@ -204,8 +203,7 @@ def multipart_handler(http_ctx, _):
     return "multipart/form-data", multipart_response(part_count, part_size)
 
 async def main():
-    server = http_server.HttpServer()
-    await server.start_socket_server()
+    await application.run()
     while True:
         await asyncio.sleep(1)
 ```

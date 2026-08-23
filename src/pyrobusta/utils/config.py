@@ -61,9 +61,9 @@ class Config:
         self.http_multipart = False
         self.http_files_api = False
         self.http_auth = None
-        self.http_browser_security = False
+        self.http_browser_security = True
         self.http_insecure_auth = False
-        self.http_sessions = False
+        self.http_sessions = True
         self.http_session_ttl_sec = 900
         self._read()
 

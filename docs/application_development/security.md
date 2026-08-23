@@ -20,7 +20,7 @@ whether the authenticated user is permitted to access a resource.
   + [Authentication & Authorization Flow](#authentication-authorization-flow)
   + [Content Serving & Browser Security Headers](#content-serving-browser-security-headers)
   + [HTTPS / TLS](#https-tls)
-  + [Certificate Installation](#certificate-installation)
+  + [Certificate Creation & Installation](#certificate-creation-installation)
 
 ---
 
@@ -70,7 +70,7 @@ bob:api_user,app_maintainer:sOqLqi48jCQUiR+VpcCcfMgKcKCspbE902y0yFe0DV4=:5PzMbQQ
 
 New users can be added programmatically through the IAM API:
 
-```python3
+```python
 from pyrobusta.utils.iam import IAMDatabase
 iam_db = IAMDatabase("pyrobusta.passwd", "pyrobusta.roles")
 iam_db.load()
@@ -84,7 +84,7 @@ Because lower iteration counts reduce the computational cost of each password gu
 PyRobusta enforces strong password requirements to increase the password search
 space and improve resistance against brute-force attacks.
 
-```python3
+```python
 iam_db.create_user("john", "secret", ["role-1", "role-2"])
 Traceback (most recent call last):
   File "<stdin>", line 1, in <module>
@@ -353,9 +353,118 @@ The following default is applicable to the `Referrer-Policy` header:
 
 ## HTTPS / TLS
 
+TLS is enabled by the `tls` configuration parameter in `pyrobusta.env`. When enabled, the certificate and private
+key specified by the `tls_cert_file` and `tls_key_file` configuration are loaded. The underlying asyncio server
+accepts a configured MicroPython `ssl.SSLContext` through the `ssl` parameter of `asyncio.start_server()`.
 
+TLS capabilities, including supported certificate and private-key formats, key types, cipher suites, and cryptographic
+algorithms, depend on the SSL implementation and configuration provided by the target MicroPython port. The configurations
+documented here are those supported and tested for PyRobusta on the ESP32 port. Larger RSA key sizes and larger elliptic
+curves require additional RAM and computational resources during TLS initialization and connection handling.
+The recommended configurations provide a balance between compatibility, security, and resource usage.
 
-## Certificate Installation
+| Algorithm | Size/curve | Key/Certificate format | Comment |
+| --- | --- | --- | --- |
+| ECDSA | P-256 | DER | Recommended ECDSA configuration |
+| ECDSA | P-384 | DER | |
+| ECDSA | P-256 | PEM | |
+| RSA | 2048 | DER | Recommended RSA configuration |
+| RSA | 3072 | DER | |
+| RSA | 4096 | DER | |
+| RSA | 2048 | PEM | |
+
+## Certificate Creation & Installation
+
+The following section provides examples for certificate creation.
+The examples below use ECDSA P-256, which is the recommended configuration.
+RSA certificates can be generated similarly by replacing the EC key-generation commands
+with RSA key generation.
+
+Replace `device.local` with the hostname used to access the device, as well as
+the certificate subject (`subjectAltName`) values according to your deployment.
+If the device is accessed by IP address, use an `IP` SAN instead, for
+example `subjectAltName=IP:192.168.1.101`.
+
+### Self-signed Certificate
+
+```bash
+# Create private key for the server
+openssl genpkey -algorithm EC \
+  -pkeyopt ec_paramgen_curve:P-256 \
+  -outform DER -out key.der
+
+# Create certificate for the server, signed by itself
+openssl req -x509 -new \
+  -key key.der -keyform DER \
+  -out cert.der -outform DER \
+  -days 365 \
+  -subj /CN=device.local \
+  -addext 'basicConstraints=critical,CA:FALSE' \
+  -addext 'keyUsage=critical,digitalSignature' \
+  -addext 'subjectAltName=DNS:device.local'
+```
+
+The above commands produce:
+```
+key.der          ECDSA P-256 private key
+cert.der         self-signed certificate
+```
+
+### CA-signed Certificate
+
+```bash
+# Optional: generate CA private key and certificate if does not exist
+openssl genpkey -algorithm EC \
+  -pkeyopt ec_paramgen_curve:P-256 \
+  -outform DER -out ca.key.der
+
+openssl req -new -x509 \
+  -key ca.key.der -keyform DER \
+  -out ca.crt.der -outform DER \
+  -days 3650 -subj /CN=TestCA \
+  -addext 'basicConstraints=critical,CA:TRUE' \
+  -addext 'keyUsage=critical,keyCertSign,cRLSign'
+
+# Create server private key certificate signing request (CSR)
+openssl genpkey -algorithm EC \
+  -pkeyopt ec_paramgen_curve:P-256 \
+  -outform DER -out key.der
+
+openssl req -new \
+  -key key.der -keyform DER \
+  -out server.csr \
+  -subj /CN=device.local
+
+# Create certificate for the server, signed by the CA
+openssl x509 -req \
+  -in server.csr \
+  -CA ca.crt.der -CAform DER \
+  -CAkey ca.key.der -CAkeyform DER \
+  -CAcreateserial \
+  -out cert.der -outform DER \
+  -days 365 \
+  -extfile <(printf '%s\n' \
+    'basicConstraints=critical,CA:FALSE' \
+    'keyUsage=critical,digitalSignature' \
+    'subjectAltName=DNS:device.local')
+```
+
+The above commands produce:
+```
+ca.key.der       CA private key
+ca.crt.der       CA certificate
+server.csr       Server CSR
+key.der          Server private key
+cert.der         CA-signed server certificate
+```
+
+Install certificates into the root directory with `mpremote`:
+
+```bash
+$ mpremote connect /dev/ttyACM1 soft-reset
+$ mpremote connect /dev/ttyACM1 cp key.der :/key.der
+$ mpremote connect /dev/ttyACM1 cp cert.der :/cert.der
+```
 
 ---
 

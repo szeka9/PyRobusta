@@ -160,8 +160,8 @@ publish:
 	# Bump version in Python source
 	@sed -E -i.bak \
 		's/(PYROBUSTA_VERSION[[:space:]]*=[[:space:]]*)"[^"]*"/\1"$(PYROBUSTA_VERSION)"/' \
-		$(SRC_DIR)/pyrobusta/utils/config.py \
-		&& rm -f $(SRC_DIR)/pyrobusta/utils/config.py.bak
+		$(SRC_DIR)/pyrobusta/__init__.py \
+		&& rm -f $(SRC_DIR)/pyrobusta/__init__.py.bak
 
 	$(MAKE) clean
 	$(MAKE) build docs BUILD_DIR=$(DIST_DIR)
@@ -198,6 +198,8 @@ stage-app:
 	@if [ -f pyrobusta.passwd ]; then cp pyrobusta.passwd $(RUNTIME_DIR)/; fi
 	@echo "http_port=8080" >> $(RUNTIME_DIR)/pyrobusta.env
 	@echo "https_port=4443" >> $(RUNTIME_DIR)/pyrobusta.env
+	@sed -i '/^wifi_ssid/d' $(RUNTIME_DIR)/pyrobusta.env
+	@sed -i '/^wifi_password/d' $(RUNTIME_DIR)/pyrobusta.env
 
 # -----------------------------
 # Run app locally with UNIX MicroPython
@@ -349,8 +351,10 @@ perf-test-device: perf-test-http-dimensioning perf-test-http-soak
 perf-test-regenerate-plots:
 	@for type in dimensioning soak; do \
 		[ -d docs/$$type/esp32_c3 ] && \
+			echo "\n======================\nESP32-C3: $$type\n======================\n"; \
 			python3 tests/system/summary.py ESP32-C3 docs/$$type; \
 		[ -d docs/$$type/esp32_s3 ] && \
+			echo "\n======================\nESP32-S3: $$type\n======================\n"; \
 			python3 tests/system/summary.py ESP32-S3 docs/$$type; \
 	done
 
@@ -359,26 +363,116 @@ perf-test-regenerate-plots:
 # ================================================
 
 # -----------------------------
-# Generate certificate
+# TLS test certificate defaults
+# TLS_FORMAT: DER, PEM
+# TLS_KEY_TYPE: EC, RSA
+# TLS_KEY_BITS (RSA only): 2048, 3072, 4096
+# TLS_KEY_CURVE (EC only): prime256v1, secp384r1
+# -----------------------------
+TLS_FORMAT ?= DER
+TLS_KEY_TYPE ?= EC
+TLS_KEY_CURVE ?= prime256v1
+TLS_KEY_BITS ?= 2048
+TLS_CN ?= localhost
+TLS_SAN ?= DNS:localhost
+
+TLS_CA_CN ?= Test CA
+
+TLS_EXT := $(shell printf '%s' "$(TLS_FORMAT)" | tr '[:upper:]' '[:lower:]')
+
+TLS_CA_CERT = $(TLS_DIR)/ca-cert.$(TLS_EXT)
+TLS_CA_KEY  = $(TLS_DIR)/ca-key.$(TLS_EXT)
+TLS_CERT    = $(TLS_DIR)/cert.$(TLS_EXT)
+TLS_KEY     = $(TLS_DIR)/key.$(TLS_EXT)
+
+TLS_CSR     = $(TLS_DIR)/csr.pem
+TLS_EXTFILE = $(TLS_DIR)/openssl-ext.conf
+TLS_SERIAL  = $(TLS_DIR)/ca-cert.srl
+
+# -----------------------------
+# Generate CA
+# -----------------------------
+.PHONY: tls-ca
+tls-ca:
+	@mkdir -p "$(TLS_DIR)"
+
+	@if [ ! -f "$(TLS_CA_KEY)" ]; then \
+		echo "Generating CA private key ($(TLS_FORMAT))..."; \
+		openssl genpkey \
+			-algorithm EC \
+			-out "$(TLS_CA_KEY)" \
+			-outform "$(TLS_FORMAT)" \
+			-pkeyopt ec_paramgen_curve:prime256v1; \
+	fi
+
+	@if [ ! -f "$(TLS_CA_CERT)" ]; then \
+		echo "Generating CA certificate ($(TLS_FORMAT))..."; \
+		openssl req -new -x509 \
+			-key "$(TLS_CA_KEY)" \
+			-keyform "$(TLS_FORMAT)" \
+			-out "$(TLS_CA_CERT)" \
+			-outform "$(TLS_FORMAT)" \
+			-days 3650 \
+			-subj "/CN=$(TLS_CA_CN)" \
+			-addext "basicConstraints=critical,CA:TRUE" \
+			-addext "keyUsage=critical,keyCertSign,cRLSign"; \
+	fi
+
+# -----------------------------
+# Generate server certificate
 # -----------------------------
 .PHONY: tls-cert
-tls-cert:
-	@rm -f $(TLS_DIR)/cert.der $(TLS_DIR)/key.der; \
-	mkdir -p $(TLS_DIR);
+tls-cert: tls-ca
+	@mkdir -p "$(TLS_DIR)"
 
-	@openssl genpkey \
-    -algorithm RSA \
-    -out $(TLS_DIR)/key.der \
-    -outform DER \
-    -pkeyopt rsa_keygen_bits:2048 2>/dev/null
-	
-	@openssl req -new -x509 \
-    -key $(TLS_DIR)/key.der \
-    -keyform DER \
-    -out $(TLS_DIR)/cert.der \
-    -outform DER \
-    -days 365 \
-    -subj "/CN=localhost"
+	@if [ "$(TLS_KEY_TYPE)" = "RSA" ]; then \
+		echo "Generating RSA server key ($(TLS_KEY_BITS) bits)..."; \
+		openssl genpkey \
+			-algorithm RSA \
+			-out "$(TLS_KEY)" \
+			-outform "$(TLS_FORMAT)" \
+			-pkeyopt "rsa_keygen_bits:$(TLS_KEY_BITS)"; \
+	elif [ "$(TLS_KEY_TYPE)" = "EC" ]; then \
+		echo "Generating EC server key ($(TLS_KEY_CURVE))..."; \
+		openssl genpkey \
+			-algorithm EC \
+			-out "$(TLS_KEY)" \
+			-outform "$(TLS_FORMAT)" \
+			-pkeyopt "ec_paramgen_curve:$(TLS_KEY_CURVE)"; \
+	else \
+		echo "Unsupported TLS_KEY_TYPE: $(TLS_KEY_TYPE)" >&2; \
+		exit 1; \
+	fi
+
+	@openssl req -new \
+		-key "$(TLS_KEY)" \
+		-keyform "$(TLS_FORMAT)" \
+		-out "$(TLS_CSR)" \
+		-subj "/CN=$(TLS_CN)"
+
+	@printf '%s\n' \
+		"basicConstraints=critical,CA:FALSE" \
+		"keyUsage=critical,digitalSignature,keyEncipherment" \
+		"subjectAltName=$(TLS_SAN)" \
+		> "$(TLS_EXTFILE)"
+
+	@openssl x509 -req \
+		-in "$(TLS_CSR)" \
+		-CA "$(TLS_CA_CERT)" \
+		-CAkey "$(TLS_CA_KEY)" \
+		-CAform "$(TLS_FORMAT)" \
+		-CAkeyform "$(TLS_FORMAT)" \
+		-CAcreateserial \
+		-out "$(TLS_CERT)" \
+		-outform "$(TLS_FORMAT)" \
+		-days 365 \
+		-extfile "$(TLS_EXTFILE)"
+
+	@rm -f \
+		"$(TLS_CSR)" \
+		"$(TLS_EXTFILE)" \
+		"$(TLS_SERIAL)"
+
 
 # -----------------------------
 # Deploy certificate
@@ -386,9 +480,10 @@ tls-cert:
 .PHONY: deploy-cert
 deploy-cert:
 	@mpremote $(DEVICE) soft-reset
-	@mpremote $(DEVICE) cp $(TLS_DIR)/key.der :key.der
-	@mpremote $(DEVICE) cp $(TLS_DIR)/cert.der :cert.der
+	@mpremote $(DEVICE) cp "$(TLS_DIR)/key.$(TLS_EXT)" ":key.$(TLS_EXT)"
+	@mpremote $(DEVICE) cp "$(TLS_DIR)/cert.$(TLS_EXT)" ":cert.$(TLS_EXT)"
 	@mpremote $(DEVICE) reset
+
 
 # ================================================
 # Cleanup

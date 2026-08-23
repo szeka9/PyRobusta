@@ -116,7 +116,7 @@ for each chunk received. As a result, the application must process the request b
 incrementally rather than assuming the full payload is available at once.
 
 ```
-import pyrobusta.server.http_server as http_server
+from pyrobusta import application
 from pyrobusta.protocol.http import HttpEngine
 from pyrobusta.utils.lexpath import normalize_path
 
@@ -140,8 +140,7 @@ def upload_chunks(http_ctx, payload: bytes):
     return "text/plain", "OK"
 
 async def main():
-    server = http_server.HttpServer()
-    await server.start_socket_server()
+    await application.run()
     while True:
         await asyncio.sleep(1)
 ```
@@ -172,7 +171,7 @@ upload using request-scoped temporary file buffering.
 import asyncio
 from os import listdir, remove, rename, mkdir
 
-import pyrobusta.server.http_server as http_server
+from pyrobusta import application
 from pyrobusta.protocol.http import HttpEngine
 from pyrobusta.utils.lexpath import normalize_path
 
@@ -198,8 +197,7 @@ def handle_parts(http_ctx, payload: tuple):
 
 async def main():
     mkdir(normalize_path("/tmp"))
-    server = http_server.HttpServer()
-    await server.start_socket_server()
+    await application.run()
     while True:
         await asyncio.sleep(1)
 ```
