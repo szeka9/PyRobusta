@@ -198,6 +198,8 @@ stage-app:
 	@if [ -f pyrobusta.passwd ]; then cp pyrobusta.passwd $(RUNTIME_DIR)/; fi
 	@echo "http_port=8080" >> $(RUNTIME_DIR)/pyrobusta.env
 	@echo "https_port=4443" >> $(RUNTIME_DIR)/pyrobusta.env
+	@sed -i '/^wifi_ssid/d' $(RUNTIME_DIR)/pyrobusta.env
+	@sed -i '/^wifi_password/d' $(RUNTIME_DIR)/pyrobusta.env
 
 # -----------------------------
 # Run app locally with UNIX MicroPython

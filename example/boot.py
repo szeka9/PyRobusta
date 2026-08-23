@@ -3,10 +3,7 @@ import asyncio
 import machine
 from os import listdir
 
-from pyrobusta.connectivity import wifi
-
-connected = wifi.initialize()
-if connected and not machine.reset_cause() == machine.SOFT_RESET:
+if not machine.reset_cause() == machine.SOFT_RESET:
     if "app.py" in listdir():
         import app
 

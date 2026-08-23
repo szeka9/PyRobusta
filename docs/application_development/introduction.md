@@ -20,10 +20,11 @@ The following application demonstrates the basic structure of a PyRobusta applic
 response generation, and server initialization. The application implements a simple HTTP API that returns the application version.
 The example includes boot.py, which starts the application, and app.py, which registers routes and starts the HTTP server.
 
-```
+```python
+# /app.py
 import asyncio
 
-from pyrobusta.server import http_server
+from pyrobusta import application
 from pyrobusta.protocol.http import HttpEngine
 
 APP_VERSION = "v0.1.0"
@@ -34,32 +35,24 @@ def version(http_ctx, _):
         return "application/json", {
             "version": APP_VERSION
         }
-
     return "text/plain", f"{APP_VERSION}\n"
 
 async def main():
-    server = http_server.HttpServer()
-    await server.start_socket_server()
-
+    await application.run()
     while True:
         await asyncio.sleep(1)
 ```
 
-```
+```python
 # /boot.py
 # This file is executed on every boot
 
+import asyncio
 import machine
-from os import listdir
+import app
 
-from pyrobusta.connectivity import wifi
-
-connected = wifi.initialize()
-if connected and not machine.reset_cause() == machine.SOFT_RESET:
-    if "app.py" in listdir():
-        import app
-
-        asyncio.run(app.main())
+if machine.reset_cause() != machine.SOFT_RESET:
+    asyncio.run(app.main())
 ```
 
 In the example, `boot.py` conditionally starts the server when no REPL session is active.

@@ -54,19 +54,23 @@ Alternatively, follow the [development guide](./development.md) to build and dep
 
 # Automatic Connection on Boot
 
-Once PyRobusta is installed, you can use its built-in Wi-Fi helper to automatically connect on boot.
+Once PyRobusta is installed, the server automatically initializes Wi-Fi in station mode, requiring a correct SSID and password
+of a Wi-Fi network. Override `wifi_ssid` and `wifi_password` in the configuration stored in [pyrobusta.env](./application_development/configuration.md).
+The server will skip Wi-Fi connection if the credentials are missing, allowing the user application to manage network connectivity.
+
 
 ```python
 # boot.py
 import machine
+from pyrobusta import application
 
-from pyrobusta.connectivity import wifi
+async def main():
+    await application.run()
+    while True:
+        await asyncio.sleep(1)
 
-connected = wifi.initialize()
-
-# Keep mpremote access available after a soft reset
-if connected and not machine.reset_cause() == machine.SOFT_RESET:
-    # <your application code here>
+if machine.reset_cause() != machine.SOFT_RESET:
+    asyncio.run(main())
 ```
 
 Upload boot.py to your device with mpremote:

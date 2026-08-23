@@ -1,7 +1,7 @@
 import asyncio
 from gc import mem_free, mem_alloc, collect
 
-import pyrobusta.server.http_server as http_server
+from pyrobusta import application
 from pyrobusta.protocol.http import HttpEngine
 
 
@@ -34,7 +34,6 @@ def mem_usage(http_ctx, _):
             http_ctx.terminate(400)
             return "text/plain", "Invalid query"
 
-
     return "text/plain", (
         f"Currently used: {usage_percentage:.2f}%\n"
         f"Free   [bytes]: {free}\n"
@@ -44,8 +43,8 @@ def mem_usage(http_ctx, _):
 
 
 async def main():
-    server = http_server.HttpServer()
-    await server.start_socket_server()
+    await application.run()
+
     while True:
         await asyncio.sleep(1)
 
