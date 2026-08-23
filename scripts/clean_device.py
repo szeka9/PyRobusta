@@ -21,7 +21,17 @@ def delete_path(path):
 delete_path("/lib/pyrobusta")
 delete_path("/www")
 
-for f in ("/app.py", "/boot.py", "/pyrobusta.env", "/cert.der", "/key.der"):
+for f in (
+    "/app.py",
+    "/boot.py",
+    "/pyrobusta.env",
+    "/pyrobusta.passwd",
+    "/pyrobusta.roles",
+    "/cert.der",
+    "/key.der",
+    "/cert.pem",
+    "/key.pem",
+):
     try:
         remove(f)
     except OSError:

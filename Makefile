@@ -160,8 +160,8 @@ publish:
 	# Bump version in Python source
 	@sed -E -i.bak \
 		's/(PYROBUSTA_VERSION[[:space:]]*=[[:space:]]*)"[^"]*"/\1"$(PYROBUSTA_VERSION)"/' \
-		$(SRC_DIR)/pyrobusta/utils/config.py \
-		&& rm -f $(SRC_DIR)/pyrobusta/utils/config.py.bak
+		$(SRC_DIR)/pyrobusta/__init__.py \
+		&& rm -f $(SRC_DIR)/pyrobusta/__init__.py.bak
 
 	$(MAKE) clean
 	$(MAKE) build docs BUILD_DIR=$(DIST_DIR)
