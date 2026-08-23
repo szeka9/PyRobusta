@@ -35,8 +35,8 @@ tls=False               # turn off TLS
 Perform a soft reset and upload `pyrobusta.env` using mpremote.
 
 ```
-$ mpremote a0 soft-reset
-$ mpremote a0 cp pyrobusta.env :/pyrobusta.env
+$ mpremote connect /dev/ttyACM1 soft-reset
+$ mpremote connect /dev/ttyACM1 cp pyrobusta.env :/pyrobusta.env
 ```
 
 ## Parameter Description

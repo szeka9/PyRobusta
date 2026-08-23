@@ -60,33 +60,32 @@ This allows `mpremote` to connect after a soft reset and upload files during dev
 
 ## Deployment with mpremote
 
-Perform a soft reset and upload app.py and boot.py using `mpremote`.
+Perform a soft reset and upload app.py and boot.py using `mpremote`:
 
+```bash
+$ mpremote connect /dev/ttyACM1 soft-reset
+$ mpremote connect /dev/ttyACM1 cp app.py :/app.py
+$ mpremote connect /dev/ttyACM1 cp boot.py :/boot.py
 ```
-$ mpremote a0 soft-reset
-$ mpremote a0 cp app.py :/app.py
-$ mpremote a0 cp boot.py :/boot.py
-```
 
-Perform a hard reset to start the application and connect to the REPL.
+Perform a hard reset to start the application and connect to the REPL:
 
-```
-$ mpremote a0 reset repl
-Connected to MicroPython at /dev/ttyACM0
-...
-[INFO] pyrobusta.con.wifi: network b'Home-Wi-Fi' found!
-[INFO] pyrobusta.con.wifi: connected, available at 192.168.1.101
-[WARN] pyrobusta.server.http_server.init_pools: low-memory mode with reduced buffer size
-[INFO] pyrobusta.server.http_server.init_pools: 2 connection(s) allowed
-[INFO] pyrobusta.server.http_server: started
+```bash
+$ mpremote connect /dev/ttyACM1 reset sleep 1 repl
+Connected to MicroPython at /dev/ttyACM1
+Use Ctrl-] or Ctrl-x to exit this shell
+[...]
+2711 INFO pyrobusta.application: connected, ip=[192.168.1.101]
+2732 INFO pyrobusta.server.http_server: 4 connection(s) allowed
+2762 INFO pyrobusta.server.http_server: started
 
-# You can now reach the device at 192.168.1.101 (replace with your IP)
+# You can now reach the device at the indicated IP address
 # Press Ctrl-x to exit
 ```
 
-Use curl to test the application.
+Use curl to test the application:
 
-```
+```bash
 $ curl "http://192.168.1.101/version"
 v0.1.0
 

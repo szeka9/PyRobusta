@@ -1,6 +1,6 @@
 # Device Setup
 
-Use [mpremote](https://docs.micropython.org/en/latest/reference/mpremote.html) to access your device over a serial connection.\
+Use [mpremote](https://docs.micropython.org/en/latest/reference/mpremote.html) to access your device over a serial connection.
 You can install mpremote via pip. It is also included in the project's requirements.txt
 
 ```bash
@@ -11,7 +11,7 @@ python3 -m pip install -r requirements.txt
 
 After installing mpremote, check if you can connect to your device:
 ```bash
-$ mpremote a1 soft-reset repl
+$ mpremote connect /dev/ttyACM1 soft-reset repl
 Connected to MicroPython at /dev/ttyACM1
 Use Ctrl-] or Ctrl-x to exit this shell
 >
@@ -22,7 +22,7 @@ Type "help()" for more information.
 
 # Connect to Wi-Fi
 
-During the initial setup, you’ll need to connect your device to a Wi-Fi network in order to install PyRobusta using the mip package manager.\
+During the initial setup, you’ll need to connect your device to a Wi-Fi network in order to install PyRobusta using the mip package manager.
 After connecting to your device with mpremote, run the following script:
 
 ```python
@@ -75,5 +75,17 @@ if machine.reset_cause() != machine.SOFT_RESET:
 
 Upload boot.py to your device with mpremote:
 ```bash
-$ mpremote a1 cp boot.py :/boot.py
+$ mpremote connect /dev/ttyACM1 cp boot.py :/boot.py
+$ mpremote connect /dev/ttyACM1 reset
+```
+
+Observe logs by connecting to the device:
+```bash
+$ mpremote connect /dev/ttyACM1 reset sleep 1 repl
+Connected to MicroPython at /dev/ttyACM1
+Use Ctrl-] or Ctrl-x to exit this shell
+[...]
+14205 INFO pyrobusta.application: connected, ip=[192.168.1.101]
+14212 INFO pyrobusta.server.http_server: 4 connection(s) allowed
+14366 INFO pyrobusta.server.http_server: started
 ```
