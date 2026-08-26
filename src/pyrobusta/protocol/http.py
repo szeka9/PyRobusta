@@ -591,9 +591,9 @@ class HttpEngine:
         This method returns on every state transition.
         """
         if self.is_terminated():
-            return
+            return None
         try:
-            self.state(rx)
+            return self.state(rx)
         except BufferOverflowError:
             self.abort(500)
             self.set_response_body(b"Buffer full")
@@ -612,6 +612,8 @@ class HttpEngine:
             logging.warning("%s.run: error=[%s]", __name__, e)
             self.abort(500)
             self.set_response_body(b"Internal Server Error")
+
+        return None
 
     # ========================================
     # Helpers for routing, state machine logic

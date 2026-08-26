@@ -1,9 +1,11 @@
+import asyncio
 import os
 import unittest
 import sys
 
 from pathlib import Path
 from unittest.mock import patch, mock_open
+
 from tests.unit.utils import load_module, patch_time
 
 patch_time()
@@ -24,6 +26,18 @@ class TestHttpBase(unittest.TestCase):
     def setUpClass(cls):
         cls.base_config = {}
         cls.cwd = os.getcwd()
+
+    @staticmethod
+    def run_coroutine(coro):
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop is not None:
+            raise RuntimeError("Unexpected running event loop in synchronous test")
+
+        asyncio.run(coro)
 
     def setUp(self):
         # Patch current working directory and config
@@ -98,6 +112,14 @@ class TestHttpBase(unittest.TestCase):
             http_basic_auth.apply_patches(
                 self.http_module.HttpEngine, config, self.iam_db
             )
+
+            self.coroutine_patcher = patch(
+                "pyrobusta.protocol.http_basic_auth.asyncio.create_task"
+            )
+            create_task = self.coroutine_patcher.start()
+            create_task.side_effect = self.run_coroutine
+
+            self.addCleanup(self.coroutine_patcher.stop)
 
         self.engine = self.http_module.HttpEngine()
 
