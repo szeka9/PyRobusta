@@ -26,7 +26,7 @@ The test workflow includes:
 
 import sys
 
-from http_user import DefaultUser, FilesApiUser, MultipartUser
+from http_user import CompositeUser
 from load_test import run_test
 from device import Device
 
@@ -91,7 +91,7 @@ def main():
         output_path,
         dev,
         test_config_factory(max_con),
-        [DefaultUser, FilesApiUser, MultipartUser],
+        [CompositeUser],
         TEST_DURATION_MINUTES,
         testcase_id,
     )
