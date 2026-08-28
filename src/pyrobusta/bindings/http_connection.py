@@ -82,8 +82,11 @@ class HttpConnection(BaseConnection):
 
         # [2] process request by state machine
         while True:
-            self._engine.run(self._recv_buf)
-            if self._prev_state == self._engine.state:
+            promise = self._engine.run(self._recv_buf)
+            if promise:
+                while not promise.done:
+                    await sleep_ms(self.STATE_MACHINE_SLEEP_MS)
+            elif self._prev_state == self._engine.state:
                 # No state transition occurred, read more data
                 break
             self._prev_state = self._engine.state
