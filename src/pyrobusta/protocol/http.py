@@ -609,7 +609,7 @@ class HttpEngine:
         except Exception as e:  # pylint: disable=W0718
             from pyrobusta.utils import logging
 
-            logging.warning("%s.run: error=[%s]", __name__, e)
+            logging.error("%s.run: error=[%s]", __name__, e)
             self.abort(500)
             self.set_response_body(b"Internal Server Error")
 
