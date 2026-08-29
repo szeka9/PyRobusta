@@ -149,4 +149,4 @@ incremental request processing, and deterministic behavior suitable for resource
 
 ---
 
-PyRobusta v0.8.0 Web Server
+PyRobusta v0.9.0 Web Server

@@ -1,0 +1,499 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<h1 id="authentication-security">Authentication &amp; Security</h1>
+<p><a href="index.html">← Back</a></p>
+<p>This page documents the security features provided by PyRobusta,
+including HTTP Basic Authentication, role-based authorization, and TLS.</p>
+<p>Note: Authentication verifies the client's identity. Authorization determines
+whether the authenticated user is permitted to access a resource.</p>
+<hr />
+<h2 id="table-of-contents">Table of Contents</h2>
+<ul>
+<li><a href="#authentication-security">Authentication &amp; Security</a></li>
+<li><a href="#basic-authentication">Basic Authentication</a></li>
+<li><a href="#http-sessions">HTTP Sessions</a></li>
+<li><a href="#authorization">Authorization</a></li>
+<li><a href="#csrf-protection">CSRF Protection</a></li>
+<li><a href="#authentication-authorization-flow">Authentication &amp; Authorization Flow</a></li>
+<li><a href="#content-serving-browser-security-headers">Content Serving &amp; Browser Security Headers</a></li>
+<li><a href="#https-tls">HTTPS / TLS</a></li>
+<li><a href="#certificate-creation-installation">Certificate Creation &amp; Installation</a></li>
+</ul>
+<hr />
+<h2 id="basic-authentication">Basic Authentication</h2>
+<p>PyRobusta supports HTTP Basic Authentication with per-user credentials
+stored on the device. Passwords are stored as PBKDF2-HMAC-SHA256 hashes
+along with randomly generated salt values. Basic authentication is
+disabled by default. It can be enabled by setting
+<code>http_auth=basic</code> in <a href="configuration.html">pyrobusta.env</a>.</p>
+<p>During initialization, PyRobusta reads <code>pyrobusta.passwd</code> by default
+from the server's working directory. Each entry specifies a username,
+one or more access role names, password hash and other related metadata.
+Set <code>passwd_file</code> in the configuration to specify an alternative user
+credentials file to load. For more information, see <a href="configuration.html">Server Configuration</a>.</p>
+<p>PyRobusta defines a single realm (<code>realm="Device"</code>) to authenticate against.
+The server response includes the <code>WWW-Authenticate: Basic realm="Device"</code> header
+when a request does not contain valid credentials.</p>
+<h3 id="pyrobustapasswd">pyrobusta.passwd</h3>
+<p><code>pyrobusta.passwd</code> utilizes a passwd-like format, specifying one user per line,
+with each element of the user data separated by <code>:</code>. The expected format
+of a user entry is:</p>
+<pre><code>&lt;username&gt;:&lt;roles&gt;:&lt;password-hash&gt;:&lt;salt&gt;:&lt;iterations&gt;:&lt;algorithm&gt;:&lt;version&gt;
+</code></pre>
+<ul>
+<li>username: name of the user (case insensitive)</li>
+<li>roles: comma-separated role names (case insensitive)</li>
+<li>password-hash: Base64-encoded PBKDF2 output</li>
+<li>salt: Base64-encoded random salt</li>
+<li>iterations: number of PBKDF2 iterations</li>
+<li>algorithm: password hashing algorithm (currently PBKDF2-HMAC-SHA256)</li>
+<li>version: version of PyRobusta when the user was created</li>
+</ul>
+<pre><code># Example
+# File: /pyrobusta.passwd
+szeka9:api_admin:JlSousyaBB87FIIS/xoQIWTCH7+Z/yjQao5NGE7O/ww=:Zz1n+l9UN89hKlpnnvcXAg==:5000:PBKDF2-HMAC-SHA256:v0.8.0
+alice:api_user,app_viewer:mKmmf5wBEtlkty7LEcphieciOd3Pl0yY7r3WmDiZnzg=:XTQgg3Has79lDTNYVW+aPw==:5000:PBKDF2-HMAC-SHA256:v0.8.0
+bob:api_user,app_maintainer:sOqLqi48jCQUiR+VpcCcfMgKcKCspbE902y0yFe0DV4=:5PzMbQQJtQRP8aZ9C7t8qQ==:5000:PBKDF2-HMAC-SHA256:v0.8.0
+[...]
+</code></pre>
+<p>New users can be added programmatically through the IAM API:</p>
+<pre><code class="language-python">from pyrobusta.utils.iam import IAMDatabase
+iam_db = IAMDatabase(&quot;pyrobusta.passwd&quot;, &quot;pyrobusta.roles&quot;)
+iam_db.load()
+iam_db.create_user(&quot;john&quot;, &quot;john's-secret-password&quot;, [&quot;role-1&quot;, &quot;role-2&quot;])
+</code></pre>
+<p>Password verification uses PBKDF2-HMAC-SHA256 with a default iteration count of 5000.
+The iteration count is intentionally chosen as a compromise between resistance against
+offline attacks and the computational limitations of microcontroller-class hardware.
+Because lower iteration counts reduce the computational cost of each password guess,
+PyRobusta enforces strong password requirements to increase the password search
+space and improve resistance against brute-force attacks.</p>
+<pre><code class="language-python">iam_db.create_user(&quot;john&quot;, &quot;secret&quot;, [&quot;role-1&quot;, &quot;role-2&quot;])
+Traceback (most recent call last):
+  File &quot;&lt;stdin&gt;&quot;, line 1, in &lt;module&gt;
+  File &quot;src/pyrobusta/utils/iam.py&quot;, line 198, in create_user
+  File &quot;src/pyrobusta/utils/crypto.py&quot;, line 125, in validate_password
+ValueError: Password must be at least 16 characters
+</code></pre>
+<h2 id="http-sessions">HTTP Sessions</h2>
+<p>Without session authentication, each HTTP request authenticated with Basic Auth requires a
+new password verification operation. Since PBKDF2 is intentionally computationally expensive,
+this can introduce noticeable latency on microcontroller-class hardware.</p>
+<p>To avoid repeated password verification, PyRobusta can issue stateless session cookies
+after a successful authentication. Subsequent requests are authenticated using the session
+cookie instead of recomputing the PBKDF2 password hash.</p>
+<p>Session cookies are cryptographically signed and validated by the server without maintaining
+per-session state. Session signing keys are derived from per-user secrets that are randomly
+generated during server startup and stored only in memory. Consequently, all existing
+sessions are invalidated automatically when the server restarts.</p>
+<p>Stateless sessions are enabled by setting <code>http_sessions=true</code> in pyrobusta.env.
+Sessions expire after 15 minutes by default. The session lifetime can be configured with
+<code>http_session_ttl_sec</code>.</p>
+<h2 id="authorization">Authorization</h2>
+<p>When HTTP Basic Authentication is enabled, PyRobusta provides role-based access control (RBAC).
+Resource permissions are determined by the authenticated user's assigned roles.
+Each user can be assigned one or more roles, configured in <code>pyrobusta.passwd</code>.</p>
+<p>While <code>pyrobusta.passwd</code> assigns roles to users, <code>pyrobusta.roles</code> maps those roles to
+HTTP methods and server resources. Authorization follows a least-privilege model.
+Users have no permissions unless explicitly granted by one or more authorization rules.
+Each matching rule grants additional permissions. Requests that do not match an authorization
+rule receive HTTP 403 Forbidden.</p>
+<p>Set <code>roles_file</code> in the configuration to specify an alternative role configuration file to load.
+For more information, see <a href="configuration.html">Server Configuration</a>.</p>
+<h3 id="pyrobustaroles">pyrobusta.roles</h3>
+<p><code>pyrobusta.roles</code> consists of one or more authorization blocks. Each block defines one or
+more path patterns, followed by one or more authorization rules. Every authorization rule
+applies to every path pattern declared within the same block.</p>
+<pre><code>&lt;path-pattern&gt;
+&lt;path-pattern&gt;
+...
+    &lt;HTTP-method&gt;: &lt;role&gt;,&lt;role&gt;,...
+    &lt;HTTP-method&gt;: &lt;role&gt;,&lt;role&gt;,...
+    ...
+
+&lt;path-pattern&gt;
+    ...
+</code></pre>
+<p>Authorization rules are selected based on pattern specificity rather than their
+order in <code>pyrobusta.roles</code>. Path patterns support the following forms, ordered
+from least to most specific. Each request is matched against the most specific
+pattern, and only the roles associated with the selected pattern are considered
+during authorization.</p>
+<pre><code>/**                        # Match any path
+/*                         # Match direct children of /
+/app                       # Exact match
+/app/**                    # Match any descendant of /app
+/app/*                     # Match direct children of /app
+/app/*/resources           # Match a single wildcard segment
+/app/endpoint/resources    # Exact match
+</code></pre>
+<p><strong>Note</strong>: recursive globs (<code>**</code>) are only supported as the final path segment.
+Allowing <code>**</code> in intermediate segments would introduce ambiguous matches
+and is therefore not supported.</p>
+<pre><code># File: /pyrobusta.roles
+
+# ---------------------------------------------------------
+# Example: public resources (/, /index.html, /styles.css, ...)
+/
+/*
+    GET,HEAD: *
+
+# ---------------------------------------------------------
+# Example: apply rule to parent and child resources
+/app/resource
+/app/resource/*
+    GET: resource_viewer
+    POST,PUT,DELETE: resource_maintainer
+
+# ---------------------------------------------------------
+# Example: apply rule to paths of any length with **
+/app/api/**
+    GET: api_viewer
+    POST,PUT,DELETE: api_maintainer
+
+# ---------------------------------------------------------
+# Example: require api_admin access for all HTTP methods
+/app/api/management
+    *: api_admin
+
+# ---------------------------------------------------------
+# Example: restrict all access to a resource
+/app/secret
+    *:
+
+# ---------------------------------------------------------
+# Example: assign multiple roles
+/app/logs
+    GET: api_admin,api_maintainer
+</code></pre>
+<p><strong>Note</strong>: The special role <code>*</code> grants public access regardless of the authenticated user's roles.
+Rules that specify <code>*</code> do not require authentication.</p>
+<h2 id="csrf-protection">CSRF Protection</h2>
+<p>Credentials used with HTTP Basic Authentication may be automatically attached to requests by a browser.
+This makes HTTP Basic Authentication vulnerable to CSRF (Cross-Site Request Forgery) attacks,
+allowing an attacker-controlled website to cause the browser to issue requests to the server on
+behalf of an authenticated user.</p>
+<p>To prevent CSRF attacks, <strong>PyRobusta applies the Signed Double-Submit Cookie pattern</strong>. For unsafe HTTP methods
+(POST, PUT, PATCH, and DELETE), the client must return the CSRF token received from the server as
+a cookie. The client must send the same token in the <code>X-CSRF-Token</code> request header. The server
+rejects requests where the cookie value and header value do not match.</p>
+<p>A malicious website cannot read the CSRF cookie from another origin because of the browser's
+same-origin policy. Therefore, a malicious website cannot provide a valid CSRF token in the request header.
+Cryptographic signing prevents attackers from forging valid CSRF tokens without knowledge of the server-side secret.</p>
+<p>PyRobusta generates CSRF tokens using HMAC-SHA256 with per-user secrets generated during server
+initialization. User secrets exist only in memory, so restarting the server invalidates all
+previous CSRF tokens. The server issues a CSRF cookie after successful authentication. Clients
+must include the same token in the <code>X-CSRF-Token</code> header for subsequent unsafe requests.</p>
+<p>Tokens generated by PyRobusta have the following format:</p>
+<pre><code>&lt;hex-encoded-random-nonce&gt;.&lt;hex-encoded-HMAC-SHA256-signature&gt;
+</code></pre>
+<p>During verification, PyRobusta recalculates the HMAC-SHA256 signature over the nonce using the
+user secret and compares it with the signature provided in the token. Requests are rejected with HTTP
+<code>403 Forbidden</code> if the token signature is invalid or if the cookie and <code>X-CSRF-Token</code> header values do not match.</p>
+<h2 id="authentication-authorization-flow">Authentication &amp; Authorization Flow</h2>
+<p><svg xmlns="http://www.w3.org/2000/svg" id="my-svg" width="100%" aria-roledescription="flowchart-v2" class="flowchart" style="font-family:&quot;trebuchet ms&quot;,verdana,arial,sans-serif;font-size:16px;fill:#333;max-width:687.441px;background-color:#fff" viewBox="0 0 687.4 3204.2"><style>@keyframes edge-animation-frame{0%{stroke-dashoffset:0}}@keyframes dash{to{stroke-dashoffset:0}}#my-svg .edge-thickness-normal{stroke-width:1px}#my-svg .edge-pattern-solid{stroke-dasharray:0}#my-svg .marker{fill:#333;stroke:#333}#my-svg .marker.cross{stroke:#333}#my-svg .label,#my-svg svg{font-family:&quot;trebuchet ms&quot;,verdana,arial,sans-serif}#my-svg svg{font-size:16px}#my-svg p{margin:0}#my-svg .label{color:#333}#my-svg span{fill:#333;color:#333}#my-svg .node circle,#my-svg .node path,#my-svg .node rect{fill:#ececff;stroke:#9370db;stroke-width:1px}#my-svg .flowchart-link{stroke:#333;fill:none}#my-svg .edgeLabel,#my-svg .node .label{text-align:center}#my-svg .edgeLabel,#my-svg .edgeLabel p,#my-svg .edgeLabel rect{background-color:rgba(232,232,232,.8)}#my-svg .edgeLabel rect{opacity:.5;fill:rgba(232,232,232,.8)}#my-svg .labelBkg{background-color:rgba(232,232,232,.5)}#my-svg [data-look=neo].node circle,#my-svg [data-look=neo].node rect{stroke:#9370db;filter:drop-shadow(1px 2px 2px #b9b9b9)}#my-svg [data-look=neo].node path{stroke:#9370db;stroke-width:1px}#my-svg :root{--mermaid-font-family:&quot;trebuchet ms&quot;,verdana,arial,sans-serif}</style><marker id="my-svg_flowchart-v2-pointEnd" class="marker flowchart-v2" markerHeight="8" markerUnits="userSpaceOnUse" markerWidth="8" orient="auto" refX="5" refY="5" viewBox="0 0 10 10"><path d="m0 0 10 5-10 5z" class="arrowMarkerPath" style="stroke-width:1;stroke-dasharray:1,0"/></marker><marker id="my-svg_flowchart-v2-pointStart" class="marker flowchart-v2" markerHeight="8" markerUnits="userSpaceOnUse" markerWidth="8" orient="auto" refX="4.5" refY="5" viewBox="0 0 10 10"><path d="m0 5 10 5V0z" class="arrowMarkerPath" style="stroke-width:1;stroke-dasharray:1,0"/></marker><marker id="my-svg_flowchart-v2-pointEnd-margin" class="marker flowchart-v2" markerHeight="14" markerUnits="userSpaceOnUse" markerWidth="10.5" orient="auto" refX="11.5" refY="7" viewBox="0 0 11.5 14"><path d="m0 0 11.5 7L0 14z" class="arrowMarkerPath" style="stroke-width:0;stroke-dasharray:1,0"/></marker><marker id="my-svg_flowchart-v2-pointStart-margin" class="marker flowchart-v2" markerHeight="14" markerUnits="userSpaceOnUse" markerWidth="11.5" orient="auto" refX="1" refY="7" viewBox="0 0 11.5 14"><path d="m0 7 11.5 7V0z" class="arrowMarkerPath" style="stroke-width:0;stroke-dasharray:1,0"/></marker><marker id="my-svg_flowchart-v2-circleEnd" class="marker flowchart-v2" markerHeight="11" markerUnits="userSpaceOnUse" markerWidth="11" orient="auto" refX="11" refY="5" viewBox="0 0 10 10"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width:1;stroke-dasharray:1,0"/></marker><marker id="my-svg_flowchart-v2-circleStart" class="marker flowchart-v2" markerHeight="11" markerUnits="userSpaceOnUse" markerWidth="11" orient="auto" refX="-1" refY="5" viewBox="0 0 10 10"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width:1;stroke-dasharray:1,0"/></marker><marker id="my-svg_flowchart-v2-circleEnd-margin" class="marker flowchart-v2" markerHeight="14" markerUnits="userSpaceOnUse" markerWidth="14" orient="auto" refX="12.3" refY="5" viewBox="0 0 10 10"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width:0;stroke-dasharray:1,0"/></marker><marker id="my-svg_flowchart-v2-circleStart-margin" class="marker flowchart-v2" markerHeight="14" markerUnits="userSpaceOnUse" markerWidth="14" orient="auto" refX="-2" refY="5" viewBox="0 0 10 10"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width:0;stroke-dasharray:1,0"/></marker><marker id="my-svg_flowchart-v2-crossEnd" class="marker cross flowchart-v2" markerHeight="11" markerUnits="userSpaceOnUse" markerWidth="11" orient="auto" refX="12" refY="5.2" viewBox="0 0 11 11"><path d="m1 1 9 9m0-9-9 9" class="arrowMarkerPath" style="stroke-width:2;stroke-dasharray:1,0"/></marker><marker id="my-svg_flowchart-v2-crossStart" class="marker cross flowchart-v2" markerHeight="11" markerUnits="userSpaceOnUse" markerWidth="11" orient="auto" refX="-1" refY="5.2" viewBox="0 0 11 11"><path d="m1 1 9 9m0-9-9 9" class="arrowMarkerPath" style="stroke-width:2;stroke-dasharray:1,0"/></marker><marker id="my-svg_flowchart-v2-crossEnd-margin" class="marker cross flowchart-v2" markerHeight="12" markerUnits="userSpaceOnUse" markerWidth="12" orient="auto" refX="17.7" refY="7.5" viewBox="0 0 15 15"><path d="m1 1 13 13M1 14 14 1" class="arrowMarkerPath" style="stroke-width:2.5"/></marker><marker id="my-svg_flowchart-v2-crossStart-margin" class="marker cross flowchart-v2" markerHeight="12" markerUnits="userSpaceOnUse" markerWidth="12" orient="auto" refX="-3.5" refY="7.5" viewBox="0 0 15 15"><path d="m1 1 13 13M1 14 14 1" class="arrowMarkerPath" style="stroke-width:2.5;stroke-dasharray:1,0"/></marker><g class="root"><g class="edgePaths"><path id="my-svg-L_A_B_0" marker-end="url(#my-svg_flowchart-v2-pointEnd)" d="M208 62v46" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="L_A_B_0" data-look="classic" data-points="W3sieCI6MjA3Ljk4ODI4MTI1LCJ5Ijo2Mn0seyJ4IjoyMDcuOTg4MjgxMjUsInkiOjg3fSx7IngiOjIwNy45ODgyODEyNSwieSI6MTEyfV0="/><path id="my-svg-L_B_C_0" marker-end="url(#my-svg_flowchart-v2-pointEnd)" d="M208 166v46" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="L_B_C_0" data-look="classic" data-points="W3sieCI6MjA3Ljk4ODI4MTI1LCJ5IjoxNjZ9LHsieCI6MjA3Ljk4ODI4MTI1LCJ5IjoxOTF9LHsieCI6MjA3Ljk4ODI4MTI1LCJ5IjoyMTZ9XQ=="/><path id="my-svg-L_C_Z_0" marker-end="url(#my-svg_flowchart-v2-pointEnd)" d="m143 399.6-18.5 17c-18.5 17-55.7 51-74.3 78.6-18.5 27.7-18.5 49-18.5 68.3v2396.3c0 48.5 0 97 6.4 127 6.4 29.9 19.2 41.3 25.6 47l6.5 5.8" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="L_C_Z_0" data-look="classic" data-points="W3sieCI6MTQzLjA4NjcwODg1OTk1ODQ2LCJ5IjozOTkuNjI5Njc3NjA5OTU4NDN9LHsieCI6MzEuNjc5Njg3NSwieSI6NTAxLjUzMTI1fSx7IngiOjMxLjY3OTY4NzUsInkiOjU2NS41MzEyNX0seyJ4IjozMS42Nzk2ODc1LCJ5Ijo2MTcuNTMxMjV9LHsieCI6MzEuNjc5Njg3NSwieSI6NzMyLjgxMjV9LHsieCI6MzEuNjc5Njg3NSwieSI6ODYwLjA5Mzc1fSx7IngiOjMxLjY3OTY4NzUsInkiOjkyNC4wOTM3NX0seyJ4IjozMS42Nzk2ODc1LCJ5Ijo5ODguMDkzNzV9LHsieCI6MzEuNjc5Njg3NSwieSI6MTEwOC41NzAzMTI1fSx7IngiOjMxLjY3OTY4NzUsInkiOjEyMjkuMDQ2ODc1fSx7IngiOjMxLjY3OTY4NzUsInkiOjEzMDUuMDQ2ODc1fSx7IngiOjMxLjY3OTY4NzUsInkiOjEzNjkuMDQ2ODc1fSx7IngiOjMxLjY3OTY4NzUsInkiOjE1MDkuNjAxNTYyNX0seyJ4IjozMS42Nzk2ODc1LCJ5IjoxNjYyLjE1NjI1fSx7IngiOjMxLjY3OTY4NzUsInkiOjE3MjYuMTU2MjV9LHsieCI6MzEuNjc5Njg3NSwieSI6MTc5MC4xNTYyNX0seyJ4IjozMS42Nzk2ODc1LCJ5IjoxOTI1LjQ1MzEyNX0seyJ4IjozMS42Nzk2ODc1LCJ5IjoyMDYwLjc1fSx7IngiOjMxLjY3OTY4NzUsInkiOjIxMjQuNzV9LHsieCI6MzEuNjc5Njg3NSwieSI6MjE3Ni43NX0seyJ4IjozMS42Nzk2ODc1LCJ5IjoyMjg5Ljg4MjgxMjV9LHsieCI6MzEuNjc5Njg3NSwieSI6MjQxNS4wMTU2MjV9LHsieCI6MzEuNjc5Njg3NSwieSI6MjU1MC43MDMxMjV9LHsieCI6MzEuNjc5Njg3NSwieSI6MjY4Ni4zOTA2MjV9LHsieCI6MzEuNjc5Njg3NSwieSI6Mjc1MC4zOTA2MjV9LHsieCI6MzEuNjc5Njg3NSwieSI6MjgxNC4zOTA2MjV9LHsieCI6MzEuNjc5Njg3NSwieSI6Mjk1OS44MDQ2ODc1fSx7IngiOjMxLjY3OTY4NzUsInkiOjMxMDUuMjE4NzV9LHsieCI6NzMuMTM1MzE0OTQxNDA2MjUsInkiOjMxNDIuMjE4NzV9XQ=="/><path id="my-svg-L_C_D_0" marker-end="url(#my-svg_flowchart-v2-pointEnd)" d="m250 422.5 6.8 13.2a592 592 0 0 1 27 58.2c6.7 18.6 6.7 29.6 6.7 35.1v5.5" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="L_C_D_0" data-look="classic" data-points="W3sieCI6MjUwLjA0NDcxOTkzOTgyNzYsInkiOjQyMi40NzQ4MTEzMTAxNzI0fSx7IngiOjI5MC40ODgyODEyNSwieSI6NTAxLjUzMTI1fSx7IngiOjI5MC40ODgyODEyNSwieSI6NTM4LjUzMTI1fV0="/><path id="my-svg-L_D_E_0" marker-end="url(#my-svg_flowchart-v2-pointEnd)" d="M290.5 592.5v46" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="L_D_E_0" data-look="classic" data-points="W3sieCI6MjkwLjQ4ODI4MTI1LCJ5Ijo1OTIuNTMxMjV9LHsieCI6MjkwLjQ4ODI4MTI1LCJ5Ijo2MTcuNTMxMjV9LHsieCI6MjkwLjQ4ODI4MTI1LCJ5Ijo2NDIuNTMxMjV9XQ=="/><path id="my-svg-L_E_F_0" marker-end="url(#my-svg_flowchart-v2-pointEnd)" d="m335.8 777.7 13.9 13.8c13.9 13.7 41.6 41.1 55.4 60.4C419 871 419 882 419 887.6v5.5" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="L_E_F_0" data-look="classic" data-points="W3sieCI6MzM1Ljg0MzMwNjgxMTYzMDQ0LCJ5Ijo3NzcuNzM4NzI0NDM4MzY5Nn0seyJ4Ijo0MTguOTg0Mzc1LCJ5Ijo4NjAuMDkzNzV9LHsieCI6NDE4Ljk4NDM3NSwieSI6ODk3LjA5Mzc1fV0="/><path id="my-svg-L_E_G_0" marker-end="url(#my-svg_flowchart-v2-pointEnd)" d="m240 772.7-18.3 14.6c-18.4 14.5-55.3 43.7-73.7 68.9s-18.4 46.6-18.4 67.9v184.4c0 40.2 0 80.4 5.9 106.2s17.6 37.2 23.5 42.9l5.9 5.7" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="L_E_G_0" data-look="classic" data-points="W3sieCI6MjQwLjA4NjE2NTk0NjIwMTUsInkiOjc3Mi42OTE2MzQ2OTYyMDE1fSx7IngiOjEyOS42MjEwOTM3NSwieSI6ODYwLjA5Mzc1fSx7IngiOjEyOS42MjEwOTM3NSwieSI6OTI0LjA5Mzc1fSx7IngiOjEyOS42MjEwOTM3NSwieSI6OTg4LjA5Mzc1fSx7IngiOjEyOS42MjEwOTM3NSwieSI6MTEwOC41NzAzMTI1fSx7IngiOjEyOS42MjEwOTM3NSwieSI6MTIyOS4wNDY4NzV9LHsieCI6MTY3Ljc3MzU0MDI5NjA1MjYzLCJ5IjoxMjY2LjA0Njg3NX1d"/><path id="my-svg-L_F_H_0" marker-end="url(#my-svg_flowchart-v2-pointEnd)" d="M419 951v70.1" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="L_F_H_0" data-look="classic" data-points="W3sieCI6NDE4Ljk4NDM3NSwieSI6OTUxLjA5Mzc1fSx7IngiOjQxOC45ODQzNzUsInkiOjk4OC4wOTM3NX0seyJ4Ijo0MTguOTg0Mzc1LCJ5IjoxMDI1LjA5Mzc1fV0="/><path id="my-svg-L_H_I_0" marker-end="url(#my-svg_flowchart-v2-pointEnd)" d="m428.5 1182.6 1 7.7c1 7.8 3 23.3 4 43.7s1 45.7 1 69v622.5c0 45 0 90.2 4.6 118.4 4.7 28.2 14 39.5 18.8 45.1l4.7 5.7" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="L_H_I_0" data-look="classic" data-points="W3sieCI6NDI4LjQ2ODAwMzQzOTc5MDIsInkiOjExODIuNTYzMjQ2NTYwMjA5OH0seyJ4Ijo0MzQuNDI1NzgxMjUsInkiOjEyMjkuMDQ2ODc1fSx7IngiOjQzNC40MjU3ODEyNSwieSI6MTMwNS4wNDY4NzV9LHsieCI6NDM0LjQyNTc4MTI1LCJ5IjoxMzY5LjA0Njg3NX0seyJ4Ijo0MzQuNDI1NzgxMjUsInkiOjE1MDkuNjAxNTYyNX0seyJ4Ijo0MzQuNDI1NzgxMjUsInkiOjE2NjIuMTU2MjV9LHsieCI6NDM0LjQyNTc4MTI1LCJ5IjoxNzI2LjE1NjI1fSx7IngiOjQzNC40MjU3ODEyNSwieSI6MTc5MC4xNTYyNX0seyJ4Ijo0MzQuNDI1NzgxMjUsInkiOjE5MjUuNDUzMTI1fSx7IngiOjQzNC40MjU3ODEyNSwieSI6MjA2MC43NX0seyJ4Ijo0NjUuMTA0Nzk3MzYzMjgxMjUsInkiOjIwOTcuNzV9XQ=="/><path id="my-svg-L_H_G_0" marker-end="url(#my-svg_flowchart-v2-pointEnd)" d="m385 1158.1-8 11.8a368 368 0 0 1-42.3 53.2 242 242 0 0 1-47.5 35l-9.8 6" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="L_H_G_0" data-look="classic" data-points="W3sieCI6Mzg1LjA1NTI1MzcxOTA2Mzk2LCJ5IjoxMTU4LjExNzc1MzcxOTA2NH0seyJ4IjozMzYuNDg0Mzc1LCJ5IjoxMjI5LjA0Njg3NX0seyJ4IjoyNzMuOTI3MDY2MjAwNjU3OSwieSI6MTI2Ni4wNDY4NzV9XQ=="/><path id="my-svg-L_G_J_0" marker-end="url(#my-svg_flowchart-v2-pointEnd)" d="M208 1344v46" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="L_G_J_0" data-look="classic" data-points="W3sieCI6MjA3Ljk4ODI4MTI1LCJ5IjoxMzQ0LjA0Njg3NX0seyJ4IjoyMDcuOTg4MjgxMjUsInkiOjEzNjkuMDQ2ODc1fSx7IngiOjIwNy45ODgyODEyNSwieSI6MTM5NC4wNDY4NzV9XQ=="/><path id="my-svg-L_J_K_0" marker-end="url(#my-svg_flowchart-v2-pointEnd)" d="m171 1588.1-5.9 12.4a354 354 0 0 0-23.3 60c-5.8 23-5.8 44.3-5.8 65.7v199.3c0 45 0 90.2 6.5 118.4s19.3 39.7 25.7 45.5l6.4 5.7" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="L_J_K_0" data-look="classic" data-points="W3sieCI6MTcwLjk0ODM3NzkzOTE2ODA0LCJ5IjoxNTg4LjExNjM0NjY4OTE2OH0seyJ4IjoxMzYuMDE5NTMxMjUsInkiOjE2NjIuMTU2MjV9LHsieCI6MTM2LjAxOTUzMTI1LCJ5IjoxNzI2LjE1NjI1fSx7IngiOjEzNi4wMTk1MzEyNSwieSI6MTc5MC4xNTYyNX0seyJ4IjoxMzYuMDE5NTMxMjUsInkiOjE5MjUuNDUzMTI1fSx7IngiOjEzNi4wMTk1MzEyNSwieSI6MjA2MC43NX0seyJ4IjoxNzcuNjI2NDY0ODQzNzUsInkiOjIwOTcuNzV9XQ=="/><path id="my-svg-L_J_L_0" marker-end="url(#my-svg_flowchart-v2-pointEnd)" d="m245 1588.1 5.8 12.4a525 525 0 0 1 23.3 54.8 102 102 0 0 1 5.9 34.4v5.5" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="L_J_L_0" data-look="classic" data-points="W3sieCI6MjQ1LjAyODE4NDU2MDgzMTk2LCJ5IjoxNTg4LjExNjM0NjY4OTE2OH0seyJ4IjoyNzkuOTU3MDMxMjUsInkiOjE2NjIuMTU2MjV9LHsieCI6Mjc5Ljk1NzAzMTI1LCJ5IjoxNjk5LjE1NjI1fV0="/><path id="my-svg-L_L_M_0" marker-end="url(#my-svg_flowchart-v2-pointEnd)" d="M280 1753.2v70" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="L_L_M_0" data-look="classic" data-points="W3sieCI6Mjc5Ljk1NzAzMTI1LCJ5IjoxNzUzLjE1NjI1fSx7IngiOjI3OS45NTcwMzEyNSwieSI6MTc5MC4xNTYyNX0seyJ4IjoyNzkuOTU3MDMxMjUsInkiOjE4MjcuMTU2MjV9XQ=="/><path id="my-svg-L_M_K_0" marker-end="url(#my-svg_flowchart-v2-pointEnd)" d="M280 2023.8v6.1c0 6.2 0 18.5-6.5 30.4a123 123 0 0 1-25.7 29l-6.5 5.8" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="L_M_K_0" data-look="classic" data-points="W3sieCI6Mjc5Ljk1NzAzMTI1LCJ5IjoyMDIzLjc1fSx7IngiOjI3OS45NTcwMzEyNSwieSI6MjA2MC43NX0seyJ4IjoyMzguMzUwMDk3NjU2MjUsInkiOjIwOTcuNzV9XQ=="/><path id="my-svg-L_M_I_0" marker-end="url(#my-svg_flowchart-v2-pointEnd)" d="m341.2 1962.5 27.2 16.3c27 16.4 81.3 49.2 107 71 25.7 22 22.9 33 21.5 38.6l-1.5 5.5" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="L_M_I_0" data-look="classic" data-points="W3sieCI6MzQxLjIzODQxODE3MTMyOSwieSI6MTk2Mi40Njg2MTMwNzg2NzF9LHsieCI6NTAzLjk0OTIxODc1LCJ5IjoyMDYwLjc1fSx7IngiOjQ5NC40MzQ5OTc1NTg1OTM3NSwieSI6MjA5Ny43NX1d"/><path id="my-svg-L_I_N_0" marker-end="url(#my-svg_flowchart-v2-pointEnd)" d="M487.5 2151.8v45.9" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="L_I_N_0" data-look="classic" data-points="W3sieCI6NDg3LjQ5MjE4NzUsInkiOjIxNTEuNzV9LHsieCI6NDg3LjQ5MjE4NzUsInkiOjIxNzYuNzV9LHsieCI6NDg3LjQ5MjE4NzUsInkiOjIyMDEuNzV9XQ=="/><path id="my-svg-L_N_O_0" marker-end="url(#my-svg_flowchart-v2-pointEnd)" d="m431.9 2322.4-26.4 15.4c-26.4 15.5-79.2 46.3-105.6 84.4-26.3 38-26.3 83.3-26.3 128.5s0 90.5 5 118.7 14.9 39.7 19.9 45.3l5 5.7" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="L_N_O_0" data-look="classic" data-points="W3sieCI6NDMxLjg4NDg4MTc5ODU5NjgsInkiOjIzMjIuNDA4MzE5Mjk4NTk3fSx7IngiOjI3My41NTg1OTM3NSwieSI6MjQxNS4wMTU2MjV9LHsieCI6MjczLjU1ODU5Mzc1LCJ5IjoyNTUwLjcwMzEyNX0seyJ4IjoyNzMuNTU4NTkzNzUsInkiOjI2ODYuMzkwNjI1fSx7IngiOjMwNi4wODcxNTgyMDMxMjUsInkiOjI3MjMuMzkwNjI1fV0="/><path id="my-svg-L_N_P_0" marker-end="url(#my-svg_flowchart-v2-pointEnd)" d="m519.8 2345.7 6.6 11.6c6.7 11.5 20 34.6 26.7 51.7 6.7 17 6.7 28 6.7 33.5v5.5" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="L_N_P_0" data-look="classic" data-points="W3sieCI6NTE5Ljc2MjI2OTkxNzc4NjMsInkiOjIzNDUuNzQ1NTQyNTgyMjEzNn0seyJ4Ijo1NTkuNzc3MzQzNzUsInkiOjI0MTUuMDE1NjI1fSx7IngiOjU1OS43NzczNDM3NSwieSI6MjQ1Mi4wMTU2MjV9XQ=="/><path id="my-svg-L_P_Q_0" marker-end="url(#my-svg_flowchart-v2-pointEnd)" d="m570.5 2638.7 1 8c.9 8 2.8 23.8 3.8 42.4s1 40 1 61.3v209.4c0 48.5 0 97 1.3 126.7a223 223 0 0 0 5.3 46.3l1.3 5.5" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="L_P_Q_0" data-look="classic" data-points="W3sieCI6NTcwLjQ1MjA4MzQ3Mzc0MTMsInkiOjI2MzguNzE1ODg1Mjc2MjU4Nn0seyJ4Ijo1NzYuMjM0Mzc1LCJ5IjoyNjg2LjM5MDYyNX0seyJ4Ijo1NzYuMjM0Mzc1LCJ5IjoyNzUwLjM5MDYyNX0seyJ4Ijo1NzYuMjM0Mzc1LCJ5IjoyODE0LjM5MDYyNX0seyJ4Ijo1NzYuMjM0Mzc1LCJ5IjoyOTU5LjgwNDY4NzV9LHsieCI6NTc2LjIzNDM3NSwieSI6MzEwNS4yMTg3NX0seyJ4Ijo1ODUuMTYxNDM3OTg4MjgxMiwieSI6MzE0Mi4yMTg3NX1d"/><path id="my-svg-L_P_O_0" marker-end="url(#my-svg_flowchart-v2-pointEnd)" d="m506.7 2596.4-17.4 15-76.2 65.7c-24 20.7-36.9 32.2-43.3 38l-6.5 5.6" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="L_P_O_0" data-look="classic" data-points="W3sieCI6NTA2LjczNjM3Njk5Mjc4NjIsInkiOjI1OTYuMzQ5NjU4MjQyNzg2fSx7IngiOjQwMi4xMDkzNzUsInkiOjI2ODYuMzkwNjI1fSx7IngiOjM2MC4zMTk1MTkwNDI5Njg3NSwieSI6MjcyMy4zOTA2MjV9XQ=="/><path id="my-svg-L_O_R_0" marker-end="url(#my-svg_flowchart-v2-pointEnd)" d="M329.8 2777.4v70" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="L_O_R_0" data-look="classic" data-points="W3sieCI6MzI5LjgyNDIxODc1LCJ5IjoyNzc3LjM5MDYyNX0seyJ4IjozMjkuODI0MjE4NzUsInkiOjI4MTQuMzkwNjI1fSx7IngiOjMyOS44MjQyMTg3NSwieSI6Mjg1MS4zOTA2MjV9XQ=="/><path id="my-svg-L_R_Z_0" marker-end="url(#my-svg_flowchart-v2-pointEnd)" d="M329.8 3068.2v6.2c0 6.2 0 18.5-21.5 30.7-21.6 12.3-64.7 24.5-86.2 30.6l-21.6 6" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="L_R_Z_0" data-look="classic" data-points="W3sieCI6MzI5LjgyNDIxODc1LCJ5IjozMDY4LjIxODc1fSx7IngiOjMyOS44MjQyMTg3NSwieSI6MzEwNS4yMTg3NX0seyJ4IjoxOTYuNjkxNDA2MjUsInkiOjMxNDIuODQ3MjM0NjgxMjAzNn1d"/><path id="my-svg-L_R_Q_0" marker-end="url(#my-svg_flowchart-v2-pointEnd)" d="m401 2997.1 34.3 18c34.4 18 103 54 136.1 77.6s30.4 34.6 29 40.1l-1.3 5.5" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" data-edge="true" data-et="edge" data-id="L_R_Q_0" data-look="classic" data-points="W3sieCI6NDAwLjk0MzExNDM5NzM1NzUzLCJ5IjoyOTk3LjA5OTg1NDM1MjY0MjV9LHsieCI6NjA3LjExNzE4NzUsInkiOjMxMDUuMjE4NzV9LHsieCI6NTk4LjE5MDEyNDUxMTcxODgsInkiOjMxNDIuMjE4NzV9XQ=="/></g><g class="edgeLabels"><g class="edgeLabel"><foreignObject width="0" height="0" class="label" data-id="L_A_B_0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display:table-cell;white-space:nowrap;line-height:1.5;max-width:200px;text-align:center"><span class="edgeLabel"/></div></foreignObject></g><g class="edgeLabel"><foreignObject width="0" height="0" class="label" data-id="L_B_C_0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display:table-cell;white-space:nowrap;line-height:1.5;max-width:200px;text-align:center"><span class="edgeLabel"/></div></foreignObject></g><g class="edgeLabel"><foreignObject width="47.4" height="24" class="label" data-id="L_C_Z_0" transform="translate(8 1714.2)"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display:table-cell;white-space:nowrap;line-height:1.5;max-width:200px;text-align:center"><span class="edgeLabel"><p>Public</p></span></div></foreignObject></g><g class="edgeLabel"><foreignObject width="76.6" height="24" class="label" data-id="L_C_D_0" transform="translate(252.2 489.5)"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display:table-cell;white-space:nowrap;line-height:1.5;max-width:200px;text-align:center"><span class="edgeLabel"><p>Protected</p></span></div></foreignObject></g><g class="edgeLabel"><foreignObject width="0" height="0" class="label" data-id="L_D_E_0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display:table-cell;white-space:nowrap;line-height:1.5;max-width:200px;text-align:center"><span class="edgeLabel"/></div></foreignObject></g><g class="edgeLabel"><foreignObject width="25.8" height="24" class="label" data-id="L_E_F_0" transform="translate(406 848)"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display:table-cell;white-space:nowrap;line-height:1.5;max-width:200px;text-align:center"><span class="edgeLabel"><p>Yes</p></span></div></foreignObject></g><g class="edgeLabel"><foreignObject width="21.8" height="24" class="label" data-id="L_E_G_0" transform="translate(118.7 976)"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display:table-cell;white-space:nowrap;line-height:1.5;max-width:200px;text-align:center"><span class="edgeLabel"><p>No</p></span></div></foreignObject></g><g class="edgeLabel"><foreignObject width="0" height="0" class="label" data-id="L_F_H_0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display:table-cell;white-space:nowrap;line-height:1.5;max-width:200px;text-align:center"><span class="edgeLabel"/></div></foreignObject></g><g class="edgeLabel"><foreignObject width="25.8" height="24" class="label" data-id="L_H_I_0" transform="translate(421.5 1650.2)"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display:table-cell;white-space:nowrap;line-height:1.5;max-width:200px;text-align:center"><span class="edgeLabel"><p>Yes</p></span></div></foreignObject></g><g class="edgeLabel"><foreignObject width="21.8" height="24" class="label" data-id="L_H_G_0" transform="translate(329.4 1211.6)"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display:table-cell;white-space:nowrap;line-height:1.5;max-width:200px;text-align:center"><span class="edgeLabel"><p>No</p></span></div></foreignObject></g><g class="edgeLabel"><foreignObject width="0" height="0" class="label" data-id="L_G_J_0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display:table-cell;white-space:nowrap;line-height:1.5;max-width:200px;text-align:center"><span class="edgeLabel"/></div></foreignObject></g><g class="edgeLabel"><foreignObject width="21.8" height="24" class="label" data-id="L_J_K_0" transform="translate(125.1 1778.2)"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display:table-cell;white-space:nowrap;line-height:1.5;max-width:200px;text-align:center"><span class="edgeLabel"><p>No</p></span></div></foreignObject></g><g class="edgeLabel"><foreignObject width="25.8" height="24" class="label" data-id="L_J_L_0" transform="translate(267 1650.2)"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display:table-cell;white-space:nowrap;line-height:1.5;max-width:200px;text-align:center"><span class="edgeLabel"><p>Yes</p></span></div></foreignObject></g><g class="edgeLabel"><foreignObject width="0" height="0" class="label" data-id="L_L_M_0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display:table-cell;white-space:nowrap;line-height:1.5;max-width:200px;text-align:center"><span class="edgeLabel"/></div></foreignObject></g><g class="edgeLabel"><foreignObject width="21.8" height="24" class="label" data-id="L_M_K_0" transform="translate(269 2048.8)"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display:table-cell;white-space:nowrap;line-height:1.5;max-width:200px;text-align:center"><span class="edgeLabel"><p>No</p></span></div></foreignObject></g><g class="edgeLabel"><foreignObject width="25.8" height="24" class="label" data-id="L_M_I_0" transform="translate(426 2009.5)"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display:table-cell;white-space:nowrap;line-height:1.5;max-width:200px;text-align:center"><span class="edgeLabel"><p>Yes</p></span></div></foreignObject></g><g class="edgeLabel"><foreignObject width="0" height="0" class="label" data-id="L_I_N_0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display:table-cell;white-space:nowrap;line-height:1.5;max-width:200px;text-align:center"><span class="edgeLabel"/></div></foreignObject></g><g class="edgeLabel"><foreignObject width="21.8" height="24" class="label" data-id="L_N_O_0" transform="translate(262.7 2538.7)"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display:table-cell;white-space:nowrap;line-height:1.5;max-width:200px;text-align:center"><span class="edgeLabel"><p>No</p></span></div></foreignObject></g><g class="edgeLabel"><foreignObject width="25.8" height="24" class="label" data-id="L_N_P_0" transform="translate(546.9 2403)"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display:table-cell;white-space:nowrap;line-height:1.5;max-width:200px;text-align:center"><span class="edgeLabel"><p>Yes</p></span></div></foreignObject></g><g class="edgeLabel"><foreignObject width="21.8" height="24" class="label" data-id="L_P_Q_0" transform="translate(565.4 2802.4)"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display:table-cell;white-space:nowrap;line-height:1.5;max-width:200px;text-align:center"><span class="edgeLabel"><p>No</p></span></div></foreignObject></g><g class="edgeLabel"><foreignObject width="25.8" height="24" class="label" data-id="L_P_O_0" transform="translate(420.4 2647.6)"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display:table-cell;white-space:nowrap;line-height:1.5;max-width:200px;text-align:center"><span class="edgeLabel"><p>Yes</p></span></div></foreignObject></g><g class="edgeLabel"><foreignObject width="0" height="0" class="label" data-id="L_O_R_0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display:table-cell;white-space:nowrap;line-height:1.5;max-width:200px;text-align:center"><span class="edgeLabel"/></div></foreignObject></g><g class="edgeLabel"><foreignObject width="25.8" height="24" class="label" data-id="L_R_Z_0" transform="translate(317 3093.2)"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display:table-cell;white-space:nowrap;line-height:1.5;max-width:200px;text-align:center"><span class="edgeLabel"><p>Yes</p></span></div></foreignObject></g><g class="edgeLabel"><foreignObject width="21.8" height="24" class="label" data-id="L_R_Q_0" transform="translate(510 3048)"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display:table-cell;white-space:nowrap;line-height:1.5;max-width:200px;text-align:center"><span class="edgeLabel"><p>No</p></span></div></foreignObject></g></g><g class="nodes"><g id="my-svg-flowchart-A-0" class="node default" data-look="classic"><path d="M108.2 8h199.7v54H108.2z" class="basic label-container"/><g class="label" transform="translate(138.1 23)"><rect/><foreignObject width="139.7" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display:table-cell;white-space:nowrap;line-height:1.5;max-width:200px;text-align:center"><span class="nodeLabel"><p>Incoming request</p></span></div></foreignObject></g></g><g id="my-svg-flowchart-B-2" class="node default" data-look="classic"><path d="M109.8 112h196.4v54H109.8z" class="basic label-container"/><g class="label" transform="translate(139.8 127)"><rect/><foreignObject width="136.4" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display:table-cell;white-space:nowrap;line-height:1.5;max-width:200px;text-align:center"><span class="nodeLabel"><p>Resolve resource</p></span></div></foreignObject></g></g><g id="my-svg-flowchart-C-4" class="node default" data-look="classic"><path d="m208.5 464.5 124.2-124.3L208.5 216 84.2 340.2z" class="label-container"/><g class="label" transform="translate(110.7 328.3)"><rect/><foreignObject width="194.5" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display:table-cell;white-space:nowrap;line-height:1.5;max-width:200px;text-align:center"><span class="nodeLabel"><p>Resource security policy</p></span></div></foreignObject></g></g><g id="my-svg-flowchart-Z-6" class="node default" data-look="classic"><path d="M10 3142.2h186.7v54H10z" class="basic label-container"/><g class="label" transform="translate(40 3157.2)"><rect/><foreignObject width="126.6" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display:table-cell;white-space:nowrap;line-height:1.5;max-width:200px;text-align:center"><span class="nodeLabel"><p>Process request</p></span></div></foreignObject></g></g><g id="my-svg-flowchart-D-8" class="node default" data-look="classic"><path d="M191.3 538.5h198.3v54H191.3z" class="basic label-container"/><g class="label" transform="translate(221.3 553.5)"><rect/><foreignObject width="138.3" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display:table-cell;white-space:nowrap;line-height:1.5;max-width:200px;text-align:center"><span class="nodeLabel"><p>Read cookie data</p></span></div></foreignObject></g></g><g id="my-svg-flowchart-E-10" class="node default" data-look="classic"><path d="m291 823 90.3-90.2-90.3-90.3-90.3 90.3z" class="label-container"/><g class="label" transform="translate(227.2 720.8)"><rect/><foreignObject width="126.6" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display:table-cell;white-space:nowrap;line-height:1.5;max-width:200px;text-align:center"><span class="nodeLabel"><p>Session cookie?</p></span></div></foreignObject></g></g><g id="my-svg-flowchart-F-12" class="node default" data-look="classic"><path d="M324.6 897h188.8v54H324.6z" class="basic label-container"/><g class="label" transform="translate(354.6 912)"><rect/><foreignObject width="128.8" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display:table-cell;white-space:nowrap;line-height:1.5;max-width:200px;text-align:center"><span class="nodeLabel"><p>Validate session</p></span></div></foreignObject></g></g><g id="my-svg-flowchart-G-14" class="node default" data-look="classic"><path d="M78 1266h260v78H78z" class="basic label-container"/><g class="label" transform="translate(108 1281)"><rect/><foreignObject width="200" height="48"><div xmlns="http://www.w3.org/1999/xhtml" style="display:table;white-space:break-spaces;line-height:1.5;max-width:200px;text-align:center;width:200px"><span class="nodeLabel"><p>Use configured auth method</p></span></div></foreignObject></g></g><g id="my-svg-flowchart-H-16" class="node default" data-look="classic"><path d="m419.5 1192 83.5-83.5-83.5-83.5-83.5 83.5z" class="label-container"/><g class="label" transform="translate(362.5 1096.6)"><rect/><foreignObject width="113" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display:table-cell;white-space:nowrap;line-height:1.5;max-width:200px;text-align:center"><span class="nodeLabel"><p>Session valid?</p></span></div></foreignObject></g></g><g id="my-svg-flowchart-I-18" class="node default" data-look="classic"><path d="M367.9 2097.8H607v54H367.9z" class="basic label-container"/><g class="label" transform="translate(397.9 2112.8)"><rect/><foreignObject width="179.2" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display:table-cell;white-space:nowrap;line-height:1.5;max-width:200px;text-align:center"><span class="nodeLabel"><p>Authenticated identity</p></span></div></foreignObject></g></g><g id="my-svg-flowchart-J-22" class="node default" data-look="classic"><path d="M208.5 1625.2 324 1509.6 208.5 1394 93 1509.6z" class="label-container"/><g class="label" transform="translate(119.4 1497.6)"><rect/><foreignObject width="177.1" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display:table-cell;white-space:nowrap;line-height:1.5;max-width:200px;text-align:center"><span class="nodeLabel"><p>Authorization header?</p></span></div></foreignObject></g></g><g id="my-svg-flowchart-K-24" class="node default" data-look="classic"><path d="M106.5 2097.8h203v54h-203z" class="basic label-container"/><g class="label" transform="translate(136.5 2112.8)"><rect/><foreignObject width="143" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display:table-cell;white-space:nowrap;line-height:1.5;max-width:200px;text-align:center"><span class="nodeLabel"><p>401 Unauthorized</p></span></div></foreignObject></g></g><g id="my-svg-flowchart-L-26" class="node default" data-look="classic"><path d="M171 1699.2h218v54H171z" class="basic label-container"/><g class="label" transform="translate(201 1714.2)"><rect/><foreignObject width="157.9" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display:table-cell;white-space:nowrap;line-height:1.5;max-width:200px;text-align:center"><span class="nodeLabel"><p>Validate credentials</p></span></div></foreignObject></g></g><g id="my-svg-flowchart-M-28" class="node default" data-look="classic"><path d="m280.5 2023.8 98.3-98.3-98.3-98.3-98.3 98.3z" class="label-container"/><g class="label" transform="translate(208.7 1913.5)"><rect/><foreignObject width="142.6" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display:table-cell;white-space:nowrap;line-height:1.5;max-width:200px;text-align:center"><span class="nodeLabel"><p>Credentials valid?</p></span></div></foreignObject></g></g><g id="my-svg-flowchart-N-34" class="node default" data-look="classic"><path d="m488 2378 88.2-88-88.2-88.3-88.1 88.2z" class="label-container"/><g class="label" transform="translate(426.4 2277.9)"><rect/><foreignObject width="122.3" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display:table-cell;white-space:nowrap;line-height:1.5;max-width:200px;text-align:center"><span class="nodeLabel"><p>CSRF required?</p></span></div></foreignObject></g></g><g id="my-svg-flowchart-O-36" class="node default" data-look="classic"><path d="M261.5 2723.4h136.6v54H261.5z" class="basic label-container"/><g class="label" transform="translate(291.5 2738.4)"><rect/><foreignObject width="76.6" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display:table-cell;white-space:nowrap;line-height:1.5;max-width:200px;text-align:center"><span class="nodeLabel"><p>Authorize</p></span></div></foreignObject></g></g><g id="my-svg-flowchart-P-38" class="node default" data-look="classic"><path d="m560.3 2649.4 98.7-98.7-98.7-98.7-98.7 98.7z" class="label-container"/><g class="label" transform="translate(488 2538.7)"><rect/><foreignObject width="143.4" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display:table-cell;white-space:nowrap;line-height:1.5;max-width:200px;text-align:center"><span class="nodeLabel"><p>CSRF token valid?</p></span></div></foreignObject></g></g><g id="my-svg-flowchart-Q-40" class="node default" data-look="classic"><path d="M503.9 3142.2h175.5v54H503.9z" class="basic label-container"/><g class="label" transform="translate(534 3157.2)"><rect/><foreignObject width="115.5" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display:table-cell;white-space:nowrap;line-height:1.5;max-width:200px;text-align:center"><span class="nodeLabel"><p>403 Forbidden</p></span></div></foreignObject></g></g><g id="my-svg-flowchart-R-44" class="node default" data-look="classic"><path d="m330.3 3068.2 108.4-108.4-108.4-108.4L222 2959.8z" class="label-container"/><g class="label" transform="translate(248.4 2947.8)"><rect/><foreignObject width="162.8" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display:table-cell;white-space:nowrap;line-height:1.5;max-width:200px;text-align:center"><span class="nodeLabel"><p>Permission granted?</p></span></div></foreignObject></g></g></g></g><defs><filter id="my-svg-drop-shadow" width="130%" height="130%"><feDropShadow dx="4" dy="4" flood-color="#000" flood-opacity=".1" stdDeviation="0"/></filter></defs><defs><filter id="my-svg-drop-shadow-small" width="150%" height="150%"><feDropShadow dx="2" dy="2" flood-color="#000" flood-opacity=".1" stdDeviation="0"/></filter></defs></svg></p>
+<p>PyRobusta returns the following HTTP status codes for authentication and authorization failures:</p>
+<table>
+<thead>
+<tr>
+<th>Condition</th>
+<th>Response</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Missing authentication credentials</td>
+<td>401 Unauthorized</td>
+</tr>
+<tr>
+<td>Invalid authentication credentials</td>
+<td>401 Unauthorized</td>
+</tr>
+<tr>
+<td>Authenticated, but CSRF validation failed</td>
+<td>403 Forbidden</td>
+</tr>
+<tr>
+<td>Authenticated, but authorization failed</td>
+<td>403 Forbidden</td>
+</tr>
+</tbody>
+</table>
+<h2 id="content-serving-browser-security-headers">Content Serving &amp; Browser Security Headers</h2>
+<h3 id="unsafe-content-types">Unsafe Content Types</h3>
+<p>To lower the risk of cross-site scripting (XSS) attacks, browser-interpreted or
+active content types like <code>text/html</code> and <code>application/javascript</code> are served
+as attachments by setting <code>Content-Disposition: attachment</code>. This rule applies
+to every file stored under <code>/www/user_data</code>. The following file extensions are
+allowlisted and are served inline with their corresponding content types:</p>
+<table>
+<thead>
+<tr>
+<th>Extension</th>
+<th>Content-Type header</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>.csv</td>
+<td>text/csv</td>
+</tr>
+<tr>
+<td>.gif</td>
+<td>image/gif</td>
+</tr>
+<tr>
+<td>.ico</td>
+<td>image/x-icon</td>
+</tr>
+<tr>
+<td>.jpeg/.jpg</td>
+<td>image/jpeg</td>
+</tr>
+<tr>
+<td>.json</td>
+<td>application/json</td>
+</tr>
+<tr>
+<td>.log</td>
+<td>text/plain</td>
+</tr>
+<tr>
+<td>.png</td>
+<td>image/png</td>
+</tr>
+<tr>
+<td>.txt</td>
+<td>text/plain</td>
+</tr>
+<tr>
+<td>.webp</td>
+<td>image/webp</td>
+</tr>
+</tbody>
+</table>
+<p>Unless overridden by the application, responses include <code>X-Content-Type-Options: nosniff</code>
+to prevent browsers from interpreting content using a different MIME type than the one
+provided by the server.</p>
+<h3 id="browser-security-headers">Browser Security Headers</h3>
+<h4 id="content-security-policy">Content Security Policy</h4>
+<p>Content Security Policy controls which resources the browser is allowed to
+load, execute, and embed, acting as a defense mechanism against XSS
+(cross-site scripting) vulnerabilities. PyRobusta includes a default
+Content-Security-Policy header in every response. Applications may override
+this header when required, but doing so can reduce browser-side security
+protections.</p>
+<p>The following defaults are applicable to the <code>Content-Security-Policy</code> header:</p>
+<table>
+<thead>
+<tr>
+<th>Policy</th>
+<th>Setting</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>default-src</td>
+<td>'self'</td>
+<td>Resources are only allowed from the same origin by default.</td>
+</tr>
+<tr>
+<td>script-src</td>
+<td>'self'</td>
+<td>JavaScript may only be loaded from the same origin. Inline scripts are blocked.</td>
+</tr>
+<tr>
+<td>style-src</td>
+<td>'self' 'unsafe-inline'</td>
+<td>Stylesheets may be loaded from the same origin. Inline styles are allowed.</td>
+</tr>
+<tr>
+<td>object-src</td>
+<td>'none'</td>
+<td>Embedded plugin content such as <code>&lt;object&gt;</code> and <code>&lt;embed&gt;</code> is disabled.</td>
+</tr>
+<tr>
+<td>base-uri</td>
+<td>'self'</td>
+<td>The document base URL can only be set to the same origin.</td>
+</tr>
+<tr>
+<td>frame-ancestors</td>
+<td>'none'</td>
+<td>Prevents the application from being embedded in frames.</td>
+</tr>
+</tbody>
+</table>
+<p>Inline styles are permitted for compatibility with embedded resources such as
+SVG files. Inline JavaScript remains disabled by the default policy.</p>
+<h4 id="referrer-policy">Referrer Policy</h4>
+<p>Referrer Policy controls the amount of referrer information sent by the browser.
+The following default is applicable to the <code>Referrer-Policy</code> header:</p>
+<table>
+<thead>
+<tr>
+<th>Header</th>
+<th>Setting</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Referrer-Policy</td>
+<td>no-referrer</td>
+<td>Prevents browsers from sending the originating URL in the <code>Referer</code> header.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="https-tls">HTTPS / TLS</h2>
+<p>TLS is enabled by the <code>tls</code> configuration parameter in <code>pyrobusta.env</code>. When enabled, the certificate and private
+key specified by the <code>tls_cert_file</code> and <code>tls_key_file</code> configuration are loaded. The underlying asyncio server
+accepts a configured MicroPython <code>ssl.SSLContext</code> through the <code>ssl</code> parameter of <code>asyncio.start_server()</code>.</p>
+<p>TLS capabilities, including supported certificate and private-key formats, key types, cipher suites, and cryptographic
+algorithms, depend on the SSL implementation and configuration provided by the target MicroPython port. The configurations
+documented here are those supported and tested for PyRobusta on the ESP32 port. Larger RSA key sizes and larger elliptic
+curves require additional RAM and computational resources during TLS initialization and connection handling.
+The recommended configurations provide a balance between compatibility, security, and resource usage.</p>
+<table>
+<thead>
+<tr>
+<th>Algorithm</th>
+<th>Size/curve</th>
+<th>Key/Certificate format</th>
+<th>Comment</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ECDSA</td>
+<td>P-256</td>
+<td>DER</td>
+<td>Recommended ECDSA configuration</td>
+</tr>
+<tr>
+<td>ECDSA</td>
+<td>P-384</td>
+<td>DER</td>
+<td></td>
+</tr>
+<tr>
+<td>ECDSA</td>
+<td>P-256</td>
+<td>PEM</td>
+<td></td>
+</tr>
+<tr>
+<td>RSA</td>
+<td>2048</td>
+<td>DER</td>
+<td>Recommended RSA configuration</td>
+</tr>
+<tr>
+<td>RSA</td>
+<td>3072</td>
+<td>DER</td>
+<td></td>
+</tr>
+<tr>
+<td>RSA</td>
+<td>4096</td>
+<td>DER</td>
+<td></td>
+</tr>
+<tr>
+<td>RSA</td>
+<td>2048</td>
+<td>PEM</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="certificate-creation-installation">Certificate Creation &amp; Installation</h2>
+<p>The following section provides examples for certificate creation.
+The examples below use ECDSA P-256, which is the recommended configuration.
+RSA certificates can be generated similarly by replacing the EC key-generation commands
+with RSA key generation.</p>
+<p>Replace <code>device.local</code> with the hostname used to access the device, as well as
+the certificate subject (<code>subjectAltName</code>) values according to your deployment.
+If the device is accessed by IP address, use an <code>IP</code> SAN instead, for
+example <code>subjectAltName=IP:192.168.1.101</code>.</p>
+<h3 id="self-signed-certificate">Self-signed Certificate</h3>
+<pre><code class="language-bash"># Create private key for the server
+openssl genpkey -algorithm EC \
+  -pkeyopt ec_paramgen_curve:P-256 \
+  -outform DER -out key.der
+
+# Create certificate for the server, signed by itself
+openssl req -x509 -new \
+  -key key.der -keyform DER \
+  -out cert.der -outform DER \
+  -days 365 \
+  -subj /CN=device.local \
+  -addext 'basicConstraints=critical,CA:FALSE' \
+  -addext 'keyUsage=critical,digitalSignature' \
+  -addext 'subjectAltName=DNS:device.local'
+</code></pre>
+<p>The above commands produce:</p>
+<pre><code>key.der          ECDSA P-256 private key
+cert.der         self-signed certificate
+</code></pre>
+<h3 id="ca-signed-certificate">CA-signed Certificate</h3>
+<pre><code class="language-bash"># Optional: generate CA private key and certificate if does not exist
+openssl genpkey -algorithm EC \
+  -pkeyopt ec_paramgen_curve:P-256 \
+  -outform DER -out ca.key.der
+
+openssl req -new -x509 \
+  -key ca.key.der -keyform DER \
+  -out ca.crt.der -outform DER \
+  -days 3650 -subj /CN=TestCA \
+  -addext 'basicConstraints=critical,CA:TRUE' \
+  -addext 'keyUsage=critical,keyCertSign,cRLSign'
+
+# Create server private key certificate signing request (CSR)
+openssl genpkey -algorithm EC \
+  -pkeyopt ec_paramgen_curve:P-256 \
+  -outform DER -out key.der
+
+openssl req -new \
+  -key key.der -keyform DER \
+  -out server.csr \
+  -subj /CN=device.local
+
+# Create certificate for the server, signed by the CA
+openssl x509 -req \
+  -in server.csr \
+  -CA ca.crt.der -CAform DER \
+  -CAkey ca.key.der -CAkeyform DER \
+  -CAcreateserial \
+  -out cert.der -outform DER \
+  -days 365 \
+  -extfile &lt;(printf '%s\n' \
+    'basicConstraints=critical,CA:FALSE' \
+    'keyUsage=critical,digitalSignature' \
+    'subjectAltName=DNS:device.local')
+</code></pre>
+<p>The above commands produce:</p>
+<pre><code>ca.key.der       CA private key
+ca.crt.der       CA certificate
+server.csr       Server CSR
+key.der          Server private key
+cert.der         CA-signed server certificate
+</code></pre>
+<p>Install certificates into the root directory with <code>mpremote</code>:</p>
+<pre><code class="language-bash">$ mpremote connect /dev/ttyACM1 soft-reset
+$ mpremote connect /dev/ttyACM1 cp key.der :/key.der
+$ mpremote connect /dev/ttyACM1 cp cert.der :/cert.der
+</code></pre>
+<hr />
+<p>PyRobusta v0.9.0 Web Server</p>
+
+</body>
+</html>

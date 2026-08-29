@@ -47,6 +47,73 @@ def handler(http_ctx, _):
     http_ctx.terminate(404)
     return &quot;text/plain&quot;, &quot;Resource not found&quot;
 </code></pre>
+<p>The following list of status codes are supported by PyRobusta:</p>
+<table>
+<thead>
+<tr>
+<th>Status Code</th>
+<th>HTTP Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>200</td>
+<td>OK</td>
+</tr>
+<tr>
+<td>201</td>
+<td>Created</td>
+</tr>
+<tr>
+<td>204</td>
+<td>No Content</td>
+</tr>
+<tr>
+<td>400</td>
+<td>Bad Request</td>
+</tr>
+<tr>
+<td>401</td>
+<td>Unauthorized</td>
+</tr>
+<tr>
+<td>403</td>
+<td>Forbidden</td>
+</tr>
+<tr>
+<td>404</td>
+<td>Not Found</td>
+</tr>
+<tr>
+<td>405</td>
+<td>Method Not Allowed</td>
+</tr>
+<tr>
+<td>408</td>
+<td>Request Timeout</td>
+</tr>
+<tr>
+<td>413</td>
+<td>Content Too Large</td>
+</tr>
+<tr>
+<td>415</td>
+<td>Unsupported Media Type</td>
+</tr>
+<tr>
+<td>500</td>
+<td>Internal Server Error</td>
+</tr>
+<tr>
+<td>503</td>
+<td>Service Unavailable</td>
+</tr>
+<tr>
+<td>505</td>
+<td>Version Not Supported</td>
+</tr>
+</tbody>
+</table>
 <h2 id="response-headers">Response Headers</h2>
 <p>Response headers and response bodies can be configured through methods exposed by the HTTP context
 (<code>set_response_header()</code>, <code>set_response_body()</code>).
@@ -108,7 +175,7 @@ The following requirements must be fulfilled by the generator:</p>
 <pre><code># /app.py
 import asyncio
 
-from pyrobusta.server import http_server
+from pyrobusta import application
 from pyrobusta.protocol.http import HttpEngine
 
 @HttpEngine.route(&quot;/stream&quot;, &quot;GET&quot;)
@@ -133,8 +200,7 @@ def stream_handler(http_ctx, _):
     http_ctx.resp_handler = generate_chunks
 
 async def main():
-    server = http_server.HttpServer()
-    await server.start_socket_server()
+    await application.run()
     while True:
         await asyncio.sleep(1)
 </code></pre>
@@ -164,7 +230,7 @@ explicitly enabled in the example below for completeness.</p>
 <pre><code># /app.py
 import asyncio
 
-from pyrobusta.server import http_server
+from pyrobusta import application
 from pyrobusta.protocol.http import HttpEngine
 
 def multipart_response(num_responses, part_size):
@@ -185,8 +251,7 @@ def multipart_handler(http_ctx, _):
     return &quot;multipart/form-data&quot;, multipart_response(part_count, part_size)
 
 async def main():
-    server = http_server.HttpServer()
-    await server.start_socket_server()
+    await application.run()
     while True:
         await asyncio.sleep(1)
 </code></pre>
@@ -207,7 +272,7 @@ XXXXXXXXXX
 --pyrobusta-boundary--
 </code></pre>
 <hr />
-<p>PyRobusta v0.8.0 Web Server</p>
+<p>PyRobusta v0.9.0 Web Server</p>
 
 </body>
 </html>

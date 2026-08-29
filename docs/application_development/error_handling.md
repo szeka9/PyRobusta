@@ -118,4 +118,4 @@ def handler(http_ctx, _):
 
 ---
 
-PyRobusta v0.8.0 Web Server
+PyRobusta v0.9.0 Web Server

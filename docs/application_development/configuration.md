@@ -95,4 +95,4 @@ and configuration-loading functionality.
 
 ---
 
-PyRobusta v0.8.0 Web Server
+PyRobusta v0.9.0 Web Server
