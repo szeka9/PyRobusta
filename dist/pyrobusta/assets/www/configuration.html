@@ -18,7 +18,7 @@ configuration API.</p>
 <li><a href="#configuration">Configuration</a></li>
 <li><a href="#configuration-format-deployment">Configuration Format &amp; Deployment</a></li>
 <li><a href="#parameter-description">Parameter Description</a></li>
-<li><a href="#configuration-api">Configuration API</a></li>
+<li><a href="#configuration-loading">Configuration Loading</a></li>
 </ul>
 <hr />
 <h2 id="configuration-format-deployment">Configuration Format &amp; Deployment</h2>
@@ -32,8 +32,8 @@ http_mem_cap=0.05       # limit heap usage of stream buffers to 5% of the total 
 tls=False               # turn off TLS
 </code></pre>
 <p>Perform a soft reset and upload <code>pyrobusta.env</code> using mpremote.</p>
-<pre><code>$ mpremote a0 soft-reset
-$ mpremote a0 cp pyrobusta.env :/pyrobusta.env
+<pre><code>$ mpremote connect /dev/ttyACM1 soft-reset
+$ mpremote connect /dev/ttyACM1 cp pyrobusta.env :/pyrobusta.env
 </code></pre>
 <h2 id="parameter-description">Parameter Description</h2>
 <table>
@@ -52,8 +52,53 @@ $ mpremote a0 cp pyrobusta.env :/pyrobusta.env
 </tr>
 <tr>
 <td><code>wifi_password</code></td>
-<td>Password of the Wi-Fi network. When empty, Wi-Fi is not initialized by the built-in <code>wifi.py</code> module.</td>
+<td>Password of the Wi-Fi network.</td>
 <td>None</td>
+</tr>
+<tr>
+<td><code>tls</code></td>
+<td>Enables or disables TLS. When enabled, <code>cert.der</code> and <code>key.der</code> must be installed at the server root.</td>
+<td>False</td>
+</tr>
+<tr>
+<td><code>tls_cert_file</code></td>
+<td>Alternative path to the TLS certificate.</td>
+<td><code>/cert.der</code></td>
+</tr>
+<tr>
+<td><code>tls_key_file</code></td>
+<td>Alternative path to the TLS private key.</td>
+<td><code>/key.der</code></td>
+</tr>
+<tr>
+<td><code>passwd_file</code></td>
+<td>Path to the file containing user credentials used for authentication.</td>
+<td><code>/pyrobusta.passwd</code></td>
+</tr>
+<tr>
+<td><code>roles_file</code></td>
+<td>Path to the file containing RBAC role definitions used for authorization.</td>
+<td><code>/pyrobusta.roles</code></td>
+</tr>
+<tr>
+<td><code>log_level</code></td>
+<td>Logging level. Can be one of: <code>error</code>, <code>warning</code>, <code>info</code>, <code>debug</code>.</td>
+<td><code>info</code></td>
+</tr>
+<tr>
+<td><code>socket_max_con</code></td>
+<td>Maximum number of simultaneous socket connections.</td>
+<td>2</td>
+</tr>
+<tr>
+<td><code>http_served_paths</code></td>
+<td>Space-separated list of filesystem paths that may be served over HTTP.</td>
+<td><code>/www</code></td>
+</tr>
+<tr>
+<td><code>http_mem_cap</code></td>
+<td>Fraction of available heap memory reserved for stream buffers. Valid range: (0, 1].</td>
+<td>0.1</td>
 </tr>
 <tr>
 <td><code>http_port</code></td>
@@ -67,18 +112,8 @@ $ mpremote a0 cp pyrobusta.env :/pyrobusta.env
 </tr>
 <tr>
 <td><code>http_multipart</code></td>
-<td>Enables or disables multipart request and response processing. Enabling multipart support increases memory usage.</td>
+<td>Enables or disables multipart request and response processing (<code>Content-Type: multipart/*</code>).</td>
 <td>False</td>
-</tr>
-<tr>
-<td><code>http_mem_cap</code></td>
-<td>Fraction of available heap memory reserved for stream buffers. Valid range: (0, 1].</td>
-<td>0.1</td>
-</tr>
-<tr>
-<td><code>http_served_paths</code></td>
-<td>Space-separated list of filesystem paths that may be served over HTTP.</td>
-<td><code>/www /lib/pyrobusta</code></td>
 </tr>
 <tr>
 <td><code>http_files_api</code></td>
@@ -86,46 +121,54 @@ $ mpremote a0 cp pyrobusta.env :/pyrobusta.env
 <td>False</td>
 </tr>
 <tr>
-<td><code>socket_max_con</code></td>
-<td>Maximum number of simultaneous socket connections.</td>
-<td>2</td>
+<td><code>http_auth</code></td>
+<td>Selects the type of authentication method enforced by the server. Currently, basic authentication (<code>basic</code>) is supported.</td>
+<td>None</td>
 </tr>
 <tr>
-<td><code>tls</code></td>
-<td>Enables or disables TLS. When enabled, <code>cert.der</code> and <code>key.der</code> must be installed at the server root.</td>
+<td><code>http_browser_security</code></td>
+<td>Enables or disables browser security features including browser security headers (Content Security Policy, referrer policy) and CSRF protection (if authentication is enabled). Disabling browser security is only recommended when using non-browser clients or during local development and testing.</td>
+<td>True</td>
+</tr>
+<tr>
+<td><code>http_insecure_auth</code></td>
+<td>Allows clients to authenticate over unsecured HTTP (without TLS). This may expose credentials or authentication tokens in transit.</td>
 <td>False</td>
 </tr>
 <tr>
-<td><code>log_level</code></td>
-<td>Logging level. Can be one of: <code>warning</code>, <code>info</code>, <code>debug</code>.</td>
-<td>info</td>
+<td><code>http_sessions</code></td>
+<td>Enables browser session cookies for authenticated clients. When enabled, successful authentication establishes a session that can be reused without resending authentication credentials.</td>
+<td>True</td>
+</tr>
+<tr>
+<td><code>http_session_ttl_sec</code></td>
+<td>Duration of validity of session cookies in seconds.</td>
+<td>900</td>
 </tr>
 </tbody>
 </table>
-<h2 id="configuration-api">Configuration API</h2>
-<p>Configuration values can be accessed through the
-<code>pyrobusta.utils.config</code> module.
-Values are loaded from <code>pyrobusta.env</code> during server initialization.
-Configuration values can be retrieved using
-<code>get_config()</code> together with one of the
-predefined <code>CONF_*</code> constants.</p>
-<p>After initialization, configuration values are retrieved from an internal cache.
-The cached values are normalized to their expected runtime types to avoid repeated
-parsing of environment strings.</p>
-<p>Configuration values are treated as immutable during runtime.
-Changes are applied only when the configuration cache is reloaded.
-The configuration cache can be reloaded by calling
-<code>read_config()</code>, which re-reads <code>pyrobusta.env</code>
-and rebuilds the internal normalized cache.</p>
-<pre><code>from pyrobusta.utils.config import get_config, CONF_TLS
+<h2 id="configuration-loading">Configuration Loading</h2>
+<p>Configuration is represented by the <code>Config</code> class in
+<code>pyrobusta.utils.config</code>. During application initialization,
+<code>pyrobusta.application</code> creates and loads a <code>Config</code> instance from
+<code>pyrobusta.env</code>, converting values to their expected runtime types.</p>
+<p>Configuration values are exposed as attributes on the <code>Config</code> instance:</p>
+<pre><code>config = Config(&quot;/pyrobusta.env&quot;)
 
-@HttpEngine.route(&quot;/tls&quot;, &quot;GET&quot;)
-def tls_status(http_ctx, _):
-    enabled = get_config(CONF_TLS)
-    return &quot;text/plain&quot;, f&quot;TLS enabled: {enabled}&quot;
+if config.tls:
+    ...
 </code></pre>
+<p>The application uses the configuration to initialize and specialize the
+relevant subsystems during startup. The <code>Config</code> instance is then discarded;
+runtime components do not access configuration directly.</p>
+<p>Configuration is <strong>immutable for the lifetime of an application</strong>. Changes
+to <code>pyrobusta.env</code> therefore require a new application instance and, under
+normal operation, an application restart.</p>
+<p>The <code>pyrobusta.utils.config</code> module does not maintain a global configuration
+object or runtime configuration cache. It provides the <code>Config</code> definition
+and configuration-loading functionality.</p>
 <hr />
-<p>PyRobusta v0.8.0 Web Server</p>
+<p>PyRobusta v0.9.0 Web Server</p>
 
 </body>
 </html>

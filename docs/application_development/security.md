@@ -468,4 +468,4 @@ $ mpremote connect /dev/ttyACM1 cp cert.der :/cert.der
 
 ---
 
-PyRobusta v0.8.0 Web Server
+PyRobusta v0.9.0 Web Server

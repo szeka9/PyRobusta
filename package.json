@@ -1,13 +1,9 @@
 {
-  "version": "v0.8.0",
+  "version": "v0.9.0",
   "urls": [
     [
-      "pyrobusta/connectivity/wifi.mpy",
-      "github:szeka9/PyRobusta/dist/pyrobusta/connectivity/wifi.mpy"
-    ],
-    [
-      "pyrobusta/connectivity/__init__.py",
-      "github:szeka9/PyRobusta/dist/pyrobusta/connectivity/__init__.py"
+      "pyrobusta/application.mpy",
+      "github:szeka9/PyRobusta/dist/pyrobusta/application.mpy"
     ],
     [
       "pyrobusta/transport/__init__.py",
@@ -26,6 +22,10 @@
       "github:szeka9/PyRobusta/dist/pyrobusta/assets/www/request.html"
     ],
     [
+      "pyrobusta/assets/www/error_handling.html",
+      "github:szeka9/PyRobusta/dist/pyrobusta/assets/www/error_handling.html"
+    ],
+    [
       "pyrobusta/assets/www/index.html",
       "github:szeka9/PyRobusta/dist/pyrobusta/assets/www/index.html"
     ],
@@ -36,6 +36,10 @@
     [
       "pyrobusta/assets/www/file_server.html",
       "github:szeka9/PyRobusta/dist/pyrobusta/assets/www/file_server.html"
+    ],
+    [
+      "pyrobusta/assets/www/security.html",
+      "github:szeka9/PyRobusta/dist/pyrobusta/assets/www/security.html"
     ],
     [
       "pyrobusta/assets/www/introduction.html",
@@ -58,8 +62,12 @@
       "github:szeka9/PyRobusta/dist/pyrobusta/assets/www/response.html"
     ],
     [
-      "pyrobusta/utils/helpers.mpy",
-      "github:szeka9/PyRobusta/dist/pyrobusta/utils/helpers.mpy"
+      "pyrobusta/utils/lexpath.mpy",
+      "github:szeka9/PyRobusta/dist/pyrobusta/utils/lexpath.mpy"
+    ],
+    [
+      "pyrobusta/utils/crypto.mpy",
+      "github:szeka9/PyRobusta/dist/pyrobusta/utils/crypto.mpy"
     ],
     [
       "pyrobusta/utils/__init__.py",
@@ -82,6 +90,10 @@
       "github:szeka9/PyRobusta/dist/pyrobusta/utils/assets.mpy"
     ],
     [
+      "pyrobusta/utils/iam.mpy",
+      "github:szeka9/PyRobusta/dist/pyrobusta/utils/iam.mpy"
+    ],
+    [
       "pyrobusta/protocol/http_multipart.mpy",
       "github:szeka9/PyRobusta/dist/pyrobusta/protocol/http_multipart.mpy"
     ],
@@ -94,8 +106,20 @@
       "github:szeka9/PyRobusta/dist/pyrobusta/protocol/__init__.py"
     ],
     [
+      "pyrobusta/protocol/http_basic_auth.mpy",
+      "github:szeka9/PyRobusta/dist/pyrobusta/protocol/http_basic_auth.mpy"
+    ],
+    [
+      "pyrobusta/protocol/http_security.mpy",
+      "github:szeka9/PyRobusta/dist/pyrobusta/protocol/http_security.mpy"
+    ],
+    [
       "pyrobusta/protocol/http_file_server.mpy",
       "github:szeka9/PyRobusta/dist/pyrobusta/protocol/http_file_server.mpy"
+    ],
+    [
+      "pyrobusta/protocol/http_cookie.mpy",
+      "github:szeka9/PyRobusta/dist/pyrobusta/protocol/http_cookie.mpy"
     ],
     [
       "pyrobusta/stream/__init__.py",

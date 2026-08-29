@@ -76,4 +76,4 @@ The following mapping between extensions and content types is maintained by the 
 
 ---
 
-PyRobusta v0.8.0 Web Server
+PyRobusta v0.9.0 Web Server

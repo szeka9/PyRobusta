@@ -95,4 +95,4 @@ $ curl -H "Accept: application/json" "http://192.168.1.101/version"
 
 ---
 
-PyRobusta v0.8.0 Web Server
+PyRobusta v0.9.0 Web Server

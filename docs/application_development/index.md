@@ -23,4 +23,4 @@ Then continue with the remaining guides in the order listed below.
 
 ---
 
-PyRobusta v0.8.0 Web Server
+PyRobusta v0.9.0 Web Server
