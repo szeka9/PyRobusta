@@ -118,7 +118,6 @@ incrementally rather than assuming the full payload is available at once.
 ```
 from pyrobusta import application
 from pyrobusta.protocol.http import HttpEngine
-from pyrobusta.utils.lexpath import normalize_path
 
 @HttpEngine.route("/app/chunks", "POST")
 def upload_chunks(http_ctx, payload: bytes):
@@ -131,7 +130,7 @@ def upload_chunks(http_ctx, payload: bytes):
 
     if payload:
         # Wait for more chunks before setting response status
-        with open(normalize_path("/tmp/chunks.txt"), "ab") as f:
+        with open("/tmp/chunks.txt", "ab") as f:
             f.write(payload)
         return
 
@@ -173,7 +172,6 @@ from os import listdir, remove, rename, mkdir
 
 from pyrobusta import application
 from pyrobusta.protocol.http import HttpEngine
-from pyrobusta.utils.lexpath import normalize_path
 
 @HttpEngine.route("/app/parts", "POST")
 def handle_parts(http_ctx, payload: tuple):
@@ -183,8 +181,8 @@ def handle_parts(http_ctx, payload: tuple):
 
     _part_headers, part_body = payload
 
-    tmp_path = normalize_path(f"/tmp/parts.{http_ctx.id}.txt")
-    target_path = normalize_path(f"/www/user_data/parts.{http_ctx.id}.txt")
+    tmp_path = f"/tmp/parts.{http_ctx.id}.txt"
+    target_path = f"/www/user_data/parts.{http_ctx.id}.txt"
 
     with open(tmp_path, "ab") as f:
         f.write(part_body)
@@ -196,7 +194,7 @@ def handle_parts(http_ctx, payload: tuple):
         return "text/plain", "OK"
 
 async def main():
-    mkdir(normalize_path("/tmp"))
+    mkdir("/tmp")
     await application.run()
     while True:
         await asyncio.sleep(1)
