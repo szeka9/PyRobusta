@@ -122,22 +122,16 @@ def load_test(config: dict, device: Device, user_classes: list, duration_minutes
         "p99_ms": total.get_response_time_percentile(0.99),
     }
 
-    try:
-        device.terminate()
-        usage_ts = device.read_file("heap_usage.csv")
-        usage = interpolate_time_series(
-            [
-                (int(u.split(",", 1)[0]), int(u.split(",", 1)[1]))
-                for u in usage_ts.splitlines()
-            ]
-        )
+    device.terminate()
+    usage_ts = device.read_file("heap_usage.csv")
+    usage = interpolate_time_series(
+        [
+            (int(u.split(",", 1)[0]), int(u.split(",", 1)[1]))
+            for u in usage_ts.splitlines()
+        ]
+    )
 
-        print(f"Measured: {usage}")
-    except Exception as e:  # pylint: disable=W0718
-        # Catch all exceptions without halting test execution
-        print(f"WARNING - exception: {e}")
-        return 0, [], stats
-
+    print(f"Measured: {usage}")
     return determine_idle_heap(usage), usage, stats
 
 

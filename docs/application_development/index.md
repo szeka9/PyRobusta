@@ -18,6 +18,7 @@ Then continue with the remaining guides in the order listed below.
 * [Static Content](static_content.md)
 * [File Server API](file_server.md)
 * [Authentication & Security](security.md)
+* [Logging & Error Handling](error_handling.md)
 * [Source Code](https://github.com/szeka9/PyRobusta)
 
 ---

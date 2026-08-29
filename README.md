@@ -127,7 +127,7 @@ Detailed benchmark results, scalability measurements, and soak tests are
 available in the [Dimensioning](./docs/dimensioning) and
 [Soak testing](./docs/soak) documentation.
 
-During a 5-minute performance test, the server handled **922 HTTP requests with
+During a 5-minute performance test, the server handled **1118 HTTP requests with
 zero errors** while heap usage remained stable throughout the test with no
 observable memory growth.
 

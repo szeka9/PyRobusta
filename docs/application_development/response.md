@@ -49,6 +49,25 @@ def handler(http_ctx, _):
     return "text/plain", "Resource not found"
 ```
 
+The following list of status codes are supported by PyRobusta:
+
+| Status Code | HTTP Status |
+| --- | --- |
+| 200 | OK |
+| 201 | Created |
+| 204 | No Content |
+| 400 | Bad Request |
+| 401 | Unauthorized |
+| 403 | Forbidden |
+| 404 | Not Found |
+| 405 | Method Not Allowed |
+| 408 | Request Timeout |
+| 413 | Content Too Large |
+| 415 | Unsupported Media Type |
+| 500 | Internal Server Error |
+| 503 | Service Unavailable |
+| 505 | Version Not Supported |
+
 ## Response Headers
 
 Response headers and response bodies can be configured through methods exposed by the HTTP context

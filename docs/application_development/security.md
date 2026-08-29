@@ -250,7 +250,7 @@ flowchart TD
 
     C -->|Public| Z[Process request]
 
-    C -->|Protected| D[Establish identity]
+    C -->|Protected| D[Read cookie data]
 
     D --> E{Session cookie?}
 

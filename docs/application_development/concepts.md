@@ -2,7 +2,7 @@
 
 [← Back](index.md)
 
-This chapter introduces the architectural concepts and design principles that underpin PyRobusta.
+This page introduces the architectural concepts and design principles that underpin PyRobusta.
 Detailed information about configuration, routing, and request handling is covered in the corresponding chapters.
 
 ---
