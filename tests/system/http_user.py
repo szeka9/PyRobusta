@@ -25,6 +25,9 @@ class DefaultTasks:
         """
         Use /test/stream to test chunked request handling.
         """
+        if AUTH and not client.cookies.get("csrf-token"):
+            self.get_index(client)
+
         part_count = 10
         part_size = 256
 
@@ -34,13 +37,18 @@ class DefaultTasks:
             chunked_data += b"X" * part_size + b"\r\n"
         chunked_data += b"0\r\n\r\n"
 
+        headers = {
+            "Content-Type": "application/octet-stream",
+            "Transfer-Encoding": "chunked",
+        }
+
+        if AUTH:
+            headers["X-CSRF-Token"] = client.cookies.get("csrf-token")
+
         response = client.post(
             "/test/stream",
             data=chunked_data,
-            headers={
-                "Content-Type": "application/octet-stream",
-                "Transfer-Encoding": "chunked",
-            },
+            headers=headers,
             name="/test/stream",
             auth=AUTH,
         )
@@ -83,6 +91,9 @@ class MultipartTasks:
         """
         Use /test/multipart to test multipart request handling.
         """
+        if AUTH and not client.cookies.get("csrf-token"):
+            self.get_multipart(client)
+
         part_count = 10
         part_size = 256
 
@@ -99,12 +110,15 @@ class MultipartTasks:
 
         multipart_data += b"--boundary--\r\n"
 
+        headers = {"Content-Type": "multipart/form-data; boundary=boundary"}
+
+        if AUTH:
+            headers["X-CSRF-Token"] = client.cookies.get("csrf-token")
+
         response = client.post(
             "/test/multipart",
             data=multipart_data,
-            headers={
-                "Content-Type": "multipart/form-data; boundary=boundary",
-            },
+            headers=headers,
             name="/test/multipart",
             auth=AUTH,
         )

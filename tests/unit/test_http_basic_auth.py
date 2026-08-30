@@ -426,7 +426,7 @@ class TestBasicAuthSessionStateMachine(TestHttpBase):
         cls.cwd = os.getcwd()
         cls.base_config = {
             "http_auth": "basic",
-            "http_browser_security": False,  # Disabling CSRF for session tests
+            "http_browser_security": False,  # Disabling CSRF for session-only tests
             "http_sessions": True,
             "http_session_ttl_sec": 5,
             "passwd_file": "/tmp/pyrobusta.passwd",
@@ -594,3 +594,160 @@ class TestBasicAuthSessionStateMachine(TestHttpBase):
         self.assertEqual(self.get_cookie_data("session"), None)
         self.assertEqual(self.engine.state, self.engine._route_request_st)
         self.assertEqual(self.engine.status_code, None)
+
+
+class TestBasicAuthSessionWithCSRFStateMachine(TestHttpBase):
+    """
+    Tests for HTTP authentication with session management and CSRF protection.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.cwd = os.getcwd()
+        cls.base_config = {
+            "http_auth": "basic",
+            "http_browser_security": True,
+            "http_sessions": True,
+            "http_session_ttl_sec": 5,
+            "passwd_file": "/tmp/pyrobusta.passwd",
+            "roles_file": "/tmp/pyrobusta.roles",
+            # For disbaling authentication related warning messages
+            "tls": True,
+        }
+
+        cls.passwd_content = (
+            "# User configuration\n"
+            "alice:role-1:mKmmf5wBEtlkty7LEcphieciOd3Pl0yY7r3WmDiZnzg=:XTQgg3Has79lDTNYVW+aPw=="
+            ":5000:PBKDF2-HMAC-SHA256:v1.2.3\n"
+        )
+
+        cls.roles_content = "/app/private\nGET: role-1\nPOST: role-1\n"
+
+    def prepare_request(self, auth_header=None):
+        self.engine.state = self.engine._handle_auth_header_st
+        self.engine.url = b"/app/private"
+        self.engine.method = b"GET"
+        if auth_header:
+            self.engine.headers["authorization"] = auth_header
+
+    def get_cookie_data(self, cookie_name):
+        try:
+            cookie_header = self.engine._lookup(self.engine.resp_headers, b"set-cookie")
+        except ValueError:
+            return None
+        cookies = cookie_header.split(b";")
+        for cookie in cookies:
+            name, _, value = cookie.partition(b"=")
+            if name.strip() == cookie_name.encode("ascii"):
+                return value.strip()
+        return None
+
+    def create_session_cookie(self, username, ttl=None):
+        user_secret = self.iam_db.get_user_info(username)[-1]
+        session_cookie = http_cookie.create_session_cookie(
+            username,
+            user_secret,
+            ttl if ttl is not None else self.base_config["http_session_ttl_sec"],
+            False,
+        )
+        return session_cookie.split(b";")[0].split(b"=")[1]
+
+    def test_session_csrf_cookies_accepted(self):
+        self.prepare_request(auth_header="")
+        self.engine.method = b"POST"
+
+        # Session cookie
+        session_cookie = self.create_session_cookie("alice")
+        self.engine.headers["cookie"] = "session=" + session_cookie.decode("ascii")
+
+        # CSRF cookie and token
+        user_secret = self.iam_db.get_user_info("alice")[-1]
+        csrf_subkey = crypto.HmacSha256(user_secret).digest(http_cookie._CSRF_INFO)
+        csrf_token = crypto.create_signed_token(
+            csrf_subkey, os.urandom(http_cookie._NONCE_SIZE)
+        )
+        self.engine.headers["cookie"] += "; csrf-token=" + csrf_token.decode("ascii")
+        self.engine.headers["x-csrf-token"] = csrf_token.decode("ascii")
+
+        self.engine.state(self.rx)
+
+        self.assertEqual(self.engine.state, self.engine._route_request_st)
+
+    def test_session_forged_csrf_secret_rejected(self):
+        self.prepare_request(auth_header="")
+        self.engine.method = b"POST"
+
+        # Session cookie
+        session_cookie = self.create_session_cookie("alice")
+        self.engine.headers["cookie"] = "session=" + session_cookie.decode("ascii")
+
+        # CSRF cookie and token
+        user_secret = b"forged"
+        csrf_subkey = crypto.HmacSha256(user_secret).digest(http_cookie._CSRF_INFO)
+        csrf_token = crypto.create_signed_token(
+            csrf_subkey, os.urandom(http_cookie._NONCE_SIZE)
+        )
+        self.engine.headers["cookie"] += "; csrf-token=" + csrf_token.decode("ascii")
+        self.engine.headers["x-csrf-token"] = csrf_token.decode("ascii")
+
+        self.engine.state(self.rx)
+
+        self.assertEqual(self.engine.state, self.engine._terminal_st)
+        self.assertEqual(self.engine.status_code, 403)
+
+    def test_session_missing_csrf_cookie_rejected(self):
+        self.prepare_request(auth_header="")
+        self.engine.method = b"POST"
+
+        # Session cookie
+        session_cookie = self.create_session_cookie("alice")
+        self.engine.headers["cookie"] = "session=" + session_cookie.decode("ascii")
+
+        # CSRF cookie and token
+        user_secret = self.iam_db.get_user_info("alice")[-1]
+        csrf_subkey = crypto.HmacSha256(user_secret).digest(http_cookie._CSRF_INFO)
+        csrf_token = crypto.create_signed_token(
+            csrf_subkey, os.urandom(http_cookie._NONCE_SIZE)
+        )
+        # self.engine.headers["cookie"] += "; csrf-token=" + csrf_token.decode("ascii")
+        self.engine.headers["x-csrf-token"] = csrf_token.decode("ascii")
+
+        self.engine.state(self.rx)
+
+        self.assertEqual(self.engine.state, self.engine._terminal_st)
+        self.assertEqual(self.engine.status_code, 403)
+
+    def test_session_missing_csrf_token_rejected(self):
+        self.prepare_request(auth_header="")
+        self.engine.method = b"POST"
+
+        # Session cookie
+        session_cookie = self.create_session_cookie("alice")
+        self.engine.headers["cookie"] = "session=" + session_cookie.decode("ascii")
+
+        # CSRF cookie and token
+        user_secret = self.iam_db.get_user_info("alice")[-1]
+        csrf_subkey = crypto.HmacSha256(user_secret).digest(http_cookie._CSRF_INFO)
+        csrf_token = crypto.create_signed_token(
+            csrf_subkey, os.urandom(http_cookie._NONCE_SIZE)
+        )
+        self.engine.headers["cookie"] += "; csrf-token=" + csrf_token.decode("ascii")
+        # self.engine.headers["x-csrf-token"] = csrf_token.decode("ascii")
+
+        self.engine.state(self.rx)
+
+        self.assertEqual(self.engine.state, self.engine._terminal_st)
+        self.assertEqual(self.engine.status_code, 403)
+
+    def test_session_missing_csrf_cookie_and_token_rejected(self):
+        self.prepare_request(auth_header="")
+        self.engine.method = b"POST"
+
+        # Session cookie
+        session_cookie = self.create_session_cookie("alice")
+        self.engine.headers["cookie"] = "session=" + session_cookie.decode("ascii")
+
+        self.engine.state(self.rx)
+
+        self.assertEqual(self.engine.state, self.engine._terminal_st)
+        self.assertEqual(self.engine.status_code, 403)

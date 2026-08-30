@@ -50,9 +50,9 @@ with no active network traffic.
 | [browser_security_001](./esp32_c3/browser_security_001.png) | N/A | True | False | 0.0127 | False | False | 1 | False | 44185 |
 | [browser_security_002](./esp32_c3/browser_security_002.png) | N/A | True | False | 0.0253 | False | False | 2 | False | 43780 |
 | [browser_security_003](./esp32_c3/browser_security_003.png) | N/A | True | False | 0.0505 | False | False | 4 | False | 46084 |
-| [auth_001](./esp32_c3/auth_001.png) | basic | False | False | 0.0127 | False | True | 1 | True | 55716 |
-| [auth_002](./esp32_c3/auth_002.png) | basic | False | False | 0.0253 | False | True | 2 | True | 56836 |
-| [auth_003](./esp32_c3/auth_003.png) | basic | False | False | 0.0505 | False | True | 4 | True | 59172 |
+| [auth_001](./esp32_c3/auth_001.png) | basic | False | False | 0.0127 | False | True | 1 | True | 55172 |
+| [auth_002](./esp32_c3/auth_002.png) | basic | False | False | 0.0253 | False | True | 2 | True | 56292 |
+| [auth_003](./esp32_c3/auth_003.png) | basic | False | False | 0.0505 | False | True | 4 | True | 58596 |
 
 ### Heap usage under network traffic
 ![image info](./esp32_c3/base.png)
@@ -85,9 +85,9 @@ with no active network traffic.
 | [browser_security_001](./esp32_s3/browser_security_001.png) | N/A | True | False | 0.000247 | False | False | 1 | False | 39863 |
 | [browser_security_002](./esp32_s3/browser_security_002.png) | N/A | True | False | 0.000493 | False | False | 2 | False | 41015 |
 | [browser_security_003](./esp32_s3/browser_security_003.png) | N/A | True | False | 0.000985 | False | False | 4 | False | 43319 |
-| [auth_001](./esp32_s3/auth_001.png) | basic | False | False | 0.000247 | False | True | 1 | True | 57330 |
-| [auth_002](./esp32_s3/auth_002.png) | basic | False | False | 0.000493 | False | True | 2 | True | 56423 |
-| [auth_003](./esp32_s3/auth_003.png) | basic | False | False | 0.000985 | False | True | 4 | True | 58727 |
+| [auth_001](./esp32_s3/auth_001.png) | basic | False | False | 0.000247 | False | True | 1 | True | 57307 |
+| [auth_002](./esp32_s3/auth_002.png) | basic | False | False | 0.000493 | False | True | 2 | True | 56425 |
+| [auth_003](./esp32_s3/auth_003.png) | basic | False | False | 0.000985 | False | True | 4 | True | 58793 |
 
 ### Heap usage under network traffic
 ![image info](./esp32_s3/base.png)
