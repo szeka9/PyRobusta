@@ -33,7 +33,7 @@ with no active network traffic.
 | id | http_auth | http_browser_security | http_files_api | http_mem_cap | http_multipart | http_sessions | socket_max_con | tls | footprint_bytes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | [base](./esp32_c3/base.png) | N/A | True | True | 1.0 | True | False | 2 | False | 73398 |
-| [tls_001](./esp32_c3/tls_001.png) | basic | True | True | 1.0 | True | True | 1 | True | 76599 |
+| [tls_001](./esp32_c3/tls_001.png) | basic | True | True | 1.0 | True | True | 1 | True | 76057 |
 
 ### Heap usage under network traffic
 ![image info](./esp32_c3/base.png)
@@ -47,7 +47,7 @@ with no active network traffic.
 | id | http_auth | http_browser_security | http_files_api | http_mem_cap | http_multipart | http_sessions | socket_max_con | tls | footprint_bytes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | [base](./esp32_s3/base.png) | N/A | True | True | 1.0 | True | False | 4 | False | 84305 |
-| [tls_001](./esp32_s3/tls_001.png) | basic | True | True | 1.0 | True | True | 4 | True | 109863 |
+| [tls_001](./esp32_s3/tls_001.png) | basic | True | True | 1.0 | True | True | 4 | True | 97425 |
 
 ### Heap usage under network traffic
 ![image info](./esp32_s3/base.png)
