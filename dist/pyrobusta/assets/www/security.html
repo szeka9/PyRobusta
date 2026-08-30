@@ -175,14 +175,16 @@ and is therefore not supported.</p>
 <p><strong>Note</strong>: The special role <code>*</code> grants public access regardless of the authenticated user's roles.
 Rules that specify <code>*</code> do not require authentication.</p>
 <h2 id="csrf-protection">CSRF Protection</h2>
-<p>Credentials used with HTTP Basic Authentication may be automatically attached to requests by a browser.
-This makes HTTP Basic Authentication vulnerable to CSRF (Cross-Site Request Forgery) attacks,
-allowing an attacker-controlled website to cause the browser to issue requests to the server on
-behalf of an authenticated user.</p>
-<p>To prevent CSRF attacks, <strong>PyRobusta applies the Signed Double-Submit Cookie pattern</strong>. For unsafe HTTP methods
-(POST, PUT, PATCH, and DELETE), the client must return the CSRF token received from the server as
-a cookie. The client must send the same token in the <code>X-CSRF-Token</code> request header. The server
-rejects requests where the cookie value and header value do not match.</p>
+<p>Authentication credentials that are automatically attached to requests by a browser, such as
+HTTP Basic Authentication credentials and session cookies, can make an application vulnerable
+to CSRF (Cross-Site Request Forgery) attacks. An attacker-controlled website may cause the browser
+to issue requests to the server that include the victim's authentication credentials, allowing
+the attacker to perform actions on behalf of the authenticated user.</p>
+<p>To prevent CSRF attacks, <strong>PyRobusta applies the Signed Double-Submit Cookie pattern</strong>, enabled by
+the <code>http_browser_security=True</code> setting. For unsafe HTTP methods (POST, PUT, PATCH, and DELETE),
+the client must return the CSRF token received from the server as a cookie. The client must send
+the same token in the <code>X-CSRF-Token</code> request header. The server rejects requests where the cookie
+value and header value do not match.</p>
 <p>A malicious website cannot read the CSRF cookie from another origin because of the browser's
 same-origin policy. Therefore, a malicious website cannot provide a valid CSRF token in the request header.
 Cryptographic signing prevents attackers from forging valid CSRF tokens without knowledge of the server-side secret.</p>
