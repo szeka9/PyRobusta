@@ -209,15 +209,17 @@ Rules that specify `*` do not require authentication.
 
 ## CSRF Protection
 
-Credentials used with HTTP Basic Authentication may be automatically attached to requests by a browser.
-This makes HTTP Basic Authentication vulnerable to CSRF (Cross-Site Request Forgery) attacks,
-allowing an attacker-controlled website to cause the browser to issue requests to the server on
-behalf of an authenticated user.
+Authentication credentials that are automatically attached to requests by a browser, such as
+HTTP Basic Authentication credentials and session cookies, can make an application vulnerable
+to CSRF (Cross-Site Request Forgery) attacks. An attacker-controlled website may cause the browser
+to issue requests to the server that include the victim's authentication credentials, allowing
+the attacker to perform actions on behalf of the authenticated user.
 
-To prevent CSRF attacks, **PyRobusta applies the Signed Double-Submit Cookie pattern**. For unsafe HTTP methods
-(POST, PUT, PATCH, and DELETE), the client must return the CSRF token received from the server as
-a cookie. The client must send the same token in the `X-CSRF-Token` request header. The server
-rejects requests where the cookie value and header value do not match.
+To prevent CSRF attacks, **PyRobusta applies the Signed Double-Submit Cookie pattern**, enabled by
+the `http_browser_security=True` setting. For unsafe HTTP methods (POST, PUT, PATCH, and DELETE),
+the client must return the CSRF token received from the server as a cookie. The client must send
+the same token in the `X-CSRF-Token` request header. The server rejects requests where the cookie
+value and header value do not match.
 
 A malicious website cannot read the CSRF cookie from another origin because of the browser's
 same-origin policy. Therefore, a malicious website cannot provide a valid CSRF token in the request header.

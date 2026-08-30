@@ -169,7 +169,7 @@ def _handle_auth_header_st(self, _):
     username, user_info = user_data
 
     # CSRF validation, cookie setting
-    if _BROWSER_SECURITY and not is_session:
+    if _BROWSER_SECURITY:
         if self.method not in (
             self.GET,
             self.HEAD,
