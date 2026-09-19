@@ -12,7 +12,7 @@ from pyrobusta.protocol import (
 )
 
 
-class TestMultipartStateMachine(TestHttpBase):
+class TestMultipartReceiverStateMachine(TestHttpBase):
     """
     Tests for multipart handling.
     """
@@ -91,10 +91,10 @@ class TestMultipartStateMachine(TestHttpBase):
     def test_multipart_receiver_complete_part(self):
         self.engine.state = self.engine._start_multipart_parser_st
         self.engine.url = b"/api/test"
-        self.engine.method = b"GET"
+        self.engine.method = b"POST"
 
         test_handler = mock.Mock()
-        self.engine.register("/api/test", test_handler)
+        self.engine.register("/api/test", test_handler, "POST")
 
         self.engine.headers["content-length"] = 1000
         self.engine.headers["content-type"] = (
@@ -132,7 +132,7 @@ class TestMultipartStateMachine(TestHttpBase):
     def test_multipart_receiver_first_part(self):
         self.engine.state = self.engine._start_multipart_parser_st
         self.engine.url = b"/api/test"
-        self.engine.method = b"GET"
+        self.engine.method = b"POST"
         self.engine.version = b"HTTP/1.1"
         self.engine.headers["content-length"] = 131
         self.engine.headers["content-type"] = (
@@ -156,13 +156,13 @@ class TestMultipartStateMachine(TestHttpBase):
     def test_multipart_receiver_last_part(self):
         self.engine.state = self.engine._parse_boundary_st
         self.engine.url = b"/api/test"
-        self.engine.method = b"GET"
+        self.engine.method = b"POST"
         self.engine.version = b"HTTP/1.1"
         self.engine.headers["content-length"] = 131
         self.engine.mp_boundary = b"test-boundary"
 
         test_handler = mock.Mock(return_value=("text/plain", "OK"))
-        self.engine.register("/api/test", test_handler)
+        self.engine.register("/api/test", test_handler, "POST")
 
         body_part = (
             b'Content-Disposition:form-data;name="file-chunk";filename="upload.txt"\r\n'
@@ -195,7 +195,7 @@ class TestMultipartStateMachine(TestHttpBase):
     def test_multipart_content_length_match(self):
         self.engine.state = self.engine._start_multipart_parser_st
         self.engine.url = b"/api/test"
-        self.engine.method = b"GET"
+        self.engine.method = b"POST"
         self.engine.version = b"HTTP/1.1"
         self.engine.headers["content-length"] = 148
         self.engine.headers["content-type"] = (
@@ -203,7 +203,7 @@ class TestMultipartStateMachine(TestHttpBase):
         )
 
         test_handler = mock.Mock(return_value=("text/plain", "OK"))
-        self.engine.register("/api/test", test_handler)
+        self.engine.register("/api/test", test_handler, "POST")
 
         body_part = (
             b"--test-boundary\r\n"
@@ -237,7 +237,7 @@ class TestMultipartStateMachine(TestHttpBase):
         """
         self.engine.state = self.engine._start_multipart_parser_st
         self.engine.url = b"/api/test"
-        self.engine.method = b"GET"
+        self.engine.method = b"POST"
         self.engine.version = b"HTTP/1.1"
         self.engine.headers["content-length"] = 148 - 1
         self.engine.mp_boundary = b"test-boundary"
@@ -246,7 +246,7 @@ class TestMultipartStateMachine(TestHttpBase):
         )
 
         test_handler = mock.Mock(return_value=("text/plain", "OK"))
-        self.engine.register("/api/test", test_handler)
+        self.engine.register("/api/test", test_handler, "POST")
 
         body_part = (
             b"--test-boundary\r\n"
@@ -269,7 +269,7 @@ class TestMultipartStateMachine(TestHttpBase):
         """
         self.engine.state = self.engine._start_multipart_parser_st
         self.engine.url = b"/api/test"
-        self.engine.method = b"GET"
+        self.engine.method = b"POST"
         self.engine.version = b"HTTP/1.1"
         self.engine.headers["content-length"] = 148 + 1
         self.engine.headers["content-type"] = (
@@ -277,7 +277,7 @@ class TestMultipartStateMachine(TestHttpBase):
         )
 
         test_handler = mock.Mock(return_value=("text/plain", "OK"))
-        self.engine.register("/api/test", test_handler)
+        self.engine.register("/api/test", test_handler, "POST")
 
         body_part = (
             b"--test-boundary\r\n"
@@ -301,7 +301,7 @@ class TestMultipartStateMachine(TestHttpBase):
         """
         self.engine.state = self.engine._start_multipart_parser_st
         self.engine.url = b"/api/test"
-        self.engine.method = b"GET"
+        self.engine.method = b"POST"
         self.engine.version = b"HTTP/1.1"
         self.engine.headers["content-length"] = 148 + 13
         self.engine.headers["content-type"] = (
@@ -309,7 +309,7 @@ class TestMultipartStateMachine(TestHttpBase):
         )
 
         test_handler = mock.Mock(return_value=("text/plain", "OK"))
-        self.engine.register("/api/test", test_handler)
+        self.engine.register("/api/test", test_handler, "POST")
 
         body_part = (
             b"--test-boundary\r\n"
@@ -328,7 +328,7 @@ class TestMultipartStateMachine(TestHttpBase):
     def test_multipart_complete_part_trailing_crlf(self):
         self.engine.state = self.engine._start_multipart_parser_st
         self.engine.url = b"/api/test"
-        self.engine.method = b"GET"
+        self.engine.method = b"POST"
         self.engine.version = b"HTTP/1.1"
         self.engine.headers["content-length"] = 150
         self.engine.headers["content-type"] = (
@@ -336,7 +336,7 @@ class TestMultipartStateMachine(TestHttpBase):
         )
 
         test_handler = mock.Mock(return_value=("text/plain", "OK"))
-        self.engine.register("/api/test", test_handler)
+        self.engine.register("/api/test", test_handler, "POST")
 
         body_part = (
             b"--test-boundary\r\n"
@@ -362,6 +362,90 @@ class TestMultipartStateMachine(TestHttpBase):
                 b"Upload content",
             ),
         )
+
+
+class TestMultipartSenderStateMachine(TestHttpBase):
+    """
+    Tests for multipart handling.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.base_config = {"http_multipart": True, "http_files_api": False}
+        cls.cwd = os.getcwd()
+
+    def multipart_producer(self, num_responses):
+        i = 0
+
+        def response_generator():
+            nonlocal i
+            i += 1
+            if i > num_responses:
+                return None
+            return "text/plain", b"Response %s" % bytes(str(i), encoding="utf-8")
+
+        return response_generator
+
+    def test_multipart_sender_one_part(self):
+        num_parts = 1
+        response_handler = self.engine._multipart_wrapper_factory(
+            self.multipart_producer(num_parts), b"--test-boundary"
+        )
+
+        sent_parts = 0
+        for i, is_complete in enumerate(response_handler(self.tx)):
+            if is_complete:
+                self.assertEqual(
+                    self.tx.peek(), "----test-boundary--\r\n".encode("utf-8")
+                )
+            else:
+                self.assertEqual(
+                    self.tx.peek(),
+                    (
+                        "----test-boundary\r\ncontent-type:text/plain\r\n\r\n"
+                        f"Response {i+1}\r\n".encode("utf-8")
+                    ),
+                )
+                sent_parts += 1
+            self.tx.consume()
+
+        self.assertEqual(sent_parts, num_parts)
+
+    def test_multipart_sender_multiple_parts(self):
+        num_parts = 10
+        response_handler = self.engine._multipart_wrapper_factory(
+            self.multipart_producer(num_parts), b"--test-boundary"
+        )
+
+        sent_parts = 0
+        for i, is_complete in enumerate(response_handler(self.tx)):
+            if is_complete:
+                self.assertEqual(
+                    self.tx.peek(), "----test-boundary--\r\n".encode("utf-8")
+                )
+            else:
+                self.assertEqual(
+                    self.tx.peek(),
+                    (
+                        "----test-boundary\r\ncontent-type:text/plain\r\n\r\n"
+                        f"Response {i+1}\r\n".encode("utf-8")
+                    ),
+                )
+                sent_parts += 1
+            self.tx.consume()
+
+        self.assertEqual(sent_parts, num_parts)
+
+    def test_multipart_sender_empty_part(self):
+        num_parts = 0
+        response_handler = self.engine._multipart_wrapper_factory(
+            self.multipart_producer(num_parts), b"--test-boundary"
+        )
+
+        for i, is_complete in enumerate(response_handler(self.tx)):
+            self.assertEqual(i, 0)
+            self.assertEqual(is_complete, True)
+            self.assertEqual(self.tx.peek(), "----test-boundary--\r\n".encode("utf-8"))
 
 
 if __name__ == "__main__":
