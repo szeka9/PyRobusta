@@ -72,16 +72,17 @@ def _multipart_wrapper_factory(callback: callable, boundary: bytes):
                 + b"\r\n\r\n"
             )
 
-            for chunk_part in (headers, part_body, b"\r\n"):
+            for chunk_part in (memoryview(headers), memoryview(part_body), b"\r\n"):
                 written = 0
                 while written < len(chunk_part):
                     to_write = tx.capacity - tx.size()
                     if not to_write:
-                        raise BufferError()
-                    chunk_part = chunk_part[written : written + to_write]
-                    tx.write(chunk_part)
-                    written += len(chunk_part)
-                    yield False
+                        yield False
+                        continue
+                    chunk = chunk_part[written : written + to_write]
+                    tx.write(chunk)
+                    written += len(chunk)
+            yield False
 
     return _multipart_wrapper
 
