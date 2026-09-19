@@ -56,6 +56,11 @@ The following list of status codes are supported by PyRobusta:
 | 200 | OK |
 | 201 | Created |
 | 204 | No Content |
+| 301 | Moved Permanently |
+| 302 | Found |
+| 303 | See Other |
+| 307 | Temporary Redirect |
+| 308 | Permanent Redirect |
 | 400 | Bad Request |
 | 401 | Unauthorized |
 | 403 | Forbidden |

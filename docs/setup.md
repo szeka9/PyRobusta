@@ -61,6 +61,7 @@ The server will skip Wi-Fi connection if the credentials are missing, allowing t
 
 ```python
 # boot.py
+import asyncio
 import machine
 from pyrobusta import application
 

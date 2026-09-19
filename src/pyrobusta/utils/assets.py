@@ -2,7 +2,18 @@
 Helper functions to install assets.
 """
 
-from os import mkdir, listdir, stat
+from os import mkdir, stat
+
+try:
+    from os import ilistdir
+except ImportError:
+    from os import listdir
+
+    def ilistdir(path):
+        """Fallback definition of ilistdir"""
+        for name in listdir(path):
+            yield (name,)
+
 
 from pyrobusta import WORKING_DIR
 
@@ -37,7 +48,7 @@ def iterate_fs(root, iter_mode=FS_ITER_FILE, path_mode=FS_ITER_ABS):
     dirs = [root]
     while dirs:
         current_directory = dirs.pop(0)
-        for name in listdir(current_directory):
+        for name, *_ in ilistdir(current_directory):
             if current_directory == "/":
                 current_path = "/" + name
             else:
