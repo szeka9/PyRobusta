@@ -119,8 +119,7 @@ class SlidingBuffer:
         if self._start == 0:
             return
         n = self._end - self._start
-        for i in range(n):
-            self._mv[i] = self._mv[self._start + i]
+        self._mv[0:n] = self._mv[self._start : self._start + n]
         self._start = 0
         self._end = n
 
@@ -148,8 +147,7 @@ class SlidingBuffer:
             self._compact()
             if needed > self.capacity - self._end:
                 raise BufferOverflowError()
-        for i in range(needed):
-            self._mv[self._end + i] = data[i]
+        self._mv[self._end : self._end + needed] = data
         self._end += needed
 
     def consume(self, n: int = None):

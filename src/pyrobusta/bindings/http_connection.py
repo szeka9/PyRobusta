@@ -18,7 +18,7 @@ class HttpConnection(BaseConnection):
     """
 
     MTU_SIZE = 1460  # Maximum Transmission Unit size for TCP packets, in bytes
-    STATE_MACHINE_SLEEP_MS = 2  # Duration of sleep between state machine iterations
+    PROMISE_SLEEP_MS = 10  # Duration of sleep while waiting for promises
     RECV_TIMEOUT_SECONDS = 3  # Timeout for reading request data from socket, in seconds
 
     __slots__ = ("_engine", "_prev_state", "_recv_buf", "_send_buf")
@@ -37,7 +37,7 @@ class HttpConnection(BaseConnection):
         self._engine = HttpEngine()
         while not self._engine.is_terminated():
             await self._run_state_machine()
-            await sleep_ms(self.STATE_MACHINE_SLEEP_MS)
+            await sleep_ms(0)
             if self._engine.is_terminated() and self._engine.do_keep_alive():
                 self._engine.reset()
                 self._prev_state = None
@@ -85,12 +85,11 @@ class HttpConnection(BaseConnection):
             promise = self._engine.run(self._recv_buf)
             if promise:
                 while not promise.done:
-                    await sleep_ms(self.STATE_MACHINE_SLEEP_MS)
+                    await sleep_ms(self.PROMISE_SLEEP_MS)
             elif self._prev_state == self._engine.state:
                 # No state transition occurred, read more data
                 break
             self._prev_state = self._engine.state
-            await sleep_ms(self.STATE_MACHINE_SLEEP_MS)
 
         # [3] write response
         if not self._engine.is_request_empty() and self._engine.is_terminated():
@@ -112,13 +111,13 @@ class HttpConnection(BaseConnection):
                     if is_finished:
                         await self.write(b"0\r\n\r\n")
                         break
-                    await sleep_ms(self.STATE_MACHINE_SLEEP_MS)
+                    await sleep_ms(0)
             else:
                 for is_finished in resp_handler(self._send_buf):
                     await self._flush_response()
                     if is_finished:
                         break
-                    await sleep_ms(self.STATE_MACHINE_SLEEP_MS)
+                    await sleep_ms(0)
         elif type(resp_handler).__name__ in ("FileIO", "BytesIO"):
             try:
                 while True:
@@ -128,7 +127,7 @@ class HttpConnection(BaseConnection):
                         break
                     self._send_buf.commit(num_read)
                     await self._flush_response()
-                    await sleep_ms(self.STATE_MACHINE_SLEEP_MS)
+                    await sleep_ms(0)
             finally:
                 resp_handler.close()
         else:
